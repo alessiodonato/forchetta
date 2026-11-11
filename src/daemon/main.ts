@@ -1,0 +1,374 @@
+import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { contextWindowOf, detectArricurdai, loadConfig, resolveTool } from '../shared/config.ts';
+import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
+import { listPanes, Tmux } from '../shared/tmux.ts';
+import { VERSION } from '../shared/version.ts';
+import { ArricurdaiNotes, ArricurdaiPoller, readArricurdaiStatus } from './arricurdai.ts';
+import { isAlive, readClaudeAgents } from './claude-agents.ts';
+import { Commander } from './commands.ts';
+import { Attention } from './attention.ts';
+import { Conflicts, writtenFile } from './conflicts.ts';
+import { changesOf } from './diffs.ts';
+import { editOf, Patches } from './patches.ts';
+import { runRecall } from './recall.ts';
+import { spawnSession } from './spawn.ts';
+import { Teams } from './teams.ts';
+import { Hub } from './hub.ts';
+import { Permissions } from './permissions.ts';
+import { isInteractiveCommand, readCommandLine } from './process.ts';
+import { Registry } from './registry.ts';
+import { createDaemonServer } from './server.ts';
+import type { Agent } from './state.ts';
+import { haikuComplete, Summarizer } from './summarizer.ts';
+import { Terminals } from './terminals.ts';
+
+// forchetta-daemon: one process, driven by events. It never ends a Claude process or a tmux session: when it
+// stops, the sessions go on, and the next daemon finds them again.
+
+const log = (message: string): void => console.log(`${new Date().toISOString()} ${message}`);
+
+const LIVENESS_MS = 5_000;
+const QUIET_CHECK_MS = 10_000;
+const QUIET_RECONCILE_MIN_MS = 30_000;
+const QUIET_RECONCILE_MAX_MS = 5 * 60_000;
+const SWEEP_MS = 60_000;
+
+/** Events after which context and cache change: arricurdAI is read again soon. */
+const CONTEXT_EVENTS = new Set(['Stop', 'StopFailure', 'PostCompact', 'SessionStart']);
+
+function main(): void {
+  process.title = 'forchetta-daemon';
+  ensurePrivateDir(paths.varDir);
+  const config = loadConfig();
+  const tmux = new Tmux(resolveTool('tmux', config), paths.tmuxSocket, paths.tmuxConf);
+  let claude: string | undefined;
+  try {
+    claude = resolveTool('claude', config);
+  } catch {
+    log('claude non trovato: niente riconciliazione con claude agents --json');
+  }
+  let settingsText: string | undefined;
+  try {
+    settingsText = readFileSync(join(claudeConfigDir(), 'settings.json'), 'utf8');
+  } catch {
+    // No settings: arricurdAI is looked for in the PATH only.
+  }
+  const arricurdai = config.arricurdai ?? detectArricurdai(settingsText);
+  log(arricurdai ? `arricurdAI: ${arricurdai.join(' ')}` : 'arricurdAI non trovato: contesto e cache non disponibili');
+
+  const token = randomBytes(32).toString('hex');
+  const startedAt = Date.now();
+
+  // Snapshot of the agents, so that a restarted daemon keeps the boxes of `forchetta run`.
+  let saveTimer: NodeJS.Timeout | undefined;
+  const save = (): void => {
+    saveTimer = undefined;
+    const temporary = `${paths.state}.${process.pid}`;
+    writeFileSync(temporary, `${JSON.stringify({ savedAt: Date.now(), agents: registry.list(), writes: conflicts.dump() })}\n`, { mode: 0o600 });
+    renameSync(temporary, paths.state);
+  };
+  const saveSoon = (): void => {
+    saveTimer ??= setTimeout(save, 1000);
+  };
+
+  let lastReconcile = 0;
+  // An event from a session with no known pid: `claude agents --json` tells it, at most every 30 s.
+  let reconcileTimer: NodeJS.Timeout | undefined;
+  const reconcileSoon = (): void => {
+    if (reconcileTimer || Date.now() - lastReconcile < QUIET_RECONCILE_MIN_MS) return;
+    reconcileTimer = setTimeout(() => {
+      reconcileTimer = undefined;
+      void reconcile('evento senza pid');
+    }, 2000);
+  };
+
+  // Forward references: the registry reports changes to the hub, the poller and the summarizer made below.
+  let hub: Hub | undefined;
+  let poller: ArricurdaiPoller | undefined;
+  let summarizer: Summarizer | undefined;
+  let commander: Commander | undefined;
+  let permissions: Permissions | undefined;
+  const attention = new Attention({ notify: (notice) => hub?.notify(notice), stallMs: config.stallMin * 60_000 });
+  const conflicts = new Conflicts();
+  const teams = new Teams(paths.teams, log);
+  const patches = new Patches(paths.patches);
+  // Conflicts are worked out again after a write, when a session ends, and every minute (old writes drop out).
+  let conflictsTimer: NodeJS.Timeout | undefined;
+  const updateConflicts = (): void => {
+    conflictsTimer ??= setTimeout(() => {
+      conflictsTimer = undefined;
+      for (const agent of conflicts.update(registry.agents.values())) registry.touch(agent);
+    }, 50);
+  };
+  const notes = new ArricurdaiNotes(arricurdai);
+  let notesSupported = false;
+  void notes.supported().then((supported) => {
+    notesSupported = supported;
+    log(supported ? 'arricurdAI prepara la nota della sessione prima di /clear (handoff --prepare)' : 'arricurdAI non ha handoff --prepare: /clear parte senza nota');
+  });
+
+  const registry = new Registry({
+    onChange: (agent: Agent) => {
+      saveSoon();
+      hub?.agentChanged(agent);
+      summarizer?.changed(agent);
+      commander?.agentChanged(agent);
+      permissions?.agentChanged(agent);
+      attention.agentChanged(agent);
+      if (agent.state === 'ended' && agent.conflicts) updateConflicts();
+      // A session in a folder with a remembered team gets it: one more change, once.
+      if (teams.apply(agent)) registry.touch(agent);
+      if (CONTEXT_EVENTS.has(agent.lastEvent.name)) poller?.soon();
+    },
+    onRemove: (ids) => {
+      saveSoon();
+      hub?.agentsRemoved(ids);
+      summarizer?.forget(ids);
+      attention.forget(ids);
+      for (const id of ids) conflicts.forget(id);
+      teams.forget(ids);
+      patches.forget(ids);
+    },
+    onUnknownPid: reconcileSoon,
+  });
+  try {
+    if (existsSync(paths.state)) {
+      const saved = JSON.parse(readFileSync(paths.state, 'utf8')) as { agents?: Agent[]; writes?: unknown };
+      registry.restore(saved.agents ?? []);
+      conflicts.load(saved.writes);
+      updateConflicts();
+      attention.prime(registry.agents.values());
+    }
+  } catch (error) {
+    log(`stato salvato illeggibile, ignorato: ${String(error)}`);
+  }
+
+  hub = new Hub({
+    token,
+    port: () => config.port,
+    snapshot: () => registry.list(),
+    settings: () => ({ replace: config.panes.replace, arricurdaiNotes: notesSupported, stallMin: config.stallMin }),
+    onCommand: (message) => {
+      if (message.type === 'cancel') {
+        commander?.cancel(message.agentId, message.commandId);
+        return;
+      }
+      const result = commander?.enqueue(message.agentId, message.kind, message.arg, message.confirmed);
+      if (result && !result.ok) log(`comando rifiutato: ${result.error}`);
+    },
+    onFiles: (agentId) => changesOf(conflicts.filesOf(agentId), patches.byFile(agentId)),
+    onSpawn: (input) => spawnSession({ tmux, registry, claude, log }, input),
+    onRecall: (project, query) => runRecall(arricurdai, project, query),
+    onTeam: (agentId, team) => {
+      const agent = registry.agents.get(agentId);
+      if (!agent) return;
+      teams.set(agent, team);
+      registry.touch(agent);
+    },
+    onPermission: (message) => {
+      void permissions?.decide(message.agentId, message.ticket, message.behavior, message.always).then((sent) => {
+        if (sent) log(`permesso: ${message.behavior === 'allow' ? (message.always !== undefined ? 'consentito sempre' : 'consentito') : 'rifiutato'} dal box`);
+      });
+    },
+    log,
+    onWatched: (watched) => {
+      log(watched ? 'una finestra mostra le sessioni' : 'nessuna finestra visibile: letture di arricurdAI sospese');
+      if (watched) void poller?.refresh();
+      else poller?.schedule();
+    },
+  });
+
+  poller = new ArricurdaiPoller({
+    watched: () => hub?.isWatched() ?? false,
+    busy: () => registry.isBusy(),
+    run: async () => {
+      if (!arricurdai) return;
+      try {
+        const { sessions, today } = await readArricurdaiStatus(arricurdai);
+        registry.applyArricurdai(sessions, (model) => contextWindowOf(model, config.contextWindows));
+        if (today) hub?.setToday(today);
+      } catch (error) {
+        log(`arricurdai status non riuscito: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+  });
+
+  if (config.summaries.haiku) {
+    const key = process.env.FORCHETTA_ANTHROPIC_API_KEY;
+    if (!key) {
+      log('riassunti Haiku attivi nella configurazione, ma FORCHETTA_ANTHROPIC_API_KEY non è impostata: restano spenti');
+    } else {
+      void haikuComplete(key, config.summaries.model).then(
+        (complete) => {
+          summarizer = new Summarizer({
+            complete,
+            minIntervalMs: config.summaries.minIntervalSec * 1000,
+            onSummary: (agentId, text) => registry.setModelSummary(agentId, text),
+            log,
+          });
+          log(`riassunti Haiku attivi (${config.summaries.model}, al massimo ogni ${config.summaries.minIntervalSec} s per sessione)`);
+        },
+        (error: unknown) => log(`riassunti Haiku non disponibili: ${String(error)}`),
+      );
+    }
+  }
+
+  let reconciling = false;
+  let quietInterval = QUIET_RECONCILE_MIN_MS;
+  async function reconcile(reason: string): Promise<boolean> {
+    if (reconciling) return false;
+    reconciling = true;
+    try {
+      const panes = await listPanes(tmux);
+      let entries: Awaited<ReturnType<typeof readClaudeAgents>> = [];
+      if (claude) {
+        try {
+          entries = await readClaudeAgents(claude);
+        } catch (error) {
+          log(`claude agents --json non riuscito: ${String(error)}`);
+        }
+      }
+      const changed = registry.reconcile(entries, panes, isAlive);
+      lastReconcile = Date.now();
+      log(`riconciliazione (${reason}): ${entries.length} sessioni da claude agents, ${panes.length} pane tmux${changed ? ', aggiornato' : ''}`);
+      return changed;
+    } finally {
+      reconciling = false;
+    }
+  }
+
+  const terminals = new Terminals({ token, port: () => config.port, registry, tmux, log });
+  commander = new Commander({ registry, tmux, log, notes });
+
+  // Whether a claude process shows its dialogs in a terminal: read once per pid (see process.ts).
+  const interactiveByPid = new Map<number, boolean>();
+  permissions = new Permissions({
+    registry,
+    interactive: async (agent) => {
+      if (!agent.pid) return false;
+      const known = interactiveByPid.get(agent.pid);
+      if (known !== undefined) return known;
+      const interactive = isInteractiveCommand(await readCommandLine(agent.pid));
+      if (interactiveByPid.size > 500) interactiveByPid.clear();
+      interactiveByPid.set(agent.pid, interactive);
+      return interactive;
+    },
+    status: async (agent) => {
+      if (!claude) return undefined;
+      const entries = await readClaudeAgents(claude);
+      const entry = entries.find((candidate) => (agent.pid !== undefined && candidate.pid === agent.pid) || (agent.sessionId !== undefined && candidate.sessionId === agent.sessionId));
+      return entry?.status;
+    },
+    log,
+  });
+
+  const server = createDaemonServer({
+    registry,
+    token,
+    uiDir: join(ROOT, 'dist', 'ui'),
+    hub,
+    terminals,
+    permissions,
+    refreshContext: () => poller?.refresh() ?? Promise.resolve(),
+    port: () => config.port,
+    recordFile: process.env.FORCHETTA_RECORD === '1' ? paths.payloads : undefined,
+    log,
+    onHook: (agent, payload) => {
+      quietInterval = QUIET_RECONCILE_MIN_MS;
+      commander?.hook(agent, payload);
+      permissions?.hook(agent, payload);
+      const edit = editOf(payload, agent.cwd, Date.now());
+      if (edit) {
+        try {
+          patches.add(agent.id, edit);
+        } catch (error) {
+          log(`modifica di ${agent.id} non salvata: ${String(error)}`);
+        }
+      }
+      const file = writtenFile(payload, agent.cwd);
+      if (file) {
+        conflicts.wrote(agent.id, file);
+        updateConflicts();
+        const count = conflicts.count(agent.id);
+        if (agent.filesChanged !== count) {
+          agent.filesChanged = count;
+          registry.touch(agent);
+        }
+      }
+    },
+    info: () => ({ pid: process.pid, port: config.port, startedAt, version: VERSION, agents: registry.agents.size, windows: hub?.size ?? 0, terminals: terminals.size }),
+    onShutdown: () => shutdown('richiesta di arresto'),
+  });
+
+  const timers: NodeJS.Timeout[] = [];
+  function shutdown(reason: string): void {
+    log(`arresto: ${reason}. Le sessioni tmux e i processi claude restano attivi.`);
+    for (const timer of timers) clearInterval(timer);
+    if (saveTimer) clearTimeout(saveTimer);
+    if (reconcileTimer) clearTimeout(reconcileTimer);
+    poller?.stop();
+    summarizer?.stop();
+    commander?.stop();
+    permissions?.stop();
+    attention.stop();
+    if (conflictsTimer) clearTimeout(conflictsTimer);
+    // The open panes are detached: their tmux clients get SIGHUP, the sessions go on.
+    terminals.close();
+    hub?.close();
+    registry.dispose();
+    try {
+      save();
+    } catch (error) {
+      log(`salvataggio finale non riuscito: ${String(error)}`);
+    }
+    try {
+      const info = JSON.parse(readFileSync(paths.daemonInfo, 'utf8')) as { pid?: number };
+      if (info.pid === process.pid) rmSync(paths.daemonInfo, { force: true });
+    } catch {
+      // Already gone.
+    }
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 1000).unref();
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    log(error.code === 'EADDRINUSE' ? `la porta ${config.port} è già in uso: un altro daemon è attivo?` : `server: ${String(error)}`);
+    process.exit(1);
+  });
+
+  server.listen(config.port, '127.0.0.1', () => {
+    writeFileSync(paths.daemonInfo, `${JSON.stringify({ pid: process.pid, port: config.port, token, startedAt, version: VERSION })}\n`, { mode: 0o600 });
+    log(`daemon ${VERSION} attivo su 127.0.0.1:${config.port} (pid ${process.pid})`);
+
+    timers.push(
+      setInterval(() => {
+        registry.checkAlive(isAlive);
+        // Sessions of `forchetta run` still without a pid: the tmux panes tell it, cheaply.
+        if (registry.waitingForPid().length > 0) void listPanes(tmux).then((panes) => registry.reconcile([], panes, isAlive));
+      }, LIVENESS_MS),
+      setInterval(() => {
+        // A command waits for a session that only claude agents can say is ready again: every 10 s, while it waits.
+        if (commander?.waitsOnAgentView() && Date.now() - lastReconcile >= QUIET_CHECK_MS) {
+          void reconcile('un comando aspetta la sessione');
+          return;
+        }
+        if (!registry.hasQuietActivity() || Date.now() - lastReconcile < quietInterval) return;
+        void reconcile('hook silenziosi').then((changed) => {
+          quietInterval = changed ? QUIET_RECONCILE_MIN_MS : Math.min(quietInterval * 2, QUIET_RECONCILE_MAX_MS);
+        });
+      }, QUIET_CHECK_MS),
+      setInterval(() => void reconcile('periodica'), config.reconcileIntervalMin * 60_000),
+      setInterval(() => {
+        registry.sweep(config.endedRetentionMin * 60_000);
+        updateConflicts();
+      }, SWEEP_MS),
+    );
+    void reconcile('avvio');
+  });
+}
+
+main();

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Status line of Claude Code, through Forchetta. Claude Code gives the status line the cost of the session at every
+# message; this script sends its input to the local daemon in the background, then prints the status line you
+# had: the command `forchetta hooks install` saved in var/statusline-command, run with the same input.
+# With the daemon off nothing changes: curl fails in the background, your status line prints as before.
+port=${1:-47821}
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+input=$(cat)
+printf '%s' "$input" | /usr/bin/curl --silent --max-time 1 --output /dev/null \
+  --header 'Content-Type: application/json' \
+  --header "X-Forchetta-Pid: ${PPID:-}" \
+  --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
+  --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
+  --data-binary @- "http://127.0.0.1:$port/forchetta/status" >/dev/null 2>&1 &
+saved="$root/var/statusline-command"
+if [ -s "$saved" ]; then
+  printf '%s' "$input" | /bin/sh -c "$(cat "$saved")"
+fi

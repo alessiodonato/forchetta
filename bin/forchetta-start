@@ -1,0 +1,11 @@
+#!/bin/sh
+# Last step of a session started from the app, run by your login shell after it read its profile (so the
+# session has the PATH and the variables of a new terminal tab). The first prompt comes in FORCHETTA_PROMPT,
+# never through tmux or a shell: it is taken out of the environment and given to claude as its argument, after
+# "--", so that claude never reads it as an option (a prompt that starts with "-", or the name of --worktree).
+prompt=${FORCHETTA_PROMPT:-}
+unset FORCHETTA_PROMPT
+if [ -n "$prompt" ]; then
+  exec "$@" -- "$prompt"
+fi
+exec "$@"

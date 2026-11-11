@@ -1,0 +1,14 @@
+#!/bin/sh
+# Hook of Forchetta for every Claude Code event. Sends the hook input to the local daemon together with what the
+# input lacks: the pid of the claude process, its tmux pane and the Forchetta agent it belongs to.
+# It prints nothing and always exits 0 within about a second, also when the daemon is not running: Claude Code
+# shows nothing (what a SessionStart hook prints would become context for Claude, a failure would show an error).
+port=${1:-47821}
+/usr/bin/curl --silent --max-time 1 --output /dev/null \
+  --header 'Content-Type: application/json' \
+  --header "X-Forchetta-Pid: ${PPID:-}" \
+  --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
+  --header "X-Forchetta-Pane: ${TMUX_PANE:-}" \
+  --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
+  --data-binary @- "http://127.0.0.1:$port/forchetta/hook" >/dev/null 2>&1
+exit 0

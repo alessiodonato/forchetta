@@ -1,0 +1,144 @@
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { type Agent, TEAM_TEXT_MAX } from '../shared/agent.ts';
+import type { Store } from './store.ts';
+
+// Names, groups and roles: a team of agents seen as a chart. The box sets them (TeamEditor); the daemon keeps
+// them, also for the folder of the session (daemon/teams.ts). The chart shows each group with its heads above
+// and the others below.
+
+/** "revisione · capo", "capo", "revisione": the role in the head of a box. */
+export function roleText(agent: Agent): string | undefined {
+  const team = agent.team;
+  if (!team) return undefined;
+  if (team.role && team.lead) return `${team.role} · capo`;
+  if (team.lead) return 'capo';
+  return team.role;
+}
+
+export interface Group {
+  /** Undefined: the sessions with no group. */
+  name?: string;
+  leads: Agent[];
+  members: Agent[];
+}
+
+/** The groups in alphabetical order, the sessions with no group last; in each, the heads apart. */
+export function groupsOf(agents: readonly Agent[]): Group[] {
+  const byName = new Map<string | undefined, Group>();
+  for (const agent of agents) {
+    const name = agent.team?.group;
+    let group = byName.get(name);
+    if (!group) {
+      group = { name, leads: [], members: [] };
+      byName.set(name, group);
+    }
+    (agent.team?.lead ? group.leads : group.members).push(agent);
+  }
+  return [...byName.values()].sort((a, b) => (a.name === undefined ? 1 : b.name === undefined ? -1 : a.name.localeCompare(b.name)));
+}
+
+export const hasGroups = (agents: readonly Agent[]): boolean => agents.some((agent) => agent.team?.group !== undefined);
+
+const stop = (event: Event): void => event.stopPropagation();
+
+export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; agents: readonly Agent[]; store: Store; onClose: () => void }) {
+  const [label, setLabel] = useState(agent.team?.label ?? '');
+  const [group, setGroup] = useState(agent.team?.group ?? '');
+  const [role, setRole] = useState(agent.team?.role ?? '');
+  const [lead, setLead] = useState(agent.team?.lead === true);
+  const first = useRef<HTMLInputElement>(null);
+  useEffect(() => first.current?.focus(), []);
+  const groups = useMemo(() => [...new Set(agents.map((other) => other.team?.group).filter((name): name is string => !!name))].sort(), [agents]);
+  const roles = useMemo(() => [...new Set(agents.map((other) => other.team?.role).filter((name): name is string => !!name))].sort(), [agents]);
+  const listId = `team-${agent.id}`;
+
+  const save = (): void => {
+    store.setTeam(agent.id, { label, group, role, lead });
+    onClose();
+  };
+  const onKey = (event: KeyboardEvent): void => {
+    event.stopPropagation();
+    if (event.key === 'Enter') save();
+    if (event.key === 'Escape') onClose();
+  };
+  const field = (name: string, value: string, set: (value: string) => void, placeholder: string, list?: string, ref?: typeof first) => (
+    <label class="team-field">
+      <span>{name}</span>
+      <input
+        ref={ref}
+        class="command-input"
+        type="text"
+        value={value}
+        maxLength={TEAM_TEXT_MAX}
+        placeholder={placeholder}
+        list={list}
+        spellcheck={false}
+        onInput={(event) => set((event.target as HTMLInputElement).value)}
+        onKeyDown={onKey}
+      />
+    </label>
+  );
+
+  return (
+    <div class="team-editor" onClick={stop} onMouseDown={stop}>
+      {field('Nome', label, setLabel, agent.project, undefined, first)}
+      {field('Gruppo', group, setGroup, 'nessuno', `${listId}-groups`)}
+      {field('Ruolo', role, setRole, 'nessuno', `${listId}-roles`)}
+      <datalist id={`${listId}-groups`}>
+        {groups.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      <datalist id={`${listId}-roles`}>
+        {roles.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      <label class="team-lead" title={group.trim() ? undefined : 'Prima scegli un gruppo'}>
+        <input type="checkbox" checked={lead && group.trim() !== ''} disabled={group.trim() === ''} onChange={() => setLead(!lead)} />
+        capo del gruppo
+      </label>
+      <div class="team-actions">
+        <span class="team-note">Ricordato anche per la sua cartella.</span>
+        {agent.team && (
+          <button
+            type="button"
+            class="quiet"
+            onClick={() => {
+              store.setTeam(agent.id, undefined);
+              onClose();
+            }}
+          >
+            Togli
+          </button>
+        )}
+        <button type="button" class="quiet" onClick={onClose}>
+          Annulla
+        </button>
+        <button type="button" class="primary" onClick={save}>
+          Salva
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The chart: one section per group, its heads above, the others below. */
+export function OrgChart({ agents, render }: { agents: readonly Agent[]; render: (agent: Agent) => preact.ComponentChild }) {
+  const groups = groupsOf(agents);
+  return (
+    <main class="org">
+      {groups.map((group) => (
+        <section key={group.name ?? ''} class="org-group" data-linked={group.leads.length > 0 && group.members.length > 0 ? '' : undefined}>
+          <h3 class="org-title">
+            {group.name ?? 'Senza gruppo'}
+            <span class="org-count">{group.leads.length + group.members.length}</span>
+          </h3>
+          {group.leads.length > 0 && <div class="org-leads">{group.leads.map(render)}</div>}
+          {group.members.length > 0 && <div class="org-members">{group.members.map(render)}</div>}
+        </section>
+      ))}
+    </main>
+  );
+}
+

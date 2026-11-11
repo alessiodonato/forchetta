@@ -1,0 +1,28 @@
+#!/bin/sh
+# Hook of Forchetta for PermissionRequest. Like forchetta-hook it sends the request to the local daemon; for an
+# interactive session it then waits until the box answers it. Claude Code shows its own dialog at the same time
+# (seen with 2.1.322): whichever answers first wins, and a late answer is ignored. When the dialog gets "No" or
+# Esc in the terminal, Claude Code ends this hook, and the daemon sees the connection close.
+#
+# What it prints is the decision, as Claude Code reads it on stdout. Daemon off, no ticket, any error: it prints
+# nothing and exits 0, and the dialog goes on as usual. The hook timeout in settings.json must be longer than
+# the wait (second argument, in seconds).
+port=${1:-47821}
+limit=${2:-3540}
+child=
+trap 'if [ -n "$child" ]; then kill "$child" 2>/dev/null; fi; exit 0' HUP INT TERM
+ticket=$(/usr/bin/curl --silent --max-time 2 \
+  --header 'Content-Type: application/json' \
+  --header "X-Forchetta-Pid: ${PPID:-}" \
+  --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
+  --header "X-Forchetta-Pane: ${TMUX_PANE:-}" \
+  --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
+  --header "X-Forchetta-Wait: $limit" \
+  --data-binary @- "http://127.0.0.1:$port/forchetta/permission" 2>/dev/null) || exit 0
+case "$ticket" in
+  '' | *[!0-9a-f]*) exit 0 ;;
+esac
+/usr/bin/curl --silent --max-time "$limit" "http://127.0.0.1:$port/forchetta/permission/$ticket" 2>/dev/null &
+child=$!
+wait "$child"
+exit 0

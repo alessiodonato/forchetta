@@ -1,0 +1,11 @@
+#!/bin/sh
+# Forchetta CLI. Resolves its real location, so that a symbolic link in the PATH works too.
+self=$0
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case $link in
+    /*) self=$link ;;
+    *) self=$(dirname "$self")/$link ;;
+  esac
+done
+exec node "$(dirname "$self")/../dist/cli.js" "$@"

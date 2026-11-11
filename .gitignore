@@ -1,0 +1,9 @@
+node_modules/
+dist/
+var/
+.pnpm-store/
+.pnpm-cache/
+.pnpm-state/
+build/
+.DS_Store
+PLAN.md

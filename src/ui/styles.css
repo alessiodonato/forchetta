@@ -1,0 +1,1855 @@
+/* Forchetta: dark, quiet, one accent. Amber, green and red mean a state and nothing else.
+   Every animation here tells a state and moves only opacity or transform, so the compositor runs it. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0d0e10;
+  --surface: #15171a;
+  --surface-waiting: #1b1813;
+  --line: #24272c;
+  --line-strong: #32363c;
+  --text: #e8e9eb;
+  --text-2: #a3a8b0;
+  --text-3: #6b7079;
+  --accent: #f0a43c;
+  --green: #46c48a;
+  --red: #ef5b5b;
+  --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --radius: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 var(--ui);
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.app {
+  min-height: 100%;
+}
+
+/* Top line: the name, and how many sessions wait for you. */
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 22px 32px 6px;
+}
+
+.top h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+
+.counts {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.counts .waiting {
+  color: var(--accent);
+}
+
+.counts .today {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.notice {
+  margin: 8px 32px 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.empty {
+  margin: 18vh auto 0;
+  text-align: center;
+  color: var(--text-3);
+}
+
+.empty p {
+  margin: 0 0 6px;
+}
+
+.empty .hint code,
+.empty code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* The grid of boxes. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(296px, 1fr));
+  gap: 16px;
+  padding: 16px 32px 40px;
+}
+
+.box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 176px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  contain: layout paint;
+  transition: opacity 600ms ease, border-color 300ms ease, background-color 300ms ease;
+}
+
+/* The layer that pulses or breathes: its own element, so that only its opacity changes. */
+.aura {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.project {
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.state {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 18px;
+  font: 12px/1.4 var(--mono);
+  color: var(--text-2);
+}
+
+.action .text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.action.muted {
+  color: var(--text-3);
+}
+
+.action.accent {
+  color: var(--accent);
+}
+
+.action.error {
+  color: var(--red);
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  animation: icon-in 220ms ease-out;
+}
+
+.glyph {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.summary {
+  display: -webkit-box;
+  min-height: 2.9em;
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text-2);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.summary .by {
+  font: 10px var(--mono);
+  color: var(--text-3);
+}
+
+/* Context: a thin bar, its fill scaled to the share of the window. */
+.ctx {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.track {
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.fill {
+  height: 100%;
+  transform-origin: left center;
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fill i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--text-3);
+  transform-origin: left center;
+}
+
+.ctx[data-high] .fill i {
+  background: var(--accent);
+}
+
+.pct {
+  flex: none;
+  min-width: 42px;
+  font: 11.5px var(--mono);
+  text-align: right;
+  color: var(--text-2);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font: 11.5px var(--mono);
+  white-space: nowrap;
+  color: var(--text-3);
+}
+
+.meta > * {
+  flex: none;
+}
+
+.meta .grow {
+  flex: 1;
+}
+
+/* When the box is narrow the expiry of the cache and the time give way; the cost stays whole. */
+.meta .usage {
+  flex: none;
+}
+
+.meta .cache-left {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta .ago {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta .soon {
+  color: var(--accent);
+}
+
+.meta .faded {
+  color: var(--text-3);
+  opacity: 0.7;
+}
+
+.tag {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.tag.control-readonly {
+  color: var(--text-2);
+}
+
+/* ——— States ———
+   On this hardware (Intel Mac, macOS 12) any animation at 60 fps costs the window server about a quarter of a
+   core. So the endless animations run smoothly here for their first cycles after a change, when the eye should
+   catch them; then ambient.ts carries them on, all together at 12 steps per second, from the same value the
+   CSS ends on (the opacity below). */
+
+/* The moving layers get a layer of their own: a change of their opacity is then a property of that layer, with
+   no repaint of the box. Only in the states that move. */
+.box[data-state='working'] .aura,
+.box[data-state='waiting'] .aura {
+  will-change: opacity;
+}
+
+.fill i.squeeze {
+  will-change: transform;
+}
+
+/* At work: the border pulses slowly. */
+.box[data-state='working'] .aura {
+  border-color: rgba(232, 233, 235, 0.5);
+  opacity: 0.12;
+  animation: pulse 2.4s ease-in-out 2;
+}
+
+.box[data-state='working'] .state {
+  color: var(--text-2);
+}
+
+/* Waiting for you: amber, with a breath you notice from across the room. */
+.box[data-state='waiting'] {
+  border-color: rgba(240, 164, 60, 0.45);
+  background: var(--surface-waiting);
+}
+
+.box[data-state='waiting'] .aura {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px rgba(240, 164, 60, 0.16),
+    0 0 22px rgba(240, 164, 60, 0.22);
+  opacity: 0.25;
+  animation: breathe 1.6s ease-in-out 5;
+}
+
+.box[data-state='waiting'] .state {
+  color: var(--accent);
+}
+
+/* Done: green for a moment, a check that draws itself, then quiet again. */
+.box[data-completed] .aura {
+  border-color: var(--green);
+  background: rgba(70, 196, 138, 0.06);
+  animation: settle 2.6s ease-out forwards;
+}
+
+.box[data-completed] .state {
+  color: var(--green);
+}
+
+.done {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: none;
+}
+
+.check {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 14;
+  stroke-dashoffset: 14;
+  animation:
+    draw 420ms ease-out 80ms forwards,
+    check-out 500ms ease-in 2000ms forwards;
+}
+
+.box[data-completed] .done {
+  display: block;
+}
+
+.box[data-completed] .head .state {
+  visibility: hidden;
+}
+
+/* Error: red; the box shakes once (motion.ts). */
+.box[data-state='error'] {
+  border-color: rgba(239, 91, 91, 0.5);
+}
+
+.box[data-state='error'] .state {
+  color: var(--red);
+}
+
+/* Compacting: the context bar shrinks. */
+.box[data-state='compacting'] .state {
+  color: var(--text-2);
+}
+
+.fill i.squeeze {
+  animation: squeeze 1.4s ease-in-out 4 alternate;
+}
+
+/* Ended: the box fades. */
+.box[data-state='ended'] {
+  opacity: 0.42;
+}
+
+.box[data-state='starting'] .state {
+  color: var(--text-2);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes settle {
+  0% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes check-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes squeeze {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0.5);
+  }
+}
+
+@keyframes icon-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* "Riduci movimento": the same states, standing still. */
+/* html[data-reduced-motion] is set by motion.ts from the app or from the media query. */
+html[data-reduced-motion] *,
+html[data-reduced-motion] *::before,
+html[data-reduced-motion] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+html[data-reduced-motion] .box[data-state='working'] .aura {
+  opacity: 0.45 !important;
+}
+
+html[data-reduced-motion] .box[data-state='waiting'] .aura,
+html[data-reduced-motion] .box[data-completed] .aura {
+  opacity: 1 !important;
+}
+
+html[data-reduced-motion] .check {
+  stroke-dashoffset: 0;
+}
+
+html[data-reduced-motion] .fill i.squeeze {
+  transform: scaleX(0.5) !important;
+}
+
+/* The window cannot be seen: nothing moves. */
+html[data-hidden] *,
+html[data-hidden] *::before,
+html[data-hidden] *::after {
+  animation-play-state: paused !important;
+}
+
+/* ——— Boxes that open a terminal ——— */
+
+.box[data-openable] {
+  cursor: pointer;
+}
+
+.box[data-openable]:hover {
+  border-color: var(--line-strong);
+}
+
+/* ——— Work area: the column of boxes, then up to four panes ——— */
+
+.app.with-panes {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app.with-panes .top {
+  padding: 14px 20px 10px;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  padding: 0 16px 16px;
+  animation: fade-in 220ms ease-out;
+}
+
+.rail {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  width: 216px;
+  overflow-y: auto;
+}
+
+.box.compact {
+  -webkit-appearance: none;
+  appearance: none;
+  gap: 4px;
+  width: 100%;
+  min-height: 0;
+  padding: 10px 12px 9px;
+  border-radius: 10px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: default;
+}
+
+.box.compact[data-openable] {
+  cursor: pointer;
+}
+
+.box.compact[data-open] {
+  border-color: var(--line-strong);
+  background: #1a1c20;
+}
+
+/* The boxes open in a pane carry a thin mark on their left side. */
+.box.compact[data-open]::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -1px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--text-2);
+  content: '';
+}
+
+.compact-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compact .project {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.compact .state {
+  font-size: 9.5px;
+}
+
+.compact-line {
+  overflow: hidden;
+  font: 11px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+
+.box.compact[data-state='waiting'] .compact-line {
+  color: var(--accent);
+}
+
+.box.compact[data-state='error'] .compact-line {
+  color: var(--red);
+}
+
+.compact-meta {
+  display: flex;
+  justify-content: space-between;
+  min-height: 14px;
+  font: 10.5px var(--mono);
+  color: var(--text-3);
+}
+
+.work {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.panes {
+  display: grid;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+}
+
+.pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #111215;
+  transform-origin: 0 0;
+}
+
+/* The state of the session as a thin line on top of its pane: no animation here, the column has it. */
+.pane::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  content: '';
+}
+
+.pane[data-state='working']::before {
+  background: rgba(232, 233, 235, 0.3);
+}
+
+.pane[data-state='waiting']::before {
+  background: var(--accent);
+}
+
+.pane[data-state='error']::before {
+  background: var(--red);
+}
+
+.pane-head {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 10px 7px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pane-project {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pane-state {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.pane[data-state='working'] .pane-state {
+  color: var(--text-2);
+}
+
+.pane[data-state='waiting'] .pane-state {
+  color: var(--accent);
+}
+
+.pane[data-state='error'] .pane-state {
+  color: var(--red);
+}
+
+.pane-activity {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: 11px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.pane-close {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.pane-close:hover {
+  background: var(--line);
+  color: var(--text);
+}
+
+.pane-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 4px 4px 10px;
+}
+
+.terminal {
+  width: 100%;
+  height: 100%;
+}
+
+.pane-note {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(13, 14, 16, 0.9);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* Which pane does a fifth session replace (policy "chiedi"). */
+.chooser {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.chooser strong {
+  color: var(--text);
+}
+
+.chooser button {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 3px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #1b1e22;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.chooser button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The column scrolls: its boxes keep their height instead of shrinking to fit. */
+.rail > * {
+  flex: none;
+}
+
+/* xterm.js paints its viewport black by default: the pane has its own background. */
+.terminal .xterm,
+.terminal .xterm-viewport {
+  background-color: #111215 !important;
+}
+
+/* The history is in tmux (the wheel scrolls it): the scrollbar of xterm.js 6 would only show an empty margin. */
+.terminal .xterm-scrollable-element > .scrollbar {
+  display: none !important;
+}
+
+.box.compact:focus-visible {
+  outline: 1px solid var(--text-2);
+  outline-offset: 2px;
+}
+
+/* ——— Commands of a session ——— */
+
+/* On the box they appear on hover or focus, over its last line; they stay while a question or a confirmation
+   is open. */
+.box-commands {
+  position: absolute;
+  right: 12px;
+  bottom: 9px;
+  left: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+.box:hover .box-commands,
+.box:focus-within .box-commands,
+.box-commands.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.command-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  background: inherit;
+}
+
+.box-commands .command-bar {
+  justify-content: flex-end;
+  background: var(--surface);
+}
+
+.box[data-state='waiting'] .box-commands .command-bar {
+  background: var(--surface-waiting);
+}
+
+.command-bar button {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #1b1e22;
+  font: 11px var(--mono);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.command-bar button:hover {
+  color: var(--text);
+}
+
+.command-bar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.command-bar button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.command-bar button.danger {
+  border-color: rgba(239, 91, 91, 0.6);
+  color: var(--red);
+}
+
+.command-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg);
+  font: 12px var(--ui);
+  color: var(--text);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.command-input:focus {
+  border-color: var(--text-3);
+}
+
+.command-bar.confirm {
+  flex-wrap: wrap;
+}
+
+.confirm-text {
+  flex: 1 1 100%;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.confirm-text strong {
+  color: var(--text);
+}
+
+/* The state of the last command, on its own line. */
+.command-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.command-status .command-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.command-status[data-status='bloccato'] {
+  color: var(--accent);
+}
+
+.command-status[data-status='fallito'],
+.command-status[data-status='non-confermato'] {
+  color: var(--red);
+}
+
+.command-status[data-status='confermato'] {
+  color: var(--text-2);
+}
+
+.command-status .link {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.pane-head .command-bar button {
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
+
+.pane > .command-status {
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ——— A permission dialog answered from the box ——— */
+
+/* In place of the summary: what is asked, in full, and the two answers. */
+.permission {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.permission-detail {
+  max-height: 4.6em;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font: 11.5px/1.45 var(--mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.permission-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.permission-actions button {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #1b1e22;
+  font: 11.5px var(--ui);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.permission-actions button.allow {
+  border-color: rgba(240, 164, 60, 0.7);
+  color: var(--accent);
+}
+
+.permission-actions button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.permission-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.permission-note {
+  overflow: hidden;
+  font: 10.5px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.permission-actions.compact {
+  margin: 2px 0 1px;
+}
+
+.permission-actions.compact button {
+  padding: 1px 8px;
+  font-size: 10.5px;
+}
+
+.permission-outcome[data-tone='done'] {
+  color: var(--text-2);
+}
+
+/* ——— Two sessions on the same files ——— */
+
+.conflict {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font: 11px var(--mono);
+  color: var(--text-2);
+}
+
+.conflict-mark,
+.conflict-tag {
+  color: var(--accent);
+}
+
+.conflict-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ——— One command to several sessions ——— */
+
+.top-right {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+}
+
+.broadcast-toggle {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: transparent;
+  font: 11px var(--mono);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.broadcast-toggle:hover,
+.broadcast-toggle.active {
+  color: var(--text);
+}
+
+.broadcast {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 32px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.app.with-panes .broadcast {
+  margin: 0 16px 12px;
+}
+
+.broadcast-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.broadcast-row.end {
+  justify-content: flex-end;
+}
+
+.broadcast-label {
+  width: 72px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.broadcast-note {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.broadcast button {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #1b1e22;
+  font: 11.5px var(--mono);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.broadcast button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.broadcast button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.broadcast button.chip.on {
+  border-color: var(--text-3);
+  color: var(--text);
+}
+
+.broadcast button.primary {
+  border-color: var(--text-3);
+  color: var(--text);
+}
+
+.broadcast button.danger {
+  border-color: rgba(239, 91, 91, 0.6);
+  color: var(--red);
+}
+
+.broadcast button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.broadcast .command-input {
+  flex: 1 1 240px;
+}
+
+.broadcast-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0 0 0 78px;
+  list-style: none;
+}
+
+.broadcast-list input {
+  accent-color: var(--text-2);
+}
+
+.broadcast-list label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.broadcast-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.broadcast-ctx {
+  margin-left: auto;
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.broadcast-ctx[data-high] {
+  color: var(--accent);
+}
+
+.broadcast-confirm {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+/* ——— The changes of a session ——— */
+
+.files-button,
+.pane-files {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  font: 10px var(--mono);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.files-button:hover,
+.pane-files:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.pane-files {
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
+
+.files-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.files {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 94vw);
+  height: 100%;
+  border-left: 1px solid var(--line-strong);
+  background: var(--bg);
+}
+
+.files-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.files-title {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.files-title strong {
+  color: var(--text);
+}
+
+.files-sub {
+  flex: 1;
+  overflow: hidden;
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.files-head button {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font: 11px var(--mono);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.files-head button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.files-note {
+  margin: 0;
+  padding: 18px 20px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.files-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.files-list {
+  flex: none;
+  width: 300px;
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  list-style: none;
+}
+
+.files-list button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: 11.5px var(--mono);
+  text-align: left;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.files-list button.on {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.files-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.files-count,
+.files-when {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.files-diff {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.diff {
+  margin: 0;
+  padding: 10px 0;
+  font: 11.5px/1.5 var(--mono);
+  color: var(--text-2);
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.diff-line {
+  display: block;
+  padding: 0 16px;
+  white-space: pre;
+}
+
+/* No green and red: added lines are bright on a lighter band, removed ones are dim. */
+.diff-line.add {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.diff-line.del {
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-3);
+}
+
+.diff-line.hunk {
+  margin-top: 6px;
+  color: var(--text-3);
+}
+
+.diff-line.meta {
+  color: var(--text-3);
+  opacity: 0.7;
+}
+
+/* ——— A new session ——— */
+
+.broadcast-row.top {
+  align-items: flex-start;
+}
+
+.broadcast-row.top .broadcast-label {
+  padding-top: 4px;
+}
+
+.command-input.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.prompt-input {
+  flex: 1 1 400px;
+  min-height: 74px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.broadcast-note.error {
+  color: var(--red);
+}
+
+/* ——— Names, groups and roles ——— */
+
+.head .grow {
+  flex: 1;
+}
+
+.head .project {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.head .folder {
+  overflow: hidden;
+  font: 11px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.head .role {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  font: 10px var(--mono);
+  color: var(--text-2);
+}
+
+.team-edit {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  font: 12px var(--ui);
+  color: var(--text-3);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.box:hover .team-edit,
+.team-edit:focus-visible {
+  opacity: 1;
+}
+
+.team-edit:hover {
+  color: var(--text);
+}
+
+.team-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.team-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.team-field span {
+  width: 50px;
+}
+
+.team-lead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 58px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.team-lead input {
+  accent-color: var(--text-2);
+}
+
+.team-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.team-note {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.team-actions button {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 2px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #1b1e22;
+  font: 11px var(--mono);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.team-actions button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.team-actions button.primary {
+  border-color: var(--text-3);
+  color: var(--text);
+}
+
+.view-switch {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.view-switch button {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  font: 11px var(--mono);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.view-switch button.on {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* The chart: a section per group, the heads above, a bracket down to the others. */
+.org {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 16px 32px 40px;
+}
+
+.org-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+
+.org-count {
+  font: 11px var(--mono);
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.org-leads {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+
+.org-leads > .box {
+  width: min(360px, 100%);
+}
+
+.org-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(296px, 1fr));
+  gap: 16px;
+}
+
+.org-group[data-linked] .org-leads {
+  position: relative;
+  padding-bottom: 18px;
+}
+
+/* The stem under the heads, and the bracket over the others. */
+.org-group[data-linked] .org-leads::after {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  height: 18px;
+  border-left: 1px solid var(--line-strong);
+  content: '';
+}
+
+.org-group[data-linked] .org-members {
+  position: relative;
+  padding-top: 18px;
+}
+
+.org-group[data-linked] .org-members::before {
+  position: absolute;
+  top: 0;
+  right: 12%;
+  left: 12%;
+  height: 12px;
+  border: 1px solid var(--line-strong);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  content: '';
+}
+
+/* The lasting choices of a permission dialog: a list under the buttons, one line each. */
+.permission-actions button.always-toggle {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.permission-actions button.always-toggle.on,
+.permission-actions button.always-toggle:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.always-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.always-list button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #1b1e22;
+  font: 11.5px var(--mono);
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.always-list button:hover:not(:disabled) {
+  border-color: rgba(240, 164, 60, 0.7);
+}
+
+.always-list button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.always-label {
+  overflow-wrap: anywhere;
+}
+
+.always-where {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+/* The changes of the session to a file, one after the other. */
+.edits {
+  display: flex;
+  flex-direction: column;
+}
+
+.edit + .edit {
+  border-top: 1px solid var(--line);
+}
+
+.edit-head {
+  margin: 0;
+  padding: 10px 16px 0;
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.edit .diff {
+  padding-top: 4px;
+}
+
+.files-head .view-switch {
+  flex: none;
+}
+
+.files-head .view-switch button {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 0;
+}
+
+/* The choices of a new session. */
+.spawn-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.spawn-option select {
+  padding: 2px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  font: 12px var(--ui);
+  color: var(--text);
+}
+
+.spawn-option input[type='checkbox'] {
+  accent-color: var(--text-2);
+}
+
+.command-input.worktree-name {
+  flex: 0 1 200px;
+}
+
+/* ——— Search in earlier sessions ——— */
+
+.recall-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.recall-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recall-head {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 4px;
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.recall-request {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+
+.recall-excerpt {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font: 11.5px/1.5 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}

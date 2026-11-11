@@ -1,0 +1,14 @@
+#!/bin/sh
+# First process of a Forchetta tmux pane. It replaces the environment of the tmux server with the one of the
+# terminal where `forchetta run` was typed (saved in a file readable by this user only), keeps what tmux sets
+# for the pane, deletes the file and then becomes the command, so the pid of the pane is the pid of claude.
+envfile=$1
+shift
+[ "$1" = "--" ] && shift
+exec /usr/bin/env -i \
+  TERM="${TERM:-screen-256color}" \
+  TERM_PROGRAM="${TERM_PROGRAM:-}" \
+  TERM_PROGRAM_VERSION="${TERM_PROGRAM_VERSION:-}" \
+  TMUX="${TMUX:-}" \
+  TMUX_PANE="${TMUX_PANE:-}" \
+  /bin/sh -c '. "$1" && rm -f "$1" && shift && exec "$@"' forchetta-exec "$envfile" "$@"
