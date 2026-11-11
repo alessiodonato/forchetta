@@ -17,16 +17,16 @@ export interface AlwaysOption {
 }
 
 const WHERE: Record<string, string> = {
-  session: 'solo in questa sessione',
-  localSettings: 'in questo progetto, solo per te',
-  projectSettings: 'in questo progetto, per chi lo condivide',
+  session: 'only in this session',
+  localSettings: 'in this project, only for you',
+  projectSettings: 'in this project, for everyone who shares it',
 };
 
 const MODES: Record<string, string> = {
-  acceptEdits: 'accetta modifiche',
+  acceptEdits: 'accept edits',
   auto: 'auto',
-  plan: 'piano',
-  default: 'predefinita',
+  plan: 'plan',
+  default: 'default',
 };
 
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
@@ -56,18 +56,18 @@ export function alwaysOption(value: unknown): AlwaysOption | undefined {
       if (update.behavior !== 'allow' || !Array.isArray(update.rules)) return undefined;
       const rules = update.rules.map(rule);
       if (rules.length === 0 || rules.some((item) => item === undefined)) return undefined;
-      return { update, label: `Consenti sempre ${rules.join(', ')}`, where };
+      return { update, label: `Always allow ${rules.join(', ')}`, where };
     }
     case 'addDirectories': {
       if (!Array.isArray(update.directories)) return undefined;
       const folders = update.directories.map(text);
       if (folders.length === 0 || folders.some((item) => item === undefined)) return undefined;
-      return { update, label: `Consenti e aggiungi la cartella ${folders.map((folder) => shortPath(folder!)).join(', ')}`, where };
+      return { update, label: `Allow and add the folder ${folders.map((folder) => shortPath(folder!)).join(', ')}`, where };
     }
     case 'setMode': {
       const mode = MODES[String(update.mode)];
       if (!mode) return undefined;
-      return { update, label: `Consenti e passa alla modalità «${mode}»`, where };
+      return { update, label: `Allow and switch to the mode “${mode}”`, where };
     }
     default:
       return undefined;

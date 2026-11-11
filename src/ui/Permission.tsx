@@ -41,13 +41,13 @@ const stop = (event: Event): void => event.stopPropagation();
 function Buttons({ ready, waiting, answer }: Pick<ReturnType<typeof useAnswer>, 'ready' | 'waiting' | 'answer'>) {
   return (
     <>
-      <button type="button" class="allow" disabled={!ready} title="Consenti una volta, come «Yes» nel terminale" onClick={answer('allow')}>
-        Consenti
+      <button type="button" class="allow" disabled={!ready} title="Allow once, as “Yes” in the terminal" onClick={answer('allow')}>
+        Allow
       </button>
-      <button type="button" class="deny" disabled={!ready} title="Rifiuta e ferma Claude, come «No» nel terminale" onClick={answer('deny')}>
-        Rifiuta
+      <button type="button" class="deny" disabled={!ready} title="Deny and stop Claude, as “No” in the terminal" onClick={answer('deny')}>
+        Deny
       </button>
-      {waiting && <span class="permission-note">controllo…</span>}
+      {waiting && <span class="permission-note">checking…</span>}
     </>
   );
 }
@@ -71,13 +71,13 @@ export function PermissionPrompt({ agent, store }: { agent: Agent; store: Store 
             type="button"
             class={`always-toggle${open ? ' on' : ''}`}
             disabled={!ready}
-            title="Le scelte che restano: una regola, una cartella, una modalità"
+            title="The lasting choices: a rule, a folder, a mode"
             onClick={() => setChoosing(open ? undefined : ask.ticket)}
           >
-            sempre…
+            always…
           </button>
         )}
-        {!waiting && <span class="permission-note">{ask.subagent ? `chiede ${ask.subagent} · ` : ''}o nel terminale</span>}
+        {!waiting && <span class="permission-note">{ask.subagent ? `asked by ${ask.subagent} · ` : ''}or in the terminal</span>}
       </div>
       {open && !waiting && (
         <ul class="always-list">

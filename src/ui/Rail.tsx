@@ -11,9 +11,9 @@ import { canOpen, type Store } from './store.ts';
 
 function line(agent: Agent): string {
   if (agent.state === 'waiting') return waitingText(agent);
-  if (agent.state === 'working') return agent.action ? agent.action.label : 'sta pensando…';
-  if (agent.state === 'error') return `errore · ${agent.error?.kind ?? '?'}`;
-  return agent.summary?.text ?? (agent.state === 'ended' ? 'terminata' : 'pronta');
+  if (agent.state === 'working') return agent.action ? agent.action.label : 'thinking…';
+  if (agent.state === 'error') return `error · ${agent.error?.kind ?? '?'}`;
+  return agent.summary?.text ?? (agent.state === 'ended' ? 'ended' : 'ready');
 }
 
 interface Props {
@@ -29,7 +29,7 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const since = useMotionAnchor(ref, agent.state);
   const openable = canOpen(agent);
-  const title = openable ? undefined : agent.state === 'ended' ? 'Sessione terminata' : 'Fuori dal tmux di Forchetta: sola lettura. Avviala con "forchetta run claude" per aprirla qui.';
+  const title = openable ? undefined : agent.state === 'ended' ? 'Session ended' : 'Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.';
   return (
     // A div with the role of a button: a <button> does not lay out its content as a flex column in WebKit.
     <div
@@ -66,15 +66,15 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
         <span>{hasEvents(agent) && agent.state !== 'ended' ? agoShort(now - agent.lastEvent.at) : ''}</span>
         {stalledFor(agent, now, stallMs) !== undefined && (
           <span class="tag conflict-tag" title={stallText(agent, stalledFor(agent, now, stallMs)!)}>
-            ◷ ferma?
+            ◷ stuck?
           </span>
         )}
         {agent.conflicts && (
           <span class="tag conflict-tag" title={conflictsTitle(agent.conflicts)}>
-            ⚠ {agent.conflicts[0]!.kind === 'file' ? 'stesso file' : 'stessa repo'}
+            ⚠ {agent.conflicts[0]!.kind === 'file' ? 'same file' : 'same repo'}
           </span>
         )}
-        {!openable && agent.state !== 'ended' && <span class="tag">sola lettura</span>}
+        {!openable && agent.state !== 'ended' && <span class="tag">read only</span>}
       </span>
     </div>
   );
@@ -88,7 +88,7 @@ export const CompactBox = memo(CompactBoxView, (before, after) => {
 
 export function Rail({ agents, now, open, onOpen, store }: { agents: readonly Agent[]; now: number; open: readonly string[]; onOpen: (id: string) => void; store: Store }) {
   return (
-    <nav class="rail" aria-label="Sessioni">
+    <nav class="rail" aria-label="Sessions">
       {agents.map((agent) => (
         <CompactBox key={agent.id} agent={agent} now={now} open={open.includes(agent.id)} onOpen={onOpen} store={store} />
       ))}

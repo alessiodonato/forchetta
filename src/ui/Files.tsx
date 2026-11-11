@@ -16,13 +16,13 @@ export function FilesButton({ agent, store, className }: { agent: Agent; store: 
     <button
       type="button"
       class={className ?? 'files-button'}
-      title="I file modificati da questa sessione, con il diff dall'ultimo commit"
+      title="The files this session changed, with the diff since the last commit"
       onClick={(event) => {
         event.stopPropagation();
         store.showFiles(agent.id);
       }}
     >
-      {count} file
+      {count} {count === 1 ? 'file' : 'files'}
     </button>
   );
 }
@@ -52,7 +52,7 @@ export function countEdits(edits: readonly SessionEdit[]): { added: number; remo
   return { added, removed };
 }
 
-const EDIT_NAME: Record<string, string> = { Edit: 'modifica', MultiEdit: 'modifiche', Write: 'riscrittura' };
+const EDIT_NAME: Record<string, string> = { Edit: 'edit', MultiEdit: 'edits', Write: 'rewrite' };
 
 /** The changes of the session to a file, one after the other, each with its blocks. */
 function SessionEdits({ edits, now }: { edits: readonly SessionEdit[]; now: number }) {
@@ -61,8 +61,8 @@ function SessionEdits({ edits, now }: { edits: readonly SessionEdit[]; now: numb
       {edits.map((edit, index) => (
         <section key={index} class="edit">
           <p class="edit-head">
-            {edit.created ? 'file creato' : (EDIT_NAME[edit.tool] ?? edit.tool)} · {agoShort(now - edit.at)} fa
-            {edit.truncated ? ' · troncata' : ''}
+            {edit.created ? 'file created' : (EDIT_NAME[edit.tool] ?? edit.tool)} · {agoShort(now - edit.at)} ago
+            {edit.truncated ? ' · truncated' : ''}
           </p>
           <pre class="diff">
             {edit.hunks.map((hunk, hunkIndex) => (
@@ -85,7 +85,7 @@ function SessionEdits({ edits, now }: { edits: readonly SessionEdit[]; now: numb
 
 function Diff({ file }: { file: FileChange }) {
   const lines = useMemo(() => (file.diff ?? '').replace(/\n$/, '').split('\n'), [file.diff]);
-  if (!file.diff) return <p class="files-note">{file.note ?? 'nessun diff'}</p>;
+  if (!file.diff) return <p class="files-note">{file.note ?? 'no diff'}</p>;
   return (
     <pre class="diff">
       {lines.map((line, index) => (
@@ -133,31 +133,31 @@ export function FilesPanel({ store, now }: { store: Store; now: number }) {
   const current = list[Math.min(selected, list.length - 1)];
   return (
     <div class="files-backdrop" onClick={() => store.closeFiles()}>
-      <section class="files" aria-label="Modifiche della sessione" onClick={(event) => event.stopPropagation()}>
+      <section class="files" aria-label="Changes of the session" onClick={(event) => event.stopPropagation()}>
         <header class="files-head">
           <span class="files-title">
-            Modifiche di <strong>{agent ? displayName(agent) : '?'}</strong>
+            Changes by <strong>{agent ? displayName(agent) : '?'}</strong>
           </span>
-          <span class="view-switch" role="group" aria-label="Vista">
+          <span class="view-switch" role="group" aria-label="View">
             <button type="button" class={view === 'session' ? 'on' : undefined} onClick={() => setView('session')}>
-              di questa sessione
+              by this session
             </button>
             <button type="button" class={view === 'git' ? 'on' : undefined} onClick={() => setView('git')}>
-              dall'ultimo commit
+              since the last commit
             </button>
           </span>
-          <span class="files-sub">solo i file scritti con Edit e Write</span>
+          <span class="files-sub">only the files written with Edit and Write</span>
           <button type="button" class="quiet" onClick={() => store.showFiles(files.agentId)} disabled={files.list === undefined}>
-            aggiorna
+            refresh
           </button>
-          <button type="button" class="files-close" title="Chiudi (Esc)" onClick={() => store.closeFiles()}>
+          <button type="button" class="files-close" title="Close (Esc)" onClick={() => store.closeFiles()}>
             ✕
           </button>
         </header>
         {files.list === undefined ? (
-          <p class="files-note">Leggo le modifiche…</p>
+          <p class="files-note">Reading the changes…</p>
         ) : list.length === 0 ? (
-          <p class="files-note">Nessun file scritto da questa sessione.</p>
+          <p class="files-note">No file written by this session.</p>
         ) : (
           <div class="files-body">
             <ul class="files-list">
@@ -178,7 +178,7 @@ export function FilesPanel({ store, now }: { store: Store; now: number }) {
                 ) : current.edits && current.edits.length > 0 ? (
                   <SessionEdits edits={current.edits} now={now} />
                 ) : (
-                  <p class="files-note">Nessuna modifica di questa sessione registrata per questo file (quelle fatte prima che Forchetta le registrasse non ci sono): guarda «dall'ultimo commit».</p>
+                  <p class="files-note">No change by this session is recorded for this file (those made before Forchetta recorded them are missing): see “since the last commit”.</p>
                 ))}
             </div>
           </div>

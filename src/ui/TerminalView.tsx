@@ -11,12 +11,12 @@ import { isFocusReport, keyInput } from './layout.ts';
 // the pane closes the socket, and the daemon detaches that tmux client: the session goes on.
 
 const THEME = {
-  background: '#111215',
+  background: '#1a1917',
   foreground: '#e3e5e8',
   cursor: '#e3e5e8',
-  cursorAccent: '#111215',
+  cursorAccent: '#1a1917',
   selectionBackground: 'rgba(163, 168, 176, 0.32)',
-  black: '#1c1e22',
+  black: '#2b2a27',
   red: '#ef5b5b',
   green: '#46c48a',
   yellow: '#e2b85c',

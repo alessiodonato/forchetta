@@ -41,7 +41,7 @@ describe('conflicts', () => {
     conflicts.wrote('b', '/r/app/src/other.ts');
     expect(conflicts.update([a, b]).map((agent) => agent.id)).toEqual(['a', 'b']);
     expect(a.conflicts).toEqual([{ kind: 'file', with: 'b', withName: 'app-b', files: ['src/api.ts'], repo: 'app' }]);
-    expect(conflictText(a.conflicts![0]!)).toBe('stesso file di app-b: src/api.ts');
+    expect(conflictText(a.conflicts![0]!)).toBe('same file as app-b: src/api.ts');
     expect(b.conflicts![0]).toMatchObject({ kind: 'file', with: 'a' });
     // Nothing new: nothing changed.
     expect(conflicts.update([a, b])).toEqual([]);
@@ -66,7 +66,7 @@ describe('conflicts', () => {
     conflicts.wrote('b', '/r/app/packages/x/b.ts');
     conflicts.update([a, b]);
     expect(a.conflicts).toEqual([{ kind: 'repo', with: 'b', withName: 'x', files: [], repo: 'app' }]);
-    expect(conflictText(a.conflicts![0]!)).toBe('stessa repo di x (app)');
+    expect(conflictText(a.conflicts![0]!)).toBe('same repo as x (app)');
   });
 
   it('none between two worktrees, two repositories, or a session that only read', () => {
@@ -130,6 +130,6 @@ describe('conflicts', () => {
     conflicts.wrote('c', '/r/app/9.ts');
     conflicts.update([a, b, c]);
     expect(a.conflicts!.map((conflict) => `${conflict.kind}:${conflict.withName}`)).toEqual(['file:zeta', 'repo:alfa']);
-    expect(conflictText(a.conflicts![0]!)).toBe('stesso file di zeta: 1.ts e altri 2');
+    expect(conflictText(a.conflicts![0]!)).toBe('same file as zeta: 1.ts and 2 more');
   });
 });

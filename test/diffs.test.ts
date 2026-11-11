@@ -43,9 +43,9 @@ describe('changes of a session', () => {
     expect(byName['src/a.ts']!.diff).toContain('+DUE');
     expect(byName['src/nuovo.ts']).toMatchObject({ added: 1, removed: 0 });
     const noDiff = (change: { diff?: string; note?: string } | undefined) => [change?.diff, change?.note];
-    expect(noDiff(byName['src/fermo.ts'])).toEqual([undefined, 'nessuna differenza dall’ultimo commit']);
-    expect(noDiff(byName['src/sparito.ts'])).toEqual([undefined, 'non c’è più']);
-    expect(noDiff(changes.find((change) => change.path === outside))).toEqual([undefined, 'fuori da git: nessun diff']);
+    expect(noDiff(byName['src/fermo.ts'])).toEqual([undefined, 'no difference since the last commit']);
+    expect(noDiff(byName['src/sparito.ts'])).toEqual([undefined, 'gone']);
+    expect(noDiff(changes.find((change) => change.path === outside))).toEqual([undefined, 'outside git: no diff']);
   });
 
   it('a repository with no commit yet: new files show whole', async () => {

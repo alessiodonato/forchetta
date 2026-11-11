@@ -36,17 +36,17 @@ export interface SpawnChoices {
 export function claudeArgs(choices: SpawnChoices): { args: string[] } | { error: string } {
   const args: string[] = [];
   if (choices.model !== undefined && choices.model !== '') {
-    if (!(MODELS as readonly unknown[]).includes(choices.model)) return { error: 'modello non valido' };
+    if (!(MODELS as readonly unknown[]).includes(choices.model)) return { error: 'invalid model' };
     args.push('--model', String(choices.model));
   }
   if (choices.mode !== undefined && choices.mode !== '') {
-    if (!(MODES as readonly unknown[]).includes(choices.mode)) return { error: 'modalità dei permessi non valida' };
+    if (!(MODES as readonly unknown[]).includes(choices.mode)) return { error: 'invalid permission mode' };
     args.push('--permission-mode', String(choices.mode));
   }
   if (choices.worktree === true) args.push('--worktree');
   else if (typeof choices.worktree === 'string' && choices.worktree.trim()) {
     const name = choices.worktree.trim();
-    if (!WORKTREE_NAME.test(name)) return { error: 'nome del worktree: lettere, cifre, ".", "_" e "-", al massimo 40' };
+    if (!WORKTREE_NAME.test(name)) return { error: 'worktree name: letters, digits, ".", "_" and "-", 40 at most' };
     args.push('--worktree', name);
   }
   return { args };
@@ -96,22 +96,22 @@ export function startCommand(shell: string, startScript: string, claude: string,
 
 export async function spawnSession(options: SpawnOptions, input: { cwd: unknown; prompt?: unknown } & SpawnChoices): Promise<SpawnResult> {
   const { tmux, registry, claude, log } = options;
-  if (!claude) return { ok: false, error: 'claude non trovato: impostalo in var/config.json (paths.claude)' };
+  if (!claude) return { ok: false, error: 'claude not found: set its path in var/config.json (paths.claude)' };
   const cwd = typeof input.cwd === 'string' ? folderOf(input.cwd) : undefined;
-  if (!cwd) return { ok: false, error: 'scrivi una cartella con il percorso completo (anche ~/…)' };
+  if (!cwd) return { ok: false, error: 'write a folder with its full path (~/… works too)' };
   try {
-    if (!statSync(cwd).isDirectory()) return { ok: false, error: `${cwd} non è una cartella` };
+    if (!statSync(cwd).isDirectory()) return { ok: false, error: `${cwd} is not a folder` };
   } catch {
-    return { ok: false, error: `la cartella ${cwd} non esiste` };
+    return { ok: false, error: `the folder ${cwd} does not exist` };
   }
   const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : '';
-  if (prompt.length > MAX_PROMPT) return { ok: false, error: `prompt troppo lungo (più di ${MAX_PROMPT} caratteri)` };
+  if (prompt.length > MAX_PROMPT) return { ok: false, error: `prompt too long (more than ${MAX_PROMPT} characters)` };
   const chosen = claudeArgs(input);
   if ('error' in chosen) return { ok: false, error: chosen.error };
-  if (input.worktree && !inGitRepo(cwd)) return { ok: false, error: 'per un worktree la cartella deve stare in una repo git' };
+  if (input.worktree && !inGitRepo(cwd)) return { ok: false, error: 'for a worktree the folder must be in a git repository' };
   const shell = options.shell ?? (userInfo().shell || '/bin/zsh');
   const command = startCommand(shell, paths.startScript, claude, chosen.args);
-  if (!command) return { ok: false, error: 'il percorso di Forchetta o di claude contiene un apice: non posso avviare la sessione da qui' };
+  if (!command) return { ok: false, error: 'the path of Forchetta or of claude contains a quote: the session cannot start from here' };
 
   const id = randomUUID();
   const session = tmuxSessionName(id);
@@ -126,7 +126,7 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   if (created.code !== 0) {
     rmSync(envFile, { force: true });
     log(`nuova sessione in ${cwd} non avviata: ${created.stderr.trim()}`);
-    return { ok: false, error: `tmux non ha creato la sessione: ${created.stderr.trim() || `codice ${created.code}`}` };
+    return { ok: false, error: `tmux did not create the session: ${created.stderr.trim() || `code ${created.code}`}` };
   }
   // claude can end at once, with code 0, and its pane with it: its message would be lost. Watch the pane until the
   // session says hello (SessionStart) or a few seconds pass; a folder never trusted shows its dialog first, and no
@@ -138,14 +138,14 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
       log(`nuova sessione in ${cwd}: claude è uscito subito`);
       const agent = registry.agents.get(id);
       if (agent && agent.state !== 'ended') {
-        markEnded(agent, 'uscita all’avvio', Date.now());
+        markEnded(agent, 'exited at start', Date.now());
         registry.touch(agent);
       }
       return {
         ok: false,
         error: input.worktree
-          ? 'Claude è uscito subito. Per un worktree Claude Code vuole che la cartella sia già fidata: aprila una volta senza worktree, accetta il dialogo di fiducia e riprova.'
-          : 'Claude è uscito subito dopo l’avvio: prova ad aprire la cartella dal Terminale con claude per vedere il messaggio.',
+          ? 'Claude exited at once. For a worktree, Claude Code wants a folder you already trust: open it once without a worktree, accept the trust dialog and try again.'
+          : 'Claude exited right after it started: open the folder with claude from the Terminal to see the message.',
       };
     }
     await new Promise((resolve) => setTimeout(resolve, 200));

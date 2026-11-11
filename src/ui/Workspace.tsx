@@ -53,9 +53,9 @@ function ReplaceChooser({ state, store }: { state: UiState; store: Store }) {
   const asking = state.panes.asking ? state.agents.get(state.panes.asking) : undefined;
   if (!asking) return null;
   return (
-    <div class="chooser" role="dialog" aria-label="Quale riquadro sostituisco?">
+    <div class="chooser" role="dialog" aria-label="Which pane do I replace?">
       <span>
-        Quattro riquadri aperti. Quale sostituisco con <strong>{displayName(asking)}</strong>?
+        Four panes are open. Which one does <strong>{displayName(asking)}</strong> replace?
       </span>
       {state.panes.open.map((id) => (
         <button key={id} type="button" onClick={() => store.replace(id)}>
@@ -63,7 +63,7 @@ function ReplaceChooser({ state, store }: { state: UiState; store: Store }) {
         </button>
       ))}
       <button type="button" class="quiet" onClick={() => store.cancelAsking()}>
-        Annulla
+        Cancel
       </button>
     </div>
   );

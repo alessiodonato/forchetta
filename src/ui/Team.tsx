@@ -10,8 +10,8 @@ import type { Store } from './store.ts';
 export function roleText(agent: Agent): string | undefined {
   const team = agent.team;
   if (!team) return undefined;
-  if (team.role && team.lead) return `${team.role} · capo`;
-  if (team.lead) return 'capo';
+  if (team.role && team.lead) return `${team.role} · lead`;
+  if (team.lead) return 'lead';
   return team.role;
 }
 
@@ -81,9 +81,9 @@ export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; ag
 
   return (
     <div class="team-editor" onClick={stop} onMouseDown={stop}>
-      {field('Nome', label, setLabel, agent.project, undefined, first)}
-      {field('Gruppo', group, setGroup, 'nessuno', `${listId}-groups`)}
-      {field('Ruolo', role, setRole, 'nessuno', `${listId}-roles`)}
+      {field('Name', label, setLabel, agent.project, undefined, first)}
+      {field('Group', group, setGroup, 'none', `${listId}-groups`)}
+      {field('Role', role, setRole, 'none', `${listId}-roles`)}
       <datalist id={`${listId}-groups`}>
         {groups.map((name) => (
           <option key={name} value={name} />
@@ -94,12 +94,12 @@ export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; ag
           <option key={name} value={name} />
         ))}
       </datalist>
-      <label class="team-lead" title={group.trim() ? undefined : 'Prima scegli un gruppo'}>
+      <label class="team-lead" title={group.trim() ? undefined : 'Choose a group first'}>
         <input type="checkbox" checked={lead && group.trim() !== ''} disabled={group.trim() === ''} onChange={() => setLead(!lead)} />
-        capo del gruppo
+        lead of the group
       </label>
       <div class="team-actions">
-        <span class="team-note">Ricordato anche per la sua cartella.</span>
+        <span class="team-note">Also remembered for its folder.</span>
         {agent.team && (
           <button
             type="button"
@@ -109,14 +109,14 @@ export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; ag
               onClose();
             }}
           >
-            Togli
+            Remove
           </button>
         )}
         <button type="button" class="quiet" onClick={onClose}>
-          Annulla
+          Cancel
         </button>
         <button type="button" class="primary" onClick={save}>
-          Salva
+          Save
         </button>
       </div>
     </div>
@@ -131,7 +131,7 @@ export function OrgChart({ agents, render }: { agents: readonly Agent[]; render:
       {groups.map((group) => (
         <section key={group.name ?? ''} class="org-group" data-linked={group.leads.length > 0 && group.members.length > 0 ? '' : undefined}>
           <h3 class="org-title">
-            {group.name ?? 'Senza gruppo'}
+            {group.name ?? 'No group'}
             <span class="org-count">{group.leads.length + group.members.length}</span>
           </h3>
           {group.leads.length > 0 && <div class="org-leads">{group.leads.map(render)}</div>}

@@ -7,16 +7,16 @@ import { clip } from './labels.ts';
 // to the Claude API: the only service outside this computer that Forchetta may talk to.
 
 export const SUMMARY_SYSTEM =
-  'Riassumi in una sola riga, in italiano, cosa sta facendo o ha appena fatto un agente di programmazione. ' +
-  'Al massimo 90 caratteri, senza virgolette, senza punto finale, senza preamboli. Descrivi il lavoro, non lo stato.';
+  'Summarize in one line, in English, what a coding agent is doing or has just done. ' +
+  'At most 90 characters, no quotes, no final period, no preamble. Describe the work, not the state.';
 
 /** The text sent to the model: only what the box already shows or summarizes. */
 export function summaryPrompt(agent: Agent): string {
-  const parts = [`Progetto: ${agent.project}`, `Stato: ${STATE_LABEL[agent.state]}`];
-  if (agent.lastPrompt) parts.push(`Ultima richiesta dell'utente: ${agent.lastPrompt}`);
-  if (agent.recentActions?.length) parts.push(`Azioni recenti: ${agent.recentActions.join('; ')}`);
-  if (agent.waiting) parts.push(`In attesa di: ${agent.waiting.kind}${agent.waiting.detail ? ` (${agent.waiting.detail})` : ''}`);
-  if (agent.lastReply) parts.push(`Ultima risposta dell'agente: ${agent.lastReply}`);
+  const parts = [`Project: ${agent.project}`, `State: ${STATE_LABEL[agent.state]}`];
+  if (agent.lastPrompt) parts.push(`Last request of the user: ${agent.lastPrompt}`);
+  if (agent.recentActions?.length) parts.push(`Recent actions: ${agent.recentActions.join('; ')}`);
+  if (agent.waiting) parts.push(`Waiting for: ${agent.waiting.kind}${agent.waiting.detail ? ` (${agent.waiting.detail})` : ''}`);
+  if (agent.lastReply) parts.push(`Last reply of the agent: ${agent.lastReply}`);
   return parts.join('\n');
 }
 

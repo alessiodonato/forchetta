@@ -78,9 +78,9 @@ function savedView(): 'grid' | 'org' {
 }
 
 function todayTitle(today: TodayInfo): string {
-  const since = new Date(today.since).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-  const unpriced = today.unpricedCalls > 0 ? `, ${today.unpricedCalls} di modelli senza prezzo noto esclusi dal costo` : '';
-  return `Tutte le sessioni dalle ${since}: ${today.calls.toLocaleString('it-IT')} chiamate, ${today.tokens.toLocaleString('it-IT')} token, a prezzi API${unpriced} (dati di arricurdAI)`;
+  const since = new Date(today.since).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const unpriced = today.unpricedCalls > 0 ? `, ${today.unpricedCalls} of them from models with no known price left out of the cost` : '';
+  return `Every session since ${since}: ${today.calls.toLocaleString('en-US')} calls, ${today.tokens.toLocaleString('en-US')} tokens, at API prices${unpriced} (data from arricurdAI)`;
 }
 
 function counts(agents: readonly Agent[], today: TodayInfo | undefined) {
@@ -90,11 +90,11 @@ function counts(agents: readonly Agent[], today: TodayInfo | undefined) {
     <p class="counts">
       {today && (
         <span class="today" title={todayTitle(today)}>
-          oggi ≈ {usdText(today.usd)} · {shortTokens(today.tokens)} token ·{' '}
+          today ≈ {usdText(today.usd)} · {shortTokens(today.tokens)} tokens ·{' '}
         </span>
       )}
-      {live} {live === 1 ? 'sessione' : 'sessioni'}
-      {waiting > 0 && <span class="waiting"> · {waiting} {waiting === 1 ? 'ti aspetta' : 'ti aspettano'}</span>}
+      {live} {live === 1 ? 'session' : 'sessions'}
+      {waiting > 0 && <span class="waiting"> · {waiting} {waiting === 1 ? 'waits for you' : 'wait for you'}</span>}
     </p>
   );
 }
@@ -154,24 +154,24 @@ export function App({ store }: { store: Store }) {
         <div class="top-right">
           {state.ready && counts(agents, state.today)}
           {state.ready && grouped && !working && (
-            <span class="view-switch" role="group" aria-label="Vista">
+            <span class="view-switch" role="group" aria-label="View">
               <button type="button" class={view === 'grid' ? 'on' : undefined} onClick={() => chooseView('grid')}>
-                griglia
+                grid
               </button>
               <button type="button" class={view === 'org' ? 'on' : undefined} onClick={() => chooseView('org')}>
-                organigramma
+                org chart
               </button>
             </span>
           )}
           {state.ready && <BroadcastButton agents={agents} open={panel === 'broadcast'} onToggle={() => toggle('broadcast')} />}
           {state.ready && (
-            <button type="button" class={`broadcast-toggle${panel === 'recall' ? ' active' : ''}`} title="Cerca nelle sessioni passate di un progetto (arricurdai recall)" onClick={() => toggle('recall')}>
-              cerca
+            <button type="button" class={`broadcast-toggle${panel === 'recall' ? ' active' : ''}`} title="Search the earlier sessions of a project (arricurdai recall)" onClick={() => toggle('recall')}>
+              search
             </button>
           )}
           {state.ready && (
-            <button type="button" class={`broadcast-toggle${panel === 'new' ? ' active' : ''}`} title="Avvia una sessione Claude Code in una cartella" onClick={() => toggle('new')}>
-              nuova sessione
+            <button type="button" class={`broadcast-toggle primary${panel === 'new' ? ' active' : ''}`} title="Start a Claude Code session in a folder" onClick={() => toggle('new')}>
+              new session
             </button>
           )}
         </div>
@@ -179,16 +179,16 @@ export function App({ store }: { store: Store }) {
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && panel === 'new' && <NewSessionPanel agents={agents} store={store} onClose={() => toggle('new')} />}
       {state.ready && panel === 'recall' && <RecallPanel agents={agents} store={store} onClose={() => toggle('recall')} />}
-      {state.ready && !state.connected && <p class="notice">Daemon non raggiungibile: riprovo…</p>}
+      {state.ready && !state.connected && <p class="notice">Daemon unreachable: trying again…</p>}
       {!state.ready ? (
-        <p class="empty">Connessione al daemon…</p>
+        <p class="empty">Connecting to the daemon…</p>
       ) : working ? (
         <Workspace state={state} store={store} agents={agents} now={now} />
       ) : agents.length === 0 ? (
         <div class="empty">
-          <p>Nessuna sessione Claude Code attiva.</p>
+          <p>No Claude Code session running.</p>
           <p class="hint">
-            Avviane una con <code>forchetta run claude</code>
+            Start one with <code>forchetta run claude</code>
           </p>
         </div>
       ) : showOrg ? (

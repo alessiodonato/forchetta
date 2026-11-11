@@ -211,12 +211,12 @@ export class Registry {
 
     for (const agent of this.live()) {
       if (agent.pid && !alive(agent.pid)) {
-        markEnded(agent, 'processo terminato', now);
+        markEnded(agent, 'process ended', now);
         touched.add(agent);
       } else if (!agent.pid && agent.control.kind === 'tmux' && now - agent.createdAt > 30_000) {
         const session = agent.control.session;
         if (!panes.some((pane) => pane.session === session)) {
-          markEnded(agent, 'non avviata', now);
+          markEnded(agent, 'never started', now);
           touched.add(agent);
         }
       }
@@ -291,7 +291,7 @@ export class Registry {
     let any = false;
     for (const agent of this.live()) {
       if (agent.pid && !alive(agent.pid)) {
-        markEnded(agent, 'processo terminato', now);
+        markEnded(agent, 'process ended', now);
         this.changed(agent);
         any = true;
       }

@@ -53,7 +53,7 @@ export function menuData(agents: Iterable<Agent>, today: TodayInfo | undefined):
     }));
   return {
     waiting: sessions.filter((session) => session.waiting).length,
-    today: today ? `oggi ≈ ${usdText(today.usd)} · ${shortTokens(today.tokens)} token` : undefined,
+    today: today ? `today ≈ ${usdText(today.usd)} · ${shortTokens(today.tokens)} tokens` : undefined,
     sessions,
   };
 }

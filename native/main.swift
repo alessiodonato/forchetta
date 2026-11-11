@@ -69,7 +69,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         webView.navigationDelegate = self
         // Opaque, with the color of the page behind it: a transparent web view makes the window server blend the
         // whole page at every frame of an animation (measured: much more CPU on an Intel Mac).
-        webView.underPageBackgroundColor = NSColor(srgbRed: 0.051, green: 0.055, blue: 0.063, alpha: 1)
+        webView.underPageBackgroundColor = NSColor(srgbRed: 0.122, green: 0.118, blue: 0.110, alpha: 1)
 
         let size = parseSize(options["size"]) ?? NSSize(width: 1240, height: 800)
         window = NSWindow(
@@ -80,7 +80,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         )
         window.title = "Forchetta"
         window.appearance = NSAppearance(named: .darkAqua)
-        window.backgroundColor = NSColor(srgbRed: 0.051, green: 0.055, blue: 0.063, alpha: 1)
+        window.backgroundColor = NSColor(srgbRed: 0.122, green: 0.118, blue: 0.110, alpha: 1)
         window.isRestorable = false
         window.minSize = NSSize(width: 420, height: 320)
         window.contentView = webView
@@ -171,8 +171,8 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     private func showProblem() {
         let log = varDir.appendingPathComponent("daemon.log").path
         let html = """
-        <html><body style="background:#0d0e10;color:#a3a8b0;font:13px -apple-system;padding:48px">
-        <p>Il daemon di Forchetta non è partito.</p><p style="font-family:ui-monospace">\(log)</p></body></html>
+        <html><body style="background:#1f1e1c;color:#bdb8ae;font:13px -apple-system;padding:48px">
+        <p>The Forchetta daemon did not start.</p><p style="font-family:ui-monospace">\(log)</p></body></html>
         """
         webView.loadHTMLString(html, baseURL: nil)
     }
@@ -247,11 +247,11 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         menu.removeAllItems()
         let sessions = (menuInfo["sessions"] as? [[String: Any]]) ?? []
         let waiting = (menuInfo["waiting"] as? Int) ?? 0
-        let head = waiting == 0 ? "Nessuna sessione ti aspetta" : waiting == 1 ? "1 sessione ti aspetta" : "\(waiting) sessioni ti aspettano"
+        let head = waiting == 0 ? "No session waits for you" : waiting == 1 ? "1 session waits for you" : "\(waiting) sessions wait for you"
         menu.addItem(disabledItem(head))
         if let today = menuInfo["today"] as? String { menu.addItem(disabledItem(today)) }
         menu.addItem(.separator())
-        if sessions.isEmpty { menu.addItem(disabledItem("Nessuna sessione attiva")) }
+        if sessions.isEmpty { menu.addItem(disabledItem("No session running")) }
         let now = Date().timeIntervalSince1970 * 1000
         for session in sessions {
             guard let id = session["id"] as? String, let name = session["name"] as? String else { continue }
@@ -259,7 +259,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             if let detail = session["detail"] as? String { parts.append(detail) }
             if session["waiting"] as? Bool != true, let expires = session["cacheExpiresAt"] as? Double {
                 let left = Int((expires - now) / 60000)
-                parts.append(left > 0 ? "cache \(left) min" : "cache scaduta")
+                parts.append(left > 0 ? "cache \(left) min" : "cache expired")
             }
             if let cost = session["cost"] as? String { parts.append(cost) }
             let line = parts.filter { !$0.isEmpty }.joined(separator: " · ")
@@ -270,14 +270,14 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let show = NSMenuItem(title: hotKeyText.map { "Mostra Forchetta (\($0))" } ?? "Mostra Forchetta", action: #selector(showWindow), keyEquivalent: "")
+        let show = NSMenuItem(title: hotKeyText.map { "Show Forchetta (\($0))" } ?? "Show Forchetta", action: #selector(showWindow), keyEquivalent: "")
         show.target = self
         menu.addItem(show)
-        let new = NSMenuItem(title: "Nuova sessione…", action: #selector(newSession), keyEquivalent: "")
+        let new = NSMenuItem(title: "New session…", action: #selector(newSession), keyEquivalent: "")
         new.target = self
         menu.addItem(new)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Esci da Forchetta", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Quit Forchetta", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
     }
 
     private func disabledItem(_ title: String) -> NSMenuItem {
@@ -353,7 +353,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             default:
                 guard key == nil, let code = keys[part] else { return nil }
                 key = code
-                keyName = part == "space" ? "Spazio" : part.uppercased()
+                keyName = part == "space" ? "Space" : part.uppercased()
             }
         }
         // A shortcut with no modifier would take a key away from every app.
@@ -370,8 +370,8 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Scegli"
-        panel.message = "La cartella della nuova sessione"
+        panel.prompt = "Choose"
+        panel.message = "The folder of the new session"
         if let folder = folder, !folder.isEmpty {
             let expanded = (folder as NSString).expandingTildeInPath
             var isDirectory: ObjCBool = false
@@ -674,40 +674,40 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Informazioni su Forchetta", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About Forchetta", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Nascondi Forchetta", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        let others = appMenu.addItem(withTitle: "Nascondi altre", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Hide Forchetta", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let others = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         others.keyEquivalentModifierMask = [.command, .option]
-        appMenu.addItem(withTitle: "Mostra tutte", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Esci da Forchetta", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Forchetta", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
 
         let editItem = NSMenuItem()
-        let editMenu = NSMenu(title: "Modifica")
-        editMenu.addItem(withTitle: "Annulla", action: Selector(("undo:")), keyEquivalent: "z")
-        let redo = editMenu.addItem(withTitle: "Ripeti", action: Selector(("redo:")), keyEquivalent: "z")
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]
         editMenu.addItem(.separator())
-        editMenu.addItem(withTitle: "Taglia", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "Copia", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Incolla", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Seleziona tutto", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = editMenu
         main.addItem(editItem)
 
         let viewItem = NSMenuItem()
-        let viewMenu = NSMenu(title: "Vista")
-        viewMenu.addItem(withTitle: "Ricarica", action: #selector(reloadPage), keyEquivalent: "r").target = self
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Reload", action: #selector(reloadPage), keyEquivalent: "r").target = self
         viewItem.submenu = viewMenu
         main.addItem(viewItem)
 
         let windowItem = NSMenuItem()
-        let windowMenu = NSMenu(title: "Finestra")
-        windowMenu.addItem(withTitle: "Contrai", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowMenu.addItem(withTitle: "Ridimensiona", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         windowItem.submenu = windowMenu
         main.addItem(windowItem)
         NSApp.windowsMenu = windowMenu

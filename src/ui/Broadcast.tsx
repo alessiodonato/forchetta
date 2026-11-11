@@ -21,8 +21,8 @@ export const overThreshold = (agents: readonly Agent[], threshold = CONTEXT_THRE
 export function BroadcastButton({ agents, open, onToggle }: { agents: readonly Agent[]; open: boolean; onToggle: () => void }) {
   if (commandable(agents).length < 2 && !open) return null;
   return (
-    <button type="button" class={`broadcast-toggle${open ? ' active' : ''}`} title="Un comando a più sessioni" onClick={onToggle}>
-      comando a più sessioni
+    <button type="button" class={`broadcast-toggle${open ? ' active' : ''}`} title="One command to several sessions" onClick={onToggle}>
+      command to several
     </button>
   );
 }
@@ -71,13 +71,13 @@ export function BroadcastPanel({ agents, store, onClose }: { agents: readonly Ag
 
   const tokens = selected.reduce((sum, agent) => sum + (agent.context?.tokens ?? 0), 0);
   const notes = store.state.settings.arricurdaiNotes
-    ? 'arricurdAI prepara prima una nota per ognuna.'
-    : 'arricurdAI non può salvare una nota in questa versione: i transcript restano su disco e recall li trova.';
+    ? 'arricurdAI first writes a note for each.'
+    : 'This version of arricurdAI cannot save a note: the transcripts stay on disk, and recall finds them.';
 
   return (
-    <section class="broadcast" aria-label="Comando a più sessioni" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
+    <section class="broadcast" aria-label="Command to several sessions" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
       <div class="broadcast-row">
-        <span class="broadcast-label">Comando</span>
+        <span class="broadcast-label">Command</span>
         {(['compact', 'clear', 'btw'] as const).map((option) => (
           <button key={option} type="button" class={`chip${kind === option ? ' on' : ''}`} onClick={() => setKind(option)}>
             /{option}
@@ -90,22 +90,22 @@ export function BroadcastPanel({ agents, store, onClose }: { agents: readonly Ag
             type="text"
             value={question}
             maxLength={900}
-            placeholder="Domanda per /btw"
+            placeholder="Question for /btw"
             onInput={(event) => setQuestion((event.target as HTMLInputElement).value)}
             onKeyDown={(event) => event.key === 'Enter' && send()}
           />
         )}
       </div>
       <div class="broadcast-row">
-        <span class="broadcast-label">Sessioni</span>
+        <span class="broadcast-label">Sessions</span>
         <button type="button" class="chip" onClick={() => pick(over)} disabled={over.length === 0}>
-          contesto ≥ {CONTEXT_THRESHOLD}% ({over.length})
+          context ≥ {CONTEXT_THRESHOLD}% ({over.length})
         </button>
         <button type="button" class="chip" onClick={() => pick(targets)}>
-          tutte ({targets.length})
+          all ({targets.length})
         </button>
         <button type="button" class="chip" onClick={() => pick([])}>
-          nessuna
+          none
         </button>
       </div>
       <ul class="broadcast-list">
@@ -123,16 +123,16 @@ export function BroadcastPanel({ agents, store, onClose }: { agents: readonly Ag
       </ul>
       {kind === 'clear' && confirming && (
         <p class="broadcast-confirm">
-          Pulire {selected.length === 1 ? '1 sessione' : `${selected.length} sessioni`}? Il loro contesto ({shortTokens(tokens)} token in tutto) verrà azzerato. {notes}
+          Clear {selected.length === 1 ? '1 session' : `${selected.length} sessions`}? Their context ({shortTokens(tokens)} tokens in all) will be emptied. {notes}
         </p>
       )}
       <div class="broadcast-row end">
-        <span class="broadcast-note">Ogni sessione lo riceve quando è pronta, come dal suo box.</span>
+        <span class="broadcast-note">Each session gets it when it is ready, as from its box.</span>
         <button type="button" class={kind === 'clear' && confirming ? 'danger' : 'primary'} disabled={!ready} onClick={send}>
-          {kind === 'clear' && confirming ? 'Pulisci' : `Invia a ${selected.length === 1 ? '1 sessione' : `${selected.length} sessioni`}`}
+          {kind === 'clear' && confirming ? 'Clear' : `Send to ${selected.length === 1 ? '1 session' : `${selected.length} sessions`}`}
         </button>
         <button type="button" class="quiet" onClick={onClose}>
-          Annulla
+          Cancel
         </button>
       </div>
     </section>

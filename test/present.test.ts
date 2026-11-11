@@ -9,7 +9,7 @@ const agent = (init: Partial<Agent>): Agent => ({ ...newAgent({ id: 'a', control
 
 describe('texts of the box', () => {
   it('counts the first minute in steps of 5 s', () => {
-    expect(agoShort(3000)).toBe('ora');
+    expect(agoShort(3000)).toBe('now');
     expect(agoShort(14_999)).toBe('10 s');
     expect(agoShort(59_000)).toBe('55 s');
     expect(agoShort(61_000)).toBe('1 min');
@@ -18,7 +18,7 @@ describe('texts of the box', () => {
   it('counts the cache down', () => {
     expect(cacheText({ expiresAt: T + 42.5 * 60_000, live: true, guardWillStop: false }, T)).toBe('cache 42 min');
     expect(cacheText({ expiresAt: T + 43_000, live: true, guardWillStop: false }, T)).toBe('cache 45 s');
-    expect(cacheText({ expiresAt: T - 1, live: false, guardWillStop: true }, T)).toBe('cache scaduta');
+    expect(cacheText({ expiresAt: T - 1, live: false, guardWillStop: true }, T)).toBe('cache expired');
   });
 
   it('writes tokens and share as arricurdai does', () => {

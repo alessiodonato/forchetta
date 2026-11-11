@@ -49,8 +49,8 @@ describe('recall', () => {
 
   it('needs arricurdAI, a folder that is there, and words', async () => {
     expect((await runRecall(undefined, temp.dir, 'x')).ok).toBe(false);
-    expect((await runRecall(fake(), 'relativa', 'x')).error).toBe('scegli un progetto');
+    expect((await runRecall(fake(), 'relativa', 'x')).error).toBe('choose a project');
     expect((await runRecall(fake(), join(temp.dir, 'non-c-e'), 'x')).ok).toBe(false);
-    expect((await runRecall(fake(), temp.dir, '   ')).error).toBe('scrivi cosa cercare');
+    expect((await runRecall(fake(), temp.dir, '   ')).error).toBe('write what to search for');
   });
 });

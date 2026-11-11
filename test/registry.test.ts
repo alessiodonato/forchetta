@@ -55,7 +55,7 @@ describe('a session of forchetta run', () => {
     const agent = registry.agents.get(AGENT)!;
     registry.hook(ev('UserPromptSubmit', { prompt: 'Sistema i test del modulo api' }));
     expect(agent.state).toBe('working');
-    expect(agent.summary?.text).toBe('Sta lavorando a: Sistema i test del modulo api');
+    expect(agent.summary?.text).toBe('Working on: Sistema i test del modulo api');
 
     registry.hook(ev('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'npm test' } }));
     expect(agent.action?.label).toBe('Bash npm test');
@@ -248,7 +248,7 @@ describe('sessions found without forchetta run', () => {
     registry.reconcile([{ pid: 111, sessionId: S2, status: 'idle' }], [], () => true);
     expect(agent).toMatchObject({ sessionId: S2, pastSessionIds: [S1] });
     registry.checkAlive(() => false);
-    expect(agent).toMatchObject({ state: 'ended', endReason: 'processo terminato' });
+    expect(agent).toMatchObject({ state: 'ended', endReason: 'process ended' });
   });
 
   it('forgets ended sessions after the retention time', () => {

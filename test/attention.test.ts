@@ -33,7 +33,7 @@ describe('notifications of a wait', () => {
     vi.advanceTimersByTime(4900);
     expect(notices).toEqual([]);
     vi.advanceTimersByTime(200);
-    expect(notices).toEqual([{ agentId: 'a-1', kind: 'waiting', title: 'alpha ti aspetta', body: 'Permesso: Bash rm -rf build' }]);
+    expect(notices).toEqual([{ agentId: 'a-1', kind: 'waiting', title: 'alpha waits for you', body: 'Permission: Bash rm -rf build' }]);
     // The same wait, changed again (the Notification of Claude Code that follows): no second one.
     attention.agentChanged(agent);
     vi.advanceTimersByTime(10_000);
@@ -106,7 +106,7 @@ describe('notifications of a stall and of an error', () => {
     vi.advanceTimersByTime(9 * 60_000);
     expect(notices).toEqual([]);
     vi.advanceTimersByTime(60_000);
-    expect(notices).toEqual([{ agentId: 'a-1', kind: 'stall', title: 'alpha sembra ferma', body: 'nessun evento da 10 min · Bash npm test in corso' }]);
+    expect(notices).toEqual([{ agentId: 'a-1', kind: 'stall', title: 'alpha seems stuck', body: 'no event for 10 min · Bash npm test running' }]);
     // Still stalled: no second one.
     attention.agentChanged(agent);
     vi.advanceTimersByTime(30 * 60_000);
@@ -120,7 +120,7 @@ describe('notifications of a stall and of an error', () => {
     attention.agentChanged(agent);
     vi.advanceTimersByTime(10 * 60_000 + 50);
     vi.setSystemTime(Date.now() - 100);
-    expect(notices[0]?.body).toBe('nessun evento da 10 min');
+    expect(notices[0]?.body).toBe('no event for 10 min');
   });
 
   it('a sign of life moves the stall away: a new event, or a cost that went up', () => {
@@ -143,7 +143,7 @@ describe('notifications of a stall and of an error', () => {
     agent.error = { kind: 'rate_limit', message: 'Limite raggiunto, riprova alle 15', at: Date.now() };
     attention.agentChanged(agent);
     vi.advanceTimersByTime(0);
-    expect(notices).toEqual([{ agentId: 'a-1', kind: 'error', title: 'alpha: errore', body: 'rate_limit · Limite raggiunto, riprova alle 15' }]);
+    expect(notices).toEqual([{ agentId: 'a-1', kind: 'error', title: 'alpha: error', body: 'rate_limit · Limite raggiunto, riprova alle 15' }]);
     attention.agentChanged(agent);
     vi.advanceTimersByTime(1000);
     expect(notices).toHaveLength(1);

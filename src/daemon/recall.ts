@@ -38,15 +38,15 @@ export function parseRecall(stdout: string): RecallResult {
 
 export function runRecall(command: readonly string[] | undefined, project: unknown, query: unknown): Promise<RecallResult> {
   const [bin, ...prefix] = command ?? [];
-  if (!bin) return Promise.resolve({ ok: false, error: 'arricurdAI non trovato: la ricerca usa arricurdai recall' });
-  if (typeof project !== 'string' || !isAbsolute(project)) return Promise.resolve({ ok: false, error: 'scegli un progetto' });
+  if (!bin) return Promise.resolve({ ok: false, error: 'arricurdAI not found: the search uses arricurdai recall' });
+  if (typeof project !== 'string' || !isAbsolute(project)) return Promise.resolve({ ok: false, error: 'choose a project' });
   try {
     if (!statSync(project).isDirectory()) throw new Error();
   } catch {
-    return Promise.resolve({ ok: false, error: `la cartella ${project} non esiste` });
+    return Promise.resolve({ ok: false, error: `the folder ${project} does not exist` });
   }
   const words = typeof query === 'string' ? query.slice(0, MAX_QUERY).split(/\s+/).filter(Boolean) : [];
-  if (words.length === 0) return Promise.resolve({ ok: false, error: 'scrivi cosa cercare' });
+  if (words.length === 0) return Promise.resolve({ ok: false, error: 'write what to search for' });
   // "--" before the words: a word that starts with "-" is a word, not an option.
   const args = [...prefix, 'recall', '--project', project, '--json', '--limit', String(LIMIT), '--', ...words];
   return new Promise((resolve) => {
@@ -63,7 +63,7 @@ export function runRecall(command: readonly string[] | undefined, project: unkno
       // "nothing in N earlier sessions matches": no error, no match.
       const none = /nothing in (\d+) earlier sessions? match/.exec(message);
       if (none) return resolve({ ok: true, sessions: Number(none[1]), matches: [] });
-      resolve({ ok: false, error: message.replace(/^arricurdai recall:\s*/, '') || 'arricurdai recall non ha risposto' });
+      resolve({ ok: false, error: message.replace(/^arricurdai recall:\s*/, '') || 'arricurdai recall did not answer' });
     });
   });
 }

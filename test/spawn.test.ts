@@ -57,7 +57,7 @@ describe('spawnSession', () => {
     const registry = new Registry();
     const plain = join(temp.dir, 'senza-git');
     mkdirSync(plain, { recursive: true });
-    expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: plain, worktree: true })).toMatchObject({ ok: false, error: expect.stringContaining('repo git') });
+    expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: plain, worktree: true })).toMatchObject({ ok: false, error: expect.stringContaining('git repository') });
     registry.dispose();
   });
 
@@ -65,8 +65,8 @@ describe('spawnSession', () => {
     const registry = new Registry();
     const file = join(temp.dir, 'file.txt');
     writeFileSync(file, 'x');
-    expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: join(temp.dir, 'non-c-e') })).toMatchObject({ ok: false, error: expect.stringContaining('non esiste') });
-    expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: file })).toMatchObject({ ok: false, error: expect.stringContaining('non è una cartella') });
+    expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: join(temp.dir, 'non-c-e') })).toMatchObject({ ok: false, error: expect.stringContaining('does not exist') });
+    expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: file })).toMatchObject({ ok: false, error: expect.stringContaining('is not a folder') });
     expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: 'relativa' })).toMatchObject({ ok: false });
     expect(await spawnSession({ tmux, registry, claude: undefined, log }, { cwd: temp.dir })).toMatchObject({ ok: false });
     expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: temp.dir, prompt: 'x'.repeat(20_001) })).toMatchObject({ ok: false });
@@ -122,7 +122,7 @@ describe('spawnSession', () => {
       { tmux, registry, claude: quick, log, shell: '/bin/bash', env: { PATH: '/usr/bin:/bin', HOME: join(temp.dir, 'home') }, watchMs: 3000 },
       { cwd: join(temp.dir, 'repo'), worktree: true },
     );
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('fidata') });
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('already trust') });
     registry.dispose();
   });
 

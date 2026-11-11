@@ -51,14 +51,14 @@ function shortPath(path: string): string {
 async function change(path: string, at: number, repo: string | undefined): Promise<FileChange> {
   const name = repo ? relative(repo, path) : shortPath(path);
   const base: FileChange = { path, name, repo: repo ? basename(repo) : undefined, at, added: 0, removed: 0 };
-  if (!repo) return { ...base, note: existsSync(path) ? 'fuori da git: nessun diff' : 'fuori da git, e non c’è più' };
+  if (!repo) return { ...base, note: existsSync(path) ? 'outside git: no diff' : 'outside git, and gone' };
   let diff = (await git([...DIFF, 'HEAD', '--', name], repo)).stdout;
   if (!diff) {
     // Not in the last commit: a new file, or a repository with no commit yet.
     const tracked = (await git(['ls-files', '--error-unmatch', '--', name], repo)).code === 0;
     if (!tracked && existsSync(path)) diff = (await git([...DIFF, '--no-index', '--', '/dev/null', name], repo)).stdout;
   }
-  if (!diff) return { ...base, note: existsSync(path) ? 'nessuna differenza dall’ultimo commit' : 'non c’è più' };
+  if (!diff) return { ...base, note: existsSync(path) ? 'no difference since the last commit' : 'gone' };
   const counted = countLines(diff);
   if (diff.length > MAX_FILE_BYTES) return { ...base, ...counted, diff: `${diff.slice(0, MAX_FILE_BYTES)}\n…`, note: 'diff troncato' };
   return { ...base, ...counted, diff };
@@ -77,7 +77,7 @@ export async function changesOf(files: ReadonlyArray<{ path: string; at: number;
     const item = { ...(await change(file.path, file.at, file.repo)), edits: own };
     total += item.diff?.length ?? 0;
     if (total > MAX_TOTAL_BYTES && item.diff) {
-      out.push({ ...item, diff: undefined, note: 'diff non mostrato: troppo testo in tutto' });
+      out.push({ ...item, diff: undefined, note: 'diff not shown: too much text in all' });
       continue;
     }
     out.push(item);

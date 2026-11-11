@@ -67,17 +67,17 @@ const sameText = (a: string, b: string): boolean => a.replace(/\s+/g, '') === b.
 function waitReason(agent: Agent): string {
   switch (agent.state) {
     case 'working':
-      return 'aspetto la fine del turno';
+      return 'waiting for the turn to end';
     case 'waiting':
-      return 'Claude aspetta una tua risposta';
+      return 'Claude waits for your answer';
     case 'compacting':
-      return 'aspetto la fine della compattazione';
+      return 'waiting for the compaction to end';
     case 'starting':
-      return 'la sessione sta partendo';
+      return 'the session is starting';
     case 'error':
-      return 'aspetto che la sessione riprenda';
+      return 'waiting for the session to resume';
     default:
-      return 'aspetto';
+      return 'waiting';
   }
 }
 
@@ -101,9 +101,9 @@ export class Commander {
 
   enqueue(agentId: string, kind: string, arg?: unknown, confirmed?: unknown): EnqueueResult {
     const agent = this.options.registry.agents.get(agentId);
-    if (!agent) return { ok: false, error: 'sessione sconosciuta' };
-    if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'sessione in sola lettura o terminata' };
-    if (kind !== 'btw' && kind !== 'compact' && kind !== 'clear') return { ok: false, error: `comando sconosciuto: ${kind}` };
+    if (!agent) return { ok: false, error: 'unknown session' };
+    if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'the session is read only or ended' };
+    if (kind !== 'btw' && kind !== 'compact' && kind !== 'clear') return { ok: false, error: `unknown command: ${kind}` };
     if (kind === 'clear' && confirmed !== true) return { ok: false, error: '/clear va confermato' };
     let question: string | undefined;
     if (kind === 'btw') {
@@ -112,8 +112,8 @@ export class Commander {
         .replace(/[\u0000-\u001f\u007f]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-      if (!question) return { ok: false, error: 'manca la domanda' };
-      if (Buffer.byteLength(question) > MAX_QUESTION_BYTES) return { ok: false, error: 'domanda troppo lunga' };
+      if (!question) return { ok: false, error: 'the question is missing' };
+      if (Buffer.byteLength(question) > MAX_QUESTION_BYTES) return { ok: false, error: 'question too long' };
     }
     const command: QueuedCommand = { id: randomUUID(), kind, arg: question, status: 'in-coda', createdAt: this.now() };
     agent.commands = [...(agent.commands ?? []), command];
@@ -155,8 +155,8 @@ export class Commander {
     }
     // A compaction that started and is over without PostCompact: Claude Code gave up on it.
     const flight = this.inflight.get(agent.id);
-    if (flight?.command.kind === 'compact' && flight.command.reason === 'compattazione in corso' && agent.state === 'idle' && agent.lastEvent.name === 'PreCompact') {
-      this.finish(agent, flight.command, 'non-confermato', 'Claude non ha compattato (forse troppo pochi messaggi): guarda il terminale');
+    if (flight?.command.kind === 'compact' && flight.command.reason === 'compacting' && agent.state === 'idle' && agent.lastEvent.name === 'PreCompact') {
+      this.finish(agent, flight.command, 'non-confermato', 'Claude did not compact (too few messages, maybe): see the terminal');
       return;
     }
     const next = this.next(agent);
@@ -173,11 +173,11 @@ export class Commander {
     const event = payload.hook_event_name;
     if (flight.command.kind === 'compact' && event === 'PreCompact' && payload.trigger === 'manual') {
       flight.deadline = this.now() + COMPACTION_MS;
-      this.note(agent, flight.command, 'inviato', 'compattazione in corso');
+      this.note(agent, flight.command, 'inviato', 'compacting');
     } else if (flight.command.kind === 'compact' && ((event === 'PostCompact' && payload.trigger === 'manual') || (event === 'SessionStart' && payload.source === 'compact'))) {
-      this.finish(agent, flight.command, 'confermato', 'compattazione fatta');
+      this.finish(agent, flight.command, 'confermato', 'compaction done');
     } else if (flight.command.kind === 'clear' && ((event === 'SessionEnd' && payload.reason === 'clear') || (event === 'SessionStart' && payload.source === 'clear'))) {
-      this.finish(agent, flight.command, 'confermato', 'sessione pulita');
+      this.finish(agent, flight.command, 'confermato', 'session cleared');
     }
   }
 
@@ -187,7 +187,7 @@ export class Commander {
     for (const [agentId, flight] of this.inflight) {
       if (now < flight.deadline) continue;
       const agent = this.options.registry.agents.get(agentId);
-      if (agent) this.finish(agent, flight.command, 'non-confermato', flight.command.kind === 'compact' ? 'nessuna compattazione partita: guarda il terminale' : 'nessuna conferma: guarda il terminale');
+      if (agent) this.finish(agent, flight.command, 'non-confermato', flight.command.kind === 'compact' ? 'no compaction started: see the terminal' : 'no confirmation: see the terminal');
       else this.inflight.delete(agentId);
     }
     for (const agent of this.options.registry.agents.values()) {
@@ -236,7 +236,7 @@ export class Commander {
     for (const command of agent.commands ?? []) {
       if (WAITING.includes(command.status) || command.status === 'inviato') {
         command.status = command.status === 'inviato' ? 'non-confermato' : 'annullato';
-        command.reason = 'sessione terminata';
+        command.reason = 'session ended';
         command.doneAt = this.now();
         changed = true;
       }
@@ -260,7 +260,7 @@ export class Commander {
     const command = this.next(agent);
     if (!command) return;
     if (agent.state !== 'idle') return this.note(agent, command, 'in-coda', waitReason(agent));
-    if (agent.control.kind !== 'tmux' || !agent.control.paneId || !agent.pid) return this.note(agent, command, 'in-coda', 'aspetto di conoscere il pane della sessione');
+    if (agent.control.kind !== 'tmux' || !agent.control.paneId || !agent.pid) return this.note(agent, command, 'in-coda', 'waiting to know the pane of the session');
     const pane = agent.control.paneId;
     const session = agent.control.session;
     const { tmux } = this.options;
@@ -270,17 +270,17 @@ export class Commander {
       const identity = await tmux.run('display-message', ['-p', '-t', pane, '#{session_name}\t#{pane_pid}']);
       const [paneSession, panePid] = identity.stdout.trim().split('\t');
       if (identity.code !== 0 || paneSession !== session || Number(panePid) !== agent.pid) {
-        return this.finish(agent, command, 'fallito', 'il pane non corrisponde più alla sessione');
+        return this.finish(agent, command, 'fallito', 'the pane no longer belongs to the session');
       }
       // Nobody typed into it in the last seconds.
       const activity = Number((await tmux.run('display-message', ['-p', '-t', session, '#{session_activity}'])).stdout.trim()) * 1000;
       if (Number.isFinite(activity) && this.now() - activity < (this.options.typingQuietMs ?? 10_000)) {
-        return this.note(agent, command, 'in-coda', 'stai scrivendo nella sessione: aspetto');
+        return this.note(agent, command, 'in-coda', 'you are typing in the session: waiting');
       }
       // The input box is on screen, and empty.
       const box = readPromptBox(await this.capture(pane));
-      if (!box.found) return this.note(agent, command, 'bloccato', 'nel terminale è aperto un dialogo o la risposta di /btw: chiudilo con Esc');
-      if (box.typed) return this.note(agent, command, 'bloccato', "c'è del testo nel prompt: lo lascio com'è");
+      if (!box.found) return this.note(agent, command, 'bloccato', 'a dialog or the answer of /btw is open in the terminal: close it with Esc');
+      if (box.typed) return this.note(agent, command, 'bloccato', 'there is text in the prompt: it stays as it is');
       // A state that changed while checking: the next round decides again.
       if (agent.state !== 'idle') return this.note(agent, command, 'in-coda', waitReason(agent));
 
@@ -288,7 +288,7 @@ export class Commander {
         try {
           await this.options.notes.prepare(agent.transcriptPath);
         } catch (error) {
-          return this.finish(agent, command, 'fallito', `arricurdAI non ha preparato la nota della sessione: ${String(error)}`);
+          return this.finish(agent, command, 'fallito', `arricurdAI did not write the note of the session: ${String(error)}`);
         }
       }
 
@@ -297,7 +297,7 @@ export class Commander {
       await this.sleep(this.options.pasteSettleMs ?? 1000);
       const typed = readPromptBox(await this.capture(pane));
       if (!typed.found || !sameText(typed.typed, text)) {
-        return this.finish(agent, command, 'fallito', 'il prompt non mostra il comando come scritto: Invio non premuto, controlla il terminale');
+        return this.finish(agent, command, 'fallito', 'the prompt does not show the command as typed: Enter not pressed, check the terminal');
       }
       await tmux.run('send-keys', ['-t', pane, 'Enter']);
       command.status = 'inviato';
@@ -311,7 +311,7 @@ export class Commander {
         await this.sleep(1500);
         const screen = await this.capture(pane);
         if (this.inflight.get(agentId)?.command === command && screenShows(screen, text)) {
-          this.finish(agent, command, 'confermato', 'la risposta è nel terminale');
+          this.finish(agent, command, 'confermato', 'the answer is in the terminal');
         }
       }
     } catch (error) {

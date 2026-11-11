@@ -130,7 +130,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
       if (prompt.startsWith('/') || prompt.startsWith('!')) break;
       startWork(agent);
       agent.action = undefined;
-      agent.summary = { text: prompt ? `Sta lavorando a: ${clip(prompt, 100)}` : 'Sta lavorando', source: 'eventi', at: now };
+      agent.summary = { text: prompt ? `Working on: ${clip(prompt, 100)}` : 'Working', source: 'eventi', at: now };
       agent.lastPrompt = prompt ? clip(prompt, 600) : undefined;
       agent.recentActions = [];
       break;
@@ -146,7 +146,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
       }
       if (!fromSubagent && tool === 'ExitPlanMode') {
         agent.state = 'waiting';
-        agent.waiting = { kind: 'dialogo', tool, detail: 'piano da approvare', since: now };
+        agent.waiting = { kind: 'dialogo', tool, detail: 'plan to approve', since: now };
         agent.completedAt = undefined;
         break;
       }
@@ -169,7 +169,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
       // AskUserQuestion and ExitPlanMode ask for permission too (seen with 2.1.322): they stay a question
       // and a plan to approve, not a permission.
       if (tool === 'AskUserQuestion') agent.waiting = { kind: 'domanda', tool, detail: firstQuestion(payload.tool_input), key, since };
-      else if (tool === 'ExitPlanMode') agent.waiting = { kind: 'dialogo', tool, detail: 'piano da approvare', key, since };
+      else if (tool === 'ExitPlanMode') agent.waiting = { kind: 'dialogo', tool, detail: 'plan to approve', key, since };
       else agent.waiting = { kind: 'permesso', tool, detail: toolLabel(tool, payload.tool_input, agent.cwd ?? payload.cwd).label, key, since };
       agent.completedAt = undefined;
       break;

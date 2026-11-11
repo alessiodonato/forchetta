@@ -88,9 +88,9 @@ describe('commands of the box', () => {
     hook(B, { hook_event_name: 'PreCompact', trigger: 'manual' });
     expect(status(A)).toBe('inviato');
     hook(A, { hook_event_name: 'PreCompact', trigger: 'manual' });
-    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'inviato', reason: 'compattazione in corso' });
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'inviato', reason: 'compacting' });
     hook(A, { hook_event_name: 'PostCompact', trigger: 'manual' });
-    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'confermato', reason: 'compattazione fatta' });
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'confermato', reason: 'compaction done' });
     expect(registry.agents.get(B)!.commands).toBeUndefined();
   });
 
@@ -114,11 +114,11 @@ describe('commands of the box', () => {
     registry.hook({ hook_event_name: 'UserPromptSubmit', session_id: `s-${A}`, prompt: 'vai' });
     commander.enqueue(A, 'compact');
     await settle();
-    expect(agent.commands![0]).toMatchObject({ status: 'in-coda', reason: 'aspetto la fine del turno' });
+    expect(agent.commands![0]).toMatchObject({ status: 'in-coda', reason: 'waiting for the turn to end' });
     registry.hook({ hook_event_name: 'PermissionRequest', session_id: `s-${A}`, tool_name: 'Bash', tool_input: { command: 'rm -rf x' } });
     commander.tick();
     await settle();
-    expect(agent.commands![0]).toMatchObject({ status: 'in-coda', reason: 'Claude aspetta una tua risposta' });
+    expect(agent.commands![0]).toMatchObject({ status: 'in-coda', reason: 'Claude waits for your answer' });
     expect(tmux.typed).toEqual([]);
     // The turn ends: the command goes.
     registry.hook({ hook_event_name: 'Stop', session_id: `s-${A}`, last_assistant_message: 'ok' });
@@ -131,7 +131,7 @@ describe('commands of the box', () => {
     tmux.panes.get('%1')!.screen = box('una bozza mia');
     commander.enqueue(A, 'compact');
     await settle();
-    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'bloccato', reason: "c'è del testo nel prompt: lo lascio com'è" });
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'bloccato', reason: 'there is text in the prompt: it stays as it is' });
     expect(tmux.typed).toEqual([]);
     tmux.panes.get('%1')!.screen = box('');
     commander.tick();
@@ -144,7 +144,7 @@ describe('commands of the box', () => {
     tmux.panes.get('%1')!.activity = Math.floor(Date.now() / 1000);
     commander.enqueue(A, 'compact');
     await settle();
-    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'in-coda', reason: 'stai scrivendo nella sessione: aspetto' });
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'in-coda', reason: 'you are typing in the session: waiting' });
     tmux.panes.get('%1')!.activity = 0;
     tmux.panes.get('%1')!.screen = BTW_OPEN('/btw domanda');
     commander.tick();
@@ -158,7 +158,7 @@ describe('commands of the box', () => {
     tmux.panes.get('%1')!.pid = 999;
     commander.enqueue(A, 'compact');
     await settle();
-    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'fallito', reason: 'il pane non corrisponde più alla sessione' });
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'fallito', reason: 'the pane no longer belongs to the session' });
     expect(tmux.typed).toEqual([]);
   });
 
@@ -202,8 +202,8 @@ describe('commands of the box', () => {
     commander.enqueue(A, 'btw', 'quanto fa\n17 per 3?');
     await settle();
     expect(tmux.typed).toEqual([{ pane: '%1', text: '/btw quanto fa 17 per 3?' }]);
-    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'confermato', reason: 'la risposta è nel terminale' });
-    expect(commander.enqueue(A, 'btw', '   ')).toEqual({ ok: false, error: 'manca la domanda' });
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'confermato', reason: 'the answer is in the terminal' });
+    expect(commander.enqueue(A, 'btw', '   ')).toEqual({ ok: false, error: 'the question is missing' });
   });
 
   it('says so when no confirmation comes, takes back a command still waiting, and drops the queue of an ended session', async () => {
@@ -232,7 +232,7 @@ describe('commands of the box', () => {
     setup();
     registry.hook({ hook_event_name: 'SessionStart', session_id: 's-readonly', source: 'startup', cwd: '/x' });
     const readonly = registry.list().find((agent) => agent.control.kind === 'readonly')!;
-    expect(commander.enqueue(readonly.id, 'compact')).toEqual({ ok: false, error: 'sessione in sola lettura o terminata' });
-    expect(commander.enqueue(A, 'exit')).toEqual({ ok: false, error: 'comando sconosciuto: exit' });
+    expect(commander.enqueue(readonly.id, 'compact')).toEqual({ ok: false, error: 'the session is read only or ended' });
+    expect(commander.enqueue(A, 'exit')).toEqual({ ok: false, error: 'unknown command: exit' });
   });
 });

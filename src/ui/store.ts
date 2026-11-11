@@ -68,7 +68,7 @@ export class Store {
       if (message.ok && message.agentId) {
         this.set({ spawn: { busy: false, startedId: message.agentId } });
         this.openWhenThere(message.agentId);
-      } else this.set({ spawn: { busy: false, error: message.error ?? 'la sessione non è partita' } });
+      } else this.set({ spawn: { busy: false, error: message.error ?? 'the session did not start' } });
       return;
     }
     if (message.type === 'files') {

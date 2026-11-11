@@ -11,7 +11,7 @@ const lastPart = (path: string): string => path.split('/').filter(Boolean).at(-1
 
 function when(at: number | undefined): string {
   if (at === undefined) return '';
-  return new Date(at).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return new Date(at).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 export function RecallPanel({ agents, store, onClose }: { agents: readonly Agent[]; store: Store; onClose: () => void }) {
@@ -27,9 +27,9 @@ export function RecallPanel({ agents, store, onClose }: { agents: readonly Agent
   };
 
   return (
-    <section class="broadcast recall" aria-label="Cerca nelle sessioni passate" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
+    <section class="broadcast recall" aria-label="Search earlier sessions" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
       <div class="broadcast-row">
-        <span class="broadcast-label">Progetto</span>
+        <span class="broadcast-label">Project</span>
         {folders.map((path) => (
           <button key={path} type="button" class={`chip${path === project ? ' on' : ''}`} title={path} onClick={() => setProject(path)}>
             {lastPart(path)}
@@ -37,22 +37,22 @@ export function RecallPanel({ agents, store, onClose }: { agents: readonly Agent
         ))}
       </div>
       <div class="broadcast-row">
-        <span class="broadcast-label">Cerca</span>
+        <span class="broadcast-label">Search</span>
         <input
           ref={field}
           class="command-input"
           type="text"
           value={query}
           maxLength={300}
-          placeholder="cosa si era chiesto, deciso o cambiato: parole chiave"
+          placeholder="what was asked, decided or changed: keywords"
           onInput={(event) => setQuery((event.target as HTMLInputElement).value)}
           onKeyDown={(event) => event.key === 'Enter' && search()}
         />
         <button type="button" class="primary" disabled={!project || !query.trim() || state?.busy === true} onClick={search}>
-          {state?.busy ? 'Cerco…' : 'Cerca'}
+          {state?.busy ? 'Searching…' : 'Search'}
         </button>
         <button type="button" class="quiet" onClick={onClose}>
-          Chiudi
+          Close
         </button>
       </div>
       {state && !state.busy && (
@@ -61,20 +61,20 @@ export function RecallPanel({ agents, store, onClose }: { agents: readonly Agent
             <p class="broadcast-note error">{state.error}</p>
           ) : !state.matches?.length ? (
             <p class="broadcast-note">
-              Nessun risultato in {state.sessions ?? 0} {state.sessions === 1 ? 'sessione passata' : 'sessioni passate'} di {lastPart(state.project)}.
+              No results in {state.sessions ?? 0} {state.sessions === 1 ? 'earlier session' : 'earlier sessions'} of {lastPart(state.project)}.
             </p>
           ) : (
             <>
               <p class="broadcast-note">
-                {state.matches.length} {state.matches.length === 1 ? 'risultato' : 'risultati'} in {state.sessions} sessioni passate di {lastPart(state.project)} · da arricurdAI, con i
-                segreti nascosti
+                {state.matches.length} {state.matches.length === 1 ? 'result' : 'results'} in {state.sessions} earlier sessions of {lastPart(state.project)} · from arricurdAI, with
+                secrets hidden
               </p>
               <ol class="recall-list">
                 {state.matches.map((match, index) => (
                   <li key={index}>
                     <p class="recall-head">
                       <span>{when(match.at)}</span>
-                      {match.request && <span class="recall-request">«{match.request}»</span>}
+                      {match.request && <span class="recall-request">“{match.request}”</span>}
                     </p>
                     <pre class="recall-excerpt">{match.excerpt}</pre>
                   </li>

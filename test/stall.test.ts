@@ -31,7 +31,7 @@ describe('stall', () => {
 
   it('says how long, and the tool in progress', () => {
     const agent = { ...base('working', 0), action: { tool: 'Bash', label: 'Bash npm test', family: 'shell' as const, at: 0 } };
-    expect(stallText(agent, 12 * MIN)).toBe('nessun evento da 12 min · Bash npm test in corso');
-    expect(stallText({ ...agent, action: undefined }, 12 * MIN)).toBe('nessun evento da 12 min');
+    expect(stallText(agent, 12 * MIN)).toBe('no event for 12 min · Bash npm test running');
+    expect(stallText({ ...agent, action: undefined }, 12 * MIN)).toBe('no event for 12 min');
   });
 });

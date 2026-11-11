@@ -4,13 +4,13 @@
 export type AgentState = 'starting' | 'working' | 'waiting' | 'idle' | 'compacting' | 'error' | 'ended';
 
 export const STATE_LABEL: Record<AgentState, string> = {
-  starting: 'avvio',
-  working: 'al lavoro',
-  waiting: 'in attesa',
-  idle: 'inattiva',
-  compacting: 'compattazione',
-  error: 'errore',
-  ended: 'terminata',
+  starting: 'starting',
+  working: 'working',
+  waiting: 'waiting',
+  idle: 'idle',
+  compacting: 'compacting',
+  error: 'error',
+  ended: 'ended',
 };
 
 export type ToolFamily = 'edit' | 'shell' | 'read' | 'web' | 'agent' | 'other';

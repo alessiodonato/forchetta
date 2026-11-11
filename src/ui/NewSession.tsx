@@ -31,7 +31,7 @@ export function recentFolders(agents: readonly Agent[], max = 6): string[] {
 const lastPart = (path: string): string => path.split('/').filter(Boolean).at(-1) ?? path;
 
 const MODELS = [
-  ['', 'predefinito'],
+  ['', 'default'],
   ['opus', 'Opus'],
   ['sonnet', 'Sonnet'],
   ['haiku', 'Haiku'],
@@ -39,11 +39,11 @@ const MODELS = [
 ] as const;
 
 const MODES = [
-  ['', 'predefiniti'],
-  ['manual', 'chiede ogni volta'],
-  ['acceptEdits', 'accetta modifiche'],
+  ['', 'default'],
+  ['manual', 'asks every time'],
+  ['acceptEdits', 'accepts edits'],
   ['auto', 'auto'],
-  ['plan', 'piano'],
+  ['plan', 'plan'],
 ] as const;
 
 export function NewSessionPanel({ agents, store, onClose }: { agents: readonly Agent[]; store: Store; onClose: () => void }) {
@@ -72,22 +72,22 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
   };
 
   return (
-    <section class="broadcast new-session" aria-label="Nuova sessione" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
+    <section class="broadcast new-session" aria-label="New session" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
       <div class="broadcast-row">
-        <span class="broadcast-label">Cartella</span>
+        <span class="broadcast-label">Folder</span>
         <input
           ref={field}
           class="command-input mono"
           type="text"
           value={folder}
-          placeholder="~/progetti/app"
+          placeholder="~/projects/app"
           spellcheck={false}
           onInput={(event) => setFolder((event.target as HTMLInputElement).value)}
           onKeyDown={(event) => event.key === 'Enter' && start()}
         />
         {shell() && (
           <button type="button" onClick={() => shell()?.postMessage({ type: 'chooseFolder', folder })}>
-            Scegli…
+            Choose…
           </button>
         )}
       </div>
@@ -102,9 +102,9 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
         </div>
       )}
       <div class="broadcast-row">
-        <span class="broadcast-label">Opzioni</span>
+        <span class="broadcast-label">Options</span>
         <label class="spawn-option">
-          modello
+          model
           <select value={model} onChange={(event) => setModel((event.target as HTMLSelectElement).value)}>
             {MODELS.map(([value, text]) => (
               <option key={value} value={value}>
@@ -114,7 +114,7 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
           </select>
         </label>
         <label class="spawn-option">
-          permessi
+          permissions
           <select value={mode} onChange={(event) => setMode((event.target as HTMLSelectElement).value)}>
             {MODES.map(([value, text]) => (
               <option key={value} value={value}>
@@ -123,9 +123,9 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
             ))}
           </select>
         </label>
-        <label class="spawn-option" title="Claude Code crea un worktree git nuovo per la sessione: lavora su una copia, senza toccare i file delle altre">
+        <label class="spawn-option" title="Claude Code creates a new git worktree for the session: it works on a copy, without touching the files of the others">
           <input type="checkbox" checked={worktree} onChange={() => setWorktree(!worktree)} />
-          worktree nuovo
+          new worktree
         </label>
         {worktree && (
           <input
@@ -133,7 +133,7 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
             type="text"
             value={worktreeName}
             maxLength={40}
-            placeholder="nome (facoltativo)"
+            placeholder="name (optional)"
             spellcheck={false}
             onInput={(event) => setWorktreeName((event.target as HTMLInputElement).value)}
           />
@@ -146,7 +146,7 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
           rows={4}
           value={prompt}
           maxLength={20_000}
-          placeholder="Il primo messaggio per Claude (facoltativo). ⌘↩ avvia."
+          placeholder="The first message for Claude (optional). ⌘↩ starts it."
           onInput={(event) => setPrompt((event.target as HTMLTextAreaElement).value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) start();
@@ -155,13 +155,13 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
       </div>
       <div class="broadcast-row end">
         <span class={`broadcast-note${state?.error ? ' error' : ''}`}>
-          {state?.error ?? 'Parte nel tmux di Forchetta, con l’ambiente della tua shell, e si apre qui.'}
+          {state?.error ?? 'It starts in the tmux of Forchetta, with the environment of your shell, and opens here.'}
         </span>
         <button type="button" class="primary" disabled={busy || !folder.trim()} onClick={start}>
-          {busy ? 'Avvio…' : 'Avvia'}
+          {busy ? 'Starting…' : 'Start'}
         </button>
         <button type="button" class="quiet" onClick={onClose}>
-          Annulla
+          Cancel
         </button>
       </div>
     </section>

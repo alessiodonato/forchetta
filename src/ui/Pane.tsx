@@ -34,15 +34,15 @@ export function Pane({ agent, area, focusKey, now, store, onClose, onUse }: Prop
         </span>
         <FilesButton agent={agent} store={store} className="pane-files" />
         {!ended && <CommandBar agent={agent} store={store} />}
-        <button class="pane-close" type="button" title="Chiudi il riquadro: la sessione continua" onClick={() => onClose(agent.id)}>
+        <button class="pane-close" type="button" title="Close the pane: the session goes on" onClick={() => onClose(agent.id)}>
           ✕
         </button>
       </header>
       <CommandStatus agent={agent} store={store} now={now} />
       <div class="pane-body">
         <TerminalView agentId={agent.id} focusKey={focusKey} onUse={() => onUse(agent.id)} onStatus={setStatus} />
-        {ended && <p class="pane-note">Sessione terminata. Il riquadro mostra l'ultima schermata.</p>}
-        {!ended && status === 'lost' && <p class="pane-note">Collegamento al daemon perso: chiudi e riapri il riquadro.</p>}
+        {ended && <p class="pane-note">Session ended. The pane shows its last screen.</p>}
+        {!ended && status === 'lost' && <p class="pane-note">Lost the connection to the daemon: close the pane and open it again.</p>}
       </div>
     </section>
   );

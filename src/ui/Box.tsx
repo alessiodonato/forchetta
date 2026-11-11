@@ -39,21 +39,21 @@ function actionLine(agent: Agent): Line {
   switch (agent.state) {
     case 'working': {
       const action = agent.action;
-      if (!action) return { text: 'sta pensando…', tone: 'muted' };
+      if (!action) return { text: 'thinking…', tone: 'muted' };
       return { text: action.subagent ? `↳ ${action.subagent} · ${action.label}` : action.label, family: action.family };
     }
     case 'waiting':
       return { text: waitingText(agent), tone: 'accent' };
     case 'idle':
-      return { text: agent.completedAt ? 'turno finito' : 'pronta', tone: 'muted' };
+      return { text: agent.completedAt ? 'turn finished' : 'ready', tone: 'muted' };
     case 'starting':
-      return { text: 'avvio…', tone: 'muted' };
+      return { text: 'starting…', tone: 'muted' };
     case 'compacting':
-      return { text: agent.compactTrigger === 'auto' ? 'compattazione automatica' : 'compattazione manuale' };
+      return { text: agent.compactTrigger === 'auto' ? 'compacting, automatically' : 'compacting, as you asked' };
     case 'error':
-      return { text: `errore · ${agent.error?.kind ?? '?'}`, tone: 'error' };
+      return { text: `error · ${agent.error?.kind ?? '?'}`, tone: 'error' };
     case 'ended':
-      return { text: `terminata · ${agent.endReason ?? '?'}`, tone: 'muted' };
+      return { text: `ended · ${agent.endReason ?? '?'}`, tone: 'muted' };
   }
 }
 
@@ -68,8 +68,8 @@ function ContextBar({ agent }: { agent: Agent }) {
   const context = agent.context;
   const share = context ? Math.min(1, Math.max(0, context.percent / 100)) : 0;
   const title = context
-    ? `${context.tokens.toLocaleString('it-IT')} token nell'ultima richiesta, su una finestra stimata di ${context.window.toLocaleString('it-IT')} (dati di arricurdAI)`
-    : 'Nessun dato di arricurdAI per questa sessione';
+    ? `${context.tokens.toLocaleString('en-US')} tokens in the last request, of an estimated window of ${context.window.toLocaleString('en-US')} (data from arricurdAI)`
+    : 'No data from arricurdAI for this session';
   return (
     <div class="ctx" title={title} data-high={context && context.percent >= 80 ? '' : undefined}>
       <div class="track">
@@ -86,18 +86,18 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
   const { context, cache } = agent;
   const left = cache ? cache.expiresAt - now : 0;
   const soon = cache && left > 0 && left < CACHE_SOON_MS && (context?.tokens ?? 0) >= LARGE_CONTEXT;
-  const expiry = cache ? new Date(cache.expiresAt).toLocaleTimeString('it-IT') : '';
+  const expiry = cache ? new Date(cache.expiresAt).toLocaleTimeString('en-US') : '';
   const cacheTitle = cache
-    ? `${left > 0 ? 'La cache del prompt scade' : 'La cache del prompt è scaduta'} alle ${expiry} (dati di arricurdAI)`
+    ? `${left > 0 ? 'The prompt cache expires' : 'The prompt cache expired'} at ${expiry} (data from arricurdAI)`
     : undefined;
   const usage = agent.usage;
   const today = agent.today;
   const usageTitle = [
     usage
-      ? `Costo della sessione dal suo avvio: circa ${usdText(usage.usd)} a prezzi API, calcolato da Claude Code come /cost.`
-      : 'Il costo arriva dalla statusline di Claude Code al prossimo messaggio della sessione.',
+      ? `Cost of the session since it started: about ${usdText(usage.usd)} at API prices, computed by Claude Code as for /cost.`
+      : 'The cost comes from the status line of Claude Code with the next message of the session.',
     today
-      ? `Oggi, con i suoi subagenti: ${today.tokens.toLocaleString('it-IT')} token in ${today.calls.toLocaleString('it-IT')} chiamate, circa ${usdText(today.usd)} (dati di arricurdAI).`
+      ? `Today, with its subagents: ${today.tokens.toLocaleString('en-US')} tokens in ${today.calls.toLocaleString('en-US')} calls, about ${usdText(today.usd)} (data from arricurdAI).`
       : '',
   ]
     .filter(Boolean)
@@ -106,22 +106,22 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
     <footer class="meta">
       <span class="usage" title={usageTitle}>
         {usage ? `${usage.usd >= 0.01 ? '≈ ' : ''}${usdText(usage.usd)}` : '—'}
-        {today && today.tokens > 0 ? ` · oggi ${shortTokens(today.tokens)} tok` : ''}
+        {today && today.tokens > 0 ? ` · today ${shortTokens(today.tokens)} tok` : ''}
       </span>
       {cache && (
         <span class={`cache-left${soon ? ' soon' : left <= 0 ? ' faded' : ''}`} title={cacheTitle}>
-          {left <= 0 ? 'scaduta' : cacheText(cache, now)}
+          {left <= 0 ? 'expired' : cacheText(cache, now)}
         </span>
       )}
       {cache && left <= 0 && cache.guardWillStop && (
-        <span class="tag" title="arricurdAI fermerà il prossimo prompt: la cache è scaduta su un contesto grande">
+        <span class="tag" title="arricurdAI will stop the next prompt: the cache expired on a large context">
           guard
         </span>
       )}
       <span class="grow" />
       <FilesButton agent={agent} store={store} />
       {hasEvents(agent) && agent.state !== 'ended' && (
-        <span class="ago" title="Tempo dall'ultimo evento">
+        <span class="ago" title="Time since the last event">
           {agoShort(now - agent.lastEvent.at)}
         </span>
       )}
@@ -138,7 +138,7 @@ function StallLine({ agent, now, stallMs }: { agent: Agent; now: number; stallMs
   return (
     <div
       class="conflict stall"
-      title={`Claude Code non manda eventi da ${agoShort(quiet)}. Può essere un comando lungo o una risposta lunga, oppure la sessione è bloccata: apri il terminale per vedere.`}
+      title={`Claude Code has sent no event for ${agoShort(quiet)}. It may be a long command or a long answer, or the session is stuck: open the terminal to see.`}
     >
       <span class="conflict-mark">◷</span>
       <span class="conflict-text">{text}</span>
@@ -191,7 +191,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store }: BoxProps) {
       data-since={since}
       data-completed={completed ? '' : undefined}
       data-openable={openable ? '' : undefined}
-      title={openable ? 'Apri il terminale della sessione' : agent.state === 'ended' ? undefined : 'Fuori dal tmux di Forchetta: sola lettura. Avviala con "forchetta run claude" per aprirla qui.'}
+      title={openable ? 'Open the terminal of the session' : agent.state === 'ended' ? undefined : 'Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.'}
       onClick={openable ? () => onOpen(agent.id) : undefined}
     >
       <div class="aura" aria-hidden="true" />
@@ -212,8 +212,8 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store }: BoxProps) {
         <button
           type="button"
           class="team-edit"
-          title="Nome, gruppo e ruolo"
-          aria-label="Nome, gruppo e ruolo"
+          title="Name, group and role"
+          aria-label="Name, group and role"
           onClick={(event) => {
             event.stopPropagation();
             setEditingTeam(!editingTeam);
@@ -241,7 +241,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store }: BoxProps) {
       ) : (
         <p class="summary" title={summary}>
           {summary ?? ''}
-          {agent.summary?.source === 'haiku' && summary === agent.summary.text && <span class="by" title="Riassunto scritto da Haiku"> · H</span>}
+          {agent.summary?.source === 'haiku' && summary === agent.summary.text && <span class="by" title="Summary written by Haiku"> · H</span>}
         </p>
       )}
       <PermissionOutcomeLine agent={agent} now={now} />

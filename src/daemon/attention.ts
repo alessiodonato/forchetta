@@ -86,11 +86,11 @@ export class Attention {
 
   private notice(agent: Agent, kind: NoticeKind): AttentionNotice {
     const name = displayName(agent);
-    if (kind === 'waiting') return { agentId: agent.id, kind, title: `${name} ti aspetta`, body: clip(waitingText(agent), 180) };
+    if (kind === 'waiting') return { agentId: agent.id, kind, title: `${name} waits for you`, body: clip(waitingText(agent), 180) };
     // A timer may fire a hair early: the time shown is the threshold at least, not "55 s" for one minute.
-    if (kind === 'stall') return { agentId: agent.id, kind, title: `${name} sembra ferma`, body: clip(stallText(agent, Math.max(this.now() - lastSign(agent), this.stallMs)), 180) };
+    if (kind === 'stall') return { agentId: agent.id, kind, title: `${name} seems stuck`, body: clip(stallText(agent, Math.max(this.now() - lastSign(agent), this.stallMs)), 180) };
     const error = agent.error;
-    return { agentId: agent.id, kind, title: `${name}: errore`, body: clip(`${error?.kind ?? 'errore'}${error?.message ? ` · ${error.message}` : ''}`, 180) };
+    return { agentId: agent.id, kind, title: `${name}: error`, body: clip(`${error?.kind ?? 'error'}${error?.message ? ` · ${error.message}` : ''}`, 180) };
   }
 
   private check(agent: Agent, kind: NoticeKind): void {

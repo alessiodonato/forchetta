@@ -114,7 +114,7 @@ describe('a request the box can answer', () => {
     const reply = await hookWaits.reply;
     expect(JSON.parse(reply.body)).toEqual({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } });
     expect(agent()).toMatchObject({ state: 'working', permission: undefined });
-    expect(agent().permissionOutcome?.text).toBe('Consentito da Forchetta: touch a.txt');
+    expect(agent().permissionOutcome?.text).toBe('Allowed from Forchetta: touch a.txt');
     expect(statusCalls).toBe(1);
   });
 
@@ -132,12 +132,12 @@ describe('a request the box can answer', () => {
     const rule = { type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }], behavior: 'allow', destination: 'localSettings' };
     const ticket = (await ask(bash('npm test', { permission_suggestions: [{ type: 'setMode', mode: 'bypassPermissions', destination: 'session' }, rule] }))).body;
     // The mode that turns every dialog off is not offered: the only choice left is the rule, at index 0.
-    expect(agent().permission?.always).toEqual([{ label: 'Consenti sempre Bash(npm test:*)', where: 'in questo progetto, solo per te' }]);
+    expect(agent().permission?.always).toEqual([{ label: 'Always allow Bash(npm test:*)', where: 'in this project, only for you' }]);
     const hookWaits = wait(ticket);
     await sleep(30);
     expect(await permissions.decide(agent().id, ticket, 'allow', 0)).toBe(true);
     expect(JSON.parse((await hookWaits.reply).body).hookSpecificOutput.decision).toEqual({ behavior: 'allow', updatedPermissions: [rule] });
-    expect(agent().permissionOutcome?.text).toBe('Consenti sempre Bash(npm test:*) (in questo progetto, solo per te): npm test');
+    expect(agent().permissionOutcome?.text).toBe('Always allow Bash(npm test:*) (in this project, only for you): npm test');
   });
 
   it('sempre…: a choice that is not there is refused, and the request stays open', async () => {
@@ -199,7 +199,7 @@ describe('the terminal answers first', () => {
     status = 'busy';
     expect(await permissions.decide(agent().id, ticket, 'deny')).toBe(false);
     expect((await hookWaits.reply).body).toBe('');
-    expect(agent().permissionOutcome?.text).toBe('Già risposto nel terminale');
+    expect(agent().permissionOutcome?.text).toBe('Already answered in the terminal');
     expect(agent().permission).toBeUndefined();
   });
 
@@ -244,7 +244,7 @@ describe('requests Forchetta does not hold', () => {
     const ticket = (await ask(bash('touch k.txt'), '0.2')).body;
     const reply = await wait(ticket).reply;
     expect(reply.body).toBe('');
-    expect(agent().permissionOutcome?.text).toBe('Tempo scaduto: rispondi nel terminale');
+    expect(agent().permissionOutcome?.text).toBe('Timed out: answer in the terminal');
   });
 });
 

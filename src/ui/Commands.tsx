@@ -27,22 +27,22 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
   let text: string;
   switch (command.status) {
     case 'in-coda':
-      text = `in coda: ${name}${command.reason ? ` · ${command.reason}` : ''}`;
+      text = `queued: ${name}${command.reason ? ` · ${command.reason}` : ''}`;
       break;
     case 'bloccato':
-      text = `${name} bloccato · ${command.reason ?? ''}`;
+      text = `${name} blocked · ${command.reason ?? ''}`;
       break;
     case 'inviato':
-      text = command.reason ? `${name}: ${command.reason}…` : `${name} inviato…`;
+      text = command.reason ? `${name}: ${command.reason}…` : `${name} sent…`;
       break;
     case 'confermato':
-      text = command.kind === 'btw' ? '/btw: la risposta è nel terminale' : command.kind === 'compact' ? '✓ /compact fatto' : '✓ /clear fatto';
+      text = command.kind === 'btw' ? '/btw: the answer is in the terminal' : command.kind === 'compact' ? '✓ /compact done' : '✓ /clear done';
       break;
     case 'non-confermato':
-      text = `${name}: ${command.reason ?? 'nessuna conferma'}`;
+      text = `${name}: ${command.reason ?? 'no confirmation'}`;
       break;
     default:
-      text = `${name} non inviato: ${command.reason ?? ''}`;
+      text = `${name} not sent: ${command.reason ?? ''}`;
   }
   const waiting = command.status === 'in-coda' || command.status === 'bloccato';
   return (
@@ -50,12 +50,12 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
       <span class="command-text">{text}</span>
       {command.kind === 'btw' && command.status === 'confermato' && (
         <button type="button" class="link" onClick={() => store.open(agent.id)}>
-          apri
+          open
         </button>
       )}
       {waiting && (
-        <button type="button" class="link" title="Annulla il comando" onClick={() => store.cancelCommand(agent.id, command.id)}>
-          annulla
+        <button type="button" class="link" title="Cancel the command" onClick={() => store.cancelCommand(agent.id, command.id)}>
+          cancel
         </button>
       )}
     </div>
@@ -95,7 +95,7 @@ export function CommandBar({ agent, store, onModeChange }: { agent: Agent; store
           type="text"
           value={question}
           maxLength={900}
-          placeholder="Domanda per /btw"
+          placeholder="Question for /btw"
           onInput={(event) => setQuestion((event.target as HTMLInputElement).value)}
           onKeyDown={(event) => {
             event.stopPropagation();
@@ -104,24 +104,24 @@ export function CommandBar({ agent, store, onModeChange }: { agent: Agent; store
           }}
         />
         <button type="button" onClick={send} disabled={!question.trim()}>
-          Invia
+          Send
         </button>
         <button type="button" class="quiet" onClick={close}>
-          Annulla
+          Cancel
         </button>
       </div>
     );
   }
 
   if (mode === 'clear') {
-    const tokens = agent.context ? ` (${shortTokens(agent.context.tokens)} token)` : '';
+    const tokens = agent.context ? ` (${shortTokens(agent.context.tokens)} tokens)` : '';
     const notes = store.state.settings.arricurdaiNotes
-      ? 'arricurdAI prepara prima una nota per la nuova sessione.'
-      : 'arricurdAI non può salvare una nota in questa versione: il transcript resta su disco e recall lo trova.';
+      ? 'arricurdAI first writes a note for the new session.'
+      : 'This version of arricurdAI cannot save a note: the transcript stays on disk, and recall finds it.';
     return (
       <div class="command-bar confirm" onClick={stop} onMouseDown={stop}>
         <span class="confirm-text">
-          Pulire <strong>{displayName(agent)}</strong>? Il contesto{tokens} verrà azzerato. {notes}
+          Clear <strong>{displayName(agent)}</strong>? Its context{tokens} will be emptied. {notes}
         </span>
         <button
           type="button"
@@ -131,10 +131,10 @@ export function CommandBar({ agent, store, onModeChange }: { agent: Agent; store
             close();
           }}
         >
-          Pulisci
+          Clear
         </button>
         <button type="button" class="quiet" onClick={close}>
-          Annulla
+          Cancel
         </button>
       </div>
     );
@@ -142,13 +142,13 @@ export function CommandBar({ agent, store, onModeChange }: { agent: Agent; store
 
   return (
     <div class="command-bar" onClick={stop} onMouseDown={stop}>
-      <button type="button" title="Domanda a parte, senza entrare nella conversazione" onClick={() => setMode('btw')}>
+      <button type="button" title="A side question, kept out of the conversation" onClick={() => setMode('btw')}>
         btw…
       </button>
-      <button type="button" title="Riassume la conversazione e libera contesto" onClick={() => store.command(agent.id, 'compact')}>
+      <button type="button" title="Summarizes the conversation and frees context" onClick={() => store.command(agent.id, 'compact')}>
         compact
       </button>
-      <button type="button" title="Nuova conversazione: chiede conferma" onClick={() => setMode('clear')}>
+      <button type="button" title="A new conversation: asks first" onClick={() => setMode('clear')}>
         clear
       </button>
     </div>

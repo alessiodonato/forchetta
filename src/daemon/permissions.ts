@@ -26,7 +26,7 @@ export type PermissionBehavior = 'allow' | 'deny';
 const NOT_YES_NO = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 /** What Claude reads when the box refuses. The refusal also stops it, as "No" in the terminal does. */
-export const DENY_MESSAGE = "L'utente ha rifiutato questa richiesta da Forchetta.";
+export const DENY_MESSAGE = 'The user denied this request from Forchetta.';
 
 /** The hook must come back for its answer within this time, or the request is dropped. */
 const ATTACH_MS = 5_000;
@@ -146,7 +146,7 @@ export class Permissions {
         ticket,
         tool,
         detail: permissionDetail(tool, payload.tool_input, agent.cwd ?? payload.cwd),
-        subagent: thread ? payload.agent_type || 'subagente' : undefined,
+        subagent: thread ? payload.agent_type || 'subagent' : undefined,
         always: options.length > 0 ? options.map(({ label, where }) => ({ label, where })) : undefined,
         since: now,
         until: now + holdMs,
@@ -193,7 +193,7 @@ export class Permissions {
     if (!agent) return false;
     const pending = this.pending.get(ticket);
     if (!pending || pending.agentId !== agentId || pending.answer !== undefined) {
-      this.outcome(agent, 'La richiesta non è più aperta');
+      this.outcome(agent, 'The request is no longer open');
       return false;
     }
     if (pending.deciding) return false;
@@ -206,18 +206,18 @@ export class Permissions {
     }
     pending.deciding = false;
     if (this.pending.get(ticket) !== pending) {
-      this.outcome(agent, 'La richiesta si è chiusa nel frattempo');
+      this.outcome(agent, 'The request closed meanwhile');
       return false;
     }
     if (status !== undefined && status !== 'waiting') {
       this.close(pending, 'altrove');
-      this.outcome(agent, 'Già risposto nel terminale');
+      this.outcome(agent, 'Already answered in the terminal');
       return false;
     }
     if (alwaysIndex !== undefined) {
       const option = behavior === 'allow' ? pending.options[alwaysIndex] : undefined;
       if (!option) {
-        this.outcome(agent, 'Scelta «sempre» non valida: rispondi di nuovo');
+        this.outcome(agent, 'Invalid “always” choice: answer again');
         return false;
       }
       pending.always = option;
@@ -254,8 +254,8 @@ export class Permissions {
       behavior === 'allow'
         ? pending.always
           ? { text: `${pending.always.label} (${pending.always.where}): ${what}`, tone: 'done', at: this.now() }
-          : { text: `Consentito da Forchetta: ${what}`, tone: 'done', at: this.now() }
-        : { text: `Rifiutato da Forchetta: ${what}`, tone: 'muted', at: this.now() };
+          : { text: `Allowed from Forchetta: ${what}`, tone: 'done', at: this.now() }
+        : { text: `Denied from Forchetta: ${what}`, tone: 'muted', at: this.now() };
     this.publish(agent);
   }
 
@@ -298,14 +298,14 @@ export class Permissions {
     const agent = this.options.registry.agents.get(pending.agentId);
     if (!agent) return;
     if (pending.answer) {
-      agent.permissionOutcome = { text: 'Risposta non consegnata: rispondi nel terminale', tone: 'muted', at: this.now() };
+      agent.permissionOutcome = { text: 'Answer not delivered: answer in the terminal', tone: 'muted', at: this.now() };
     } else if (how === 'terminale' && agent.state === 'waiting' && agent.waiting?.key === pending.key) {
       // No or Esc in the terminal: Claude stopped, and waits for the next prompt.
       agent.state = 'idle';
       agent.waiting = undefined;
       agent.action = undefined;
     } else if (how === 'scaduta' && agent.state === 'waiting') {
-      agent.permissionOutcome = { text: 'Tempo scaduto: rispondi nel terminale', tone: 'muted', at: this.now() };
+      agent.permissionOutcome = { text: 'Timed out: answer in the terminal', tone: 'muted', at: this.now() };
     }
     this.publish(agent);
   }

@@ -18,8 +18,8 @@ function summarizer(complete: Complete, summaries: string[], logs: string[] = []
 describe('Haiku summary (optional)', () => {
   it('sends only what the box already shows', () => {
     const text = summaryPrompt(agent({ state: 'idle', lastReply: 'Fatto: 12 test aggiunti.' }));
-    expect(text).toContain('Progetto: forchetta');
-    expect(text).toContain('Stato: inattiva');
+    expect(text).toContain('Project: forchetta');
+    expect(text).toContain('State: idle');
     expect(text).toContain('Aggiungi i test del daemon');
     expect(text).toContain('Edit src/daemon/main.ts; Bash pnpm test');
     expect(text).toContain('Fatto: 12 test aggiunti.');

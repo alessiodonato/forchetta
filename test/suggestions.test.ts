@@ -11,15 +11,15 @@ describe('always choices', () => {
       { type: 'setMode', mode: 'acceptEdits', destination: 'session' },
     ]);
     expect(options.map(({ label, where }) => ({ label, where }))).toEqual([
-      { label: 'Consenti e aggiungi la cartella ~/progetti/app', where: 'solo in questa sessione' },
-      { label: 'Consenti e passa alla modalità «accetta modifiche»', where: 'solo in questa sessione' },
+      { label: 'Allow and add the folder ~/progetti/app', where: 'only in this session' },
+      { label: 'Allow and switch to the mode “accept edits”', where: 'only in this session' },
     ]);
   });
 
   it('a rule for a command, kept in the project', () => {
     const update = { type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }], behavior: 'allow', destination: 'localSettings' };
     const [option] = alwaysOptions([update]);
-    expect(option).toEqual({ update, label: 'Consenti sempre Bash(npm test:*)', where: 'in questo progetto, solo per te' });
+    expect(option).toEqual({ update, label: 'Always allow Bash(npm test:*)', where: 'in this project, only for you' });
   });
 
   it('leaves out what goes beyond the project or turns every dialog off, and what it cannot read', () => {

@@ -1,17 +1,23 @@
-/* Forchetta: dark, quiet, one accent. Amber, green and red mean a state and nothing else.
+/* Forchetta: warm and quiet, close to the dark theme of Claude. Amber, green and red mean a state and nothing
+   else; Claude orange marks what you can act on: what starts something, what is chosen, where the keys go.
    Every animation here tells a state and moves only opacity or transform, so the compositor runs it. */
 
 :root {
   color-scheme: dark;
-  --bg: #0d0e10;
-  --surface: #15171a;
-  --surface-waiting: #1b1813;
-  --line: #24272c;
-  --line-strong: #32363c;
-  --text: #e8e9eb;
-  --text-2: #a3a8b0;
-  --text-3: #6b7079;
+  --bg: #1f1e1c;
+  --surface: #292825;
+  --surface-2: #33312d;
+  --surface-waiting: #352b1c;
+  --terminal: #1a1917;
+  --line: #3a3834;
+  --line-strong: #4c4944;
+  --text: #f3f1ec;
+  --text-2: #bdb8ae;
+  --text-3: #8b867d;
   --accent: #f0a43c;
+  --claude: #d97757;
+  --claude-strong: #c96442;
+  --claude-soft: rgba(217, 119, 87, 0.16);
   --green: #46c48a;
   --red: #ef5b5b;
   --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
@@ -36,12 +42,16 @@ body {
   cursor: default;
 }
 
+input[type='checkbox'] {
+  accent-color: var(--claude);
+}
+
 .app {
   min-height: 100%;
 }
 
 /* Top line: the name, and how many sessions wait for you. */
-.top {
+header.top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -50,10 +60,10 @@ body {
 
 .top h1 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 650;
   letter-spacing: 0.02em;
-  color: var(--text-2);
+  color: var(--claude);
 }
 
 .counts {
@@ -91,7 +101,7 @@ body {
 .empty code {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--claude);
 }
 
 /* The grid of boxes. */
@@ -235,7 +245,7 @@ body {
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: var(--text-3);
+  background: var(--claude);
   transform-origin: left center;
 }
 
@@ -522,8 +532,8 @@ html[data-hidden] *::after {
   cursor: pointer;
 }
 
-.box[data-openable]:hover {
-  border-color: var(--line-strong);
+.box[data-openable]:not([data-state='waiting']):not([data-state='error']):hover {
+  border-color: rgba(217, 119, 87, 0.55);
 }
 
 /* ——— Work area: the column of boxes, then up to four panes ——— */
@@ -535,7 +545,7 @@ html[data-hidden] *::after {
   overflow: hidden;
 }
 
-.app.with-panes .top {
+.app.with-panes header.top {
   padding: 14px 20px 10px;
 }
 
@@ -577,7 +587,7 @@ html[data-hidden] *::after {
 
 .box.compact[data-open] {
   border-color: var(--line-strong);
-  background: #1a1c20;
+  background: var(--surface-2);
 }
 
 /* The boxes open in a pane carry a thin mark on their left side. */
@@ -588,7 +598,7 @@ html[data-hidden] *::after {
   left: -1px;
   width: 2px;
   border-radius: 2px;
-  background: var(--text-2);
+  background: var(--claude);
   content: '';
 }
 
@@ -659,7 +669,7 @@ html[data-hidden] *::after {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #111215;
+  background: var(--terminal);
   transform-origin: 0 0;
 }
 
@@ -685,6 +695,15 @@ html[data-hidden] *::after {
   background: var(--red);
 }
 
+/* Where the keys go: the pane whose terminal has the keyboard. */
+.pane:focus-within {
+  border-color: rgba(217, 119, 87, 0.55);
+}
+
+.pane:focus-within .pane-project {
+  color: var(--claude);
+}
+
 .pane-head {
   display: flex;
   flex: none;
@@ -692,6 +711,7 @@ html[data-hidden] *::after {
   gap: 10px;
   padding: 9px 10px 7px 14px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .pane-project {
@@ -770,7 +790,7 @@ html[data-hidden] *::after {
   padding: 6px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(13, 14, 16, 0.9);
+  background: rgba(26, 25, 23, 0.92);
   font-size: 12px;
   color: var(--text-2);
 }
@@ -799,7 +819,7 @@ html[data-hidden] *::after {
   padding: 3px 9px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #1b1e22;
+  background: var(--surface-2);
   font: inherit;
   color: var(--text);
   cursor: pointer;
@@ -828,7 +848,7 @@ html[data-hidden] *::after {
 /* xterm.js paints its viewport black by default: the pane has its own background. */
 .terminal .xterm,
 .terminal .xterm-viewport {
-  background-color: #111215 !important;
+  background-color: var(--terminal) !important;
 }
 
 /* The history is in tmux (the wheel scrolls it): the scrollbar of xterm.js 6 would only show an empty margin. */
@@ -837,7 +857,7 @@ html[data-hidden] *::after {
 }
 
 .box.compact:focus-visible {
-  outline: 1px solid var(--text-2);
+  outline: 1px solid var(--claude);
   outline-offset: 2px;
 }
 
@@ -886,13 +906,14 @@ html[data-hidden] *::after {
   padding: 2px 8px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #1b1e22;
+  background: var(--surface-2);
   font: 11px var(--mono);
   color: var(--text-2);
   cursor: pointer;
 }
 
 .command-bar button:hover {
+  border-color: rgba(217, 119, 87, 0.6);
   color: var(--text);
 }
 
@@ -927,7 +948,7 @@ html[data-hidden] *::after {
 }
 
 .command-input:focus {
-  border-color: var(--text-3);
+  border-color: var(--claude);
 }
 
 .command-bar.confirm {
@@ -983,7 +1004,7 @@ html[data-hidden] *::after {
   background: none;
   font: inherit;
   text-decoration: underline;
-  color: var(--text-2);
+  color: var(--claude);
   cursor: pointer;
 }
 
@@ -1037,7 +1058,7 @@ html[data-hidden] *::after {
   padding: 3px 10px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #1b1e22;
+  background: var(--surface-2);
   font: 11.5px var(--ui);
   color: var(--text-2);
   cursor: pointer;
@@ -1122,9 +1143,30 @@ html[data-hidden] *::after {
   cursor: pointer;
 }
 
-.broadcast-toggle:hover,
-.broadcast-toggle.active {
+.broadcast-toggle:hover {
+  border-color: rgba(217, 119, 87, 0.6);
   color: var(--text);
+}
+
+.broadcast-toggle.active {
+  border-color: var(--claude);
+  background: var(--claude-soft);
+  color: var(--text);
+}
+
+/* The way to start a session: Claude orange, always. */
+.broadcast-toggle.primary {
+  border-color: var(--claude-strong);
+  background: var(--claude-strong);
+  font-weight: 600;
+  color: #fff;
+}
+
+.broadcast-toggle.primary:hover,
+.broadcast-toggle.primary.active {
+  border-color: var(--claude);
+  background: var(--claude);
+  color: #fff;
 }
 
 .broadcast {
@@ -1171,7 +1213,7 @@ html[data-hidden] *::after {
   padding: 3px 10px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #1b1e22;
+  background: var(--surface-2);
   font: 11.5px var(--mono);
   color: var(--text-2);
   cursor: pointer;
@@ -1187,13 +1229,22 @@ html[data-hidden] *::after {
 }
 
 .broadcast button.chip.on {
-  border-color: var(--text-3);
+  border-color: var(--claude);
+  background: var(--claude-soft);
   color: var(--text);
 }
 
 .broadcast button.primary {
-  border-color: var(--text-3);
-  color: var(--text);
+  border-color: var(--claude-strong);
+  background: var(--claude-strong);
+  font-weight: 600;
+  color: #fff;
+}
+
+.broadcast button.primary:hover:not(:disabled) {
+  border-color: var(--claude);
+  background: var(--claude);
+  color: #fff;
 }
 
 .broadcast button.danger {
@@ -1274,7 +1325,7 @@ html[data-hidden] *::after {
 
 .files-button:hover,
 .pane-files:hover {
-  border-color: var(--line-strong);
+  border-color: rgba(217, 119, 87, 0.6);
   color: var(--text);
 }
 
@@ -1384,7 +1435,7 @@ html[data-hidden] *::after {
 }
 
 .files-list button.on {
-  background: var(--surface);
+  background: var(--claude-soft);
   color: var(--text);
 }
 
@@ -1577,7 +1628,7 @@ html[data-hidden] *::after {
   padding: 2px 9px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #1b1e22;
+  background: var(--surface-2);
   font: 11px var(--mono);
   color: var(--text-2);
   cursor: pointer;
@@ -1590,8 +1641,10 @@ html[data-hidden] *::after {
 }
 
 .team-actions button.primary {
-  border-color: var(--text-3);
-  color: var(--text);
+  border-color: var(--claude-strong);
+  background: var(--claude-strong);
+  font-weight: 600;
+  color: #fff;
 }
 
 .view-switch {
@@ -1613,8 +1666,8 @@ html[data-hidden] *::after {
 }
 
 .view-switch button.on {
-  background: var(--surface);
-  color: var(--text);
+  background: var(--claude-soft);
+  color: var(--claude);
 }
 
 /* The chart: a section per group, the heads above, a bracket down to the others. */
@@ -1722,7 +1775,7 @@ html[data-hidden] *::after {
   padding: 5px 9px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #1b1e22;
+  background: var(--surface-2);
   font: 11.5px var(--mono);
   text-align: left;
   color: var(--text);
