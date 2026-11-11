@@ -27,7 +27,7 @@ function clientEnv(): NodeJS.ProcessEnv {
 }
 
 export async function runClaude(args: string[], io: RunIO): Promise<number> {
-  if (args[0] !== 'claude') throw new UserError('uso: forchetta run claude [argomenti di claude]');
+  if (args[0] !== 'claude') throw new UserError('usage: forchetta run claude [claude arguments]');
   const config = loadConfig();
   const claude = resolveTool('claude', config);
 
@@ -53,7 +53,7 @@ export async function runClaude(args: string[], io: RunIO): Promise<number> {
   } catch {
     // Claude starts anyway; its hooks announce it as soon as the daemon is there.
   }
-  if (!announced) io.stderr('forchetta: il daemon non risponde. La sessione parte lo stesso e comparirà quando il daemon sarà attivo.\n');
+  if (!announced) io.stderr('forchetta: the daemon does not answer. The session starts anyway, and shows up once the daemon runs.\n');
 
   const envFile = join(paths.runDir, `${id}.env`);
   writeFileSync(envFile, envFileText(paneEnv(process.env, id)), { mode: 0o600 });
@@ -67,11 +67,11 @@ export async function runClaude(args: string[], io: RunIO): Promise<number> {
   );
   if (created.status !== 0) {
     rmSync(envFile, { force: true });
-    throw new UserError(`tmux non ha creato la sessione: ${String(created.stderr).trim() || `codice ${created.status}`}`);
+    throw new UserError(`tmux did not create the session: ${String(created.stderr).trim() || `code ${created.status}`}`);
   }
 
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    io.stdout(`Sessione avviata in tmux (${session}). Questo non è un terminale, quindi non mi aggancio: la vedi in Forchetta.\n`);
+    io.stdout(`Session started in tmux (${session}). This is not a terminal, so it is not attached here: you see it in Forchetta.\n`);
     return 0;
   }
   const attached = spawnSync(tmuxBin, tmux.argv('attach-session', ['-t', session]), { stdio: 'inherit', env: clientEnv() });

@@ -154,6 +154,6 @@ export function which(name: string, env: NodeJS.ProcessEnv = process.env): strin
 export function resolveTool(tool: Tool, config: Config): string {
   if (tool === 'node' && !config.paths.node) return process.execPath;
   const found = config.paths[tool] ?? which(tool);
-  if (!found) throw new UserError(`non trovo ${tool}: installalo o scrivi il suo percorso in ${paths.config}`);
+  if (!found) throw new UserError(`${tool} not found: install it, or write its path in ${paths.config}`);
   return found;
 }

@@ -9,5 +9,5 @@ const root = dirname(require.resolve('node-pty/package.json'));
 const helper = join(root, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper');
 if (existsSync(helper)) {
   chmodSync(helper, 0o755);
-  console.log(`node-pty: ${helper} reso eseguibile`);
+  console.log(`node-pty: ${helper} made executable`);
 }

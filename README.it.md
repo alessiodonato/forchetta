@@ -29,7 +29,7 @@ Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo real
 
 ## Cosa fa
 
-Versione 0.7.0:
+Versione 0.7.1:
 - trova da sola le sessioni Claude Code attive e mostra per ognuna un box con stato, azione in corso, riassunto, contesto, cache e costo;
 - apre fino a 4 sessioni affiancate in terminali veri, agganciati a tmux;
 - manda `/btw`, `/compact` e `/clear` a una o più sessioni, solo quando è sicuro;
@@ -39,7 +39,7 @@ Versione 0.7.0:
 
 Tutto gira in locale. L'unico servizio esterno, facoltativo e spento di default, è la Claude API per i riassunti.
 
-L'interfaccia dell'app è in inglese: in questo README i pulsanti e i messaggi sono citati come compaiono.
+L'app e i comandi da terminale sono in inglese: in questo README pulsanti e messaggi sono citati come compaiono.
 
 ## Installazione
 

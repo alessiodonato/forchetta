@@ -20,7 +20,7 @@ function findRoot(): string {
       }
     }
     const parent = dirname(dir);
-    if (parent === dir) throw new Error('forchetta: cartella del progetto non trovata');
+    if (parent === dir) throw new Error('forchetta: the Forchetta folder was not found');
     dir = parent;
   }
 }
@@ -109,6 +109,6 @@ export const claudeConfigDir = (env: NodeJS.ProcessEnv = process.env): string =>
 export function ensurePrivateDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const stats = lstatSync(dir);
-  if (!stats.isDirectory()) throw new Error(`forchetta: ${dir} non è una cartella`);
+  if (!stats.isDirectory()) throw new Error(`forchetta: ${dir} is not a folder`);
   if ((stats.mode & 0o077) !== 0) chmodSync(dir, 0o700);
 }

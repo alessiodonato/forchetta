@@ -22,9 +22,9 @@ cp "$SRC/native/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 # without it, an ad-hoc signature, as before.
 IDENTITY="Forchetta (firma locale)"
 if security find-certificate -c "$IDENTITY" >/dev/null 2>&1 && codesign --force --sign "$IDENTITY" "$APP" >/dev/null 2>&1; then
-  echo "firmata con il certificato \"$IDENTITY\""
+  echo "signed with the certificate \"$IDENTITY\""
 else
   codesign --force --sign - "$APP" >/dev/null 2>&1 || true
-  echo "firma ad-hoc: macOS chiederà di nuovo i permessi dell'app (scripts/make-signing-cert.sh li fa ricordare)"
+  echo "ad-hoc signature: macOS will ask again for the permissions of the app (scripts/make-signing-cert.sh makes it remember them)"
 fi
 echo "$APP"

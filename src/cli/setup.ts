@@ -57,7 +57,7 @@ function buildApp(target: string): void {
       encoding: 'utf8',
       env: { ...process.env, FORCHETTA_ROOT: ROOT, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? '/usr/bin:/bin'}` },
     });
-    if (built.status !== 0) throw new UserError(`l'app non è stata compilata:\n${(built.stderr || built.stdout).trim()}`);
+    if (built.status !== 0) throw new UserError(`the app was not built:\n${(built.stderr || built.stdout).trim()}`);
     mkdirSync(dirname(target), { recursive: true });
     const old = `${target}.old-${process.pid}`;
     if (existsSync(target)) renameSync(target, old);
@@ -78,27 +78,27 @@ const running = (app: string): boolean => spawnSync('/usr/bin/pgrep', ['-f', joi
 
 export async function setupCommand(options: SetupOptions, io: RunIO): Promise<number> {
   if (process.platform !== 'darwin') throw new UserError('Forchetta funziona solo su macOS.');
-  if (!existsSync(paths.daemonJs) || !existsSync(join(ROOT, 'dist', 'ui', 'index.html'))) throw new UserError(`manca ${join(ROOT, 'dist')}: esegui prima pnpm build`);
-  if (!which('tmux')) throw new UserError('manca tmux: installalo con brew install tmux, poi riesegui forchetta setup');
-  if (!hasSwiftCompiler()) throw new UserError("per compilare l'app servono i Command Line Tools di Xcode: xcode-select --install, poi riesegui forchetta setup");
-  if (!which('claude')) io.stdout('Nota: claude non è nel PATH. Forchetta lo troverà quando installerai Claude Code (rilancia allora forchetta setup).\n');
+  if (!existsSync(paths.daemonJs) || !existsSync(join(ROOT, 'dist', 'ui', 'index.html'))) throw new UserError(`${join(ROOT, 'dist')} is missing: run pnpm build first`);
+  if (!which('tmux')) throw new UserError('tmux is missing: install it with brew install tmux, then run forchetta setup again');
+  if (!hasSwiftCompiler()) throw new UserError('building the app needs the Xcode Command Line Tools: xcode-select --install, then run forchetta setup again');
+  if (!which('claude')) io.stdout('Note: claude is not in the PATH. Forchetta finds it once you install Claude Code (then run forchetta setup again).\n');
 
   const app = join(options.appDir, 'Forchetta.app');
   if (needsBuild(installedApp(app), VERSION, ROOT, options.force)) {
-    io.stdout(`Compilo l'app (circa 10 secondi)…\n`);
+    io.stdout(`Building the app (about 10 seconds)…\n`);
     buildApp(app);
-    io.stdout(`App installata: ${app}\n`);
-    if (running(app)) io.stdout('Forchetta è aperta con la versione di prima: chiudila (⌘Q) e riaprila.\n');
+    io.stdout(`App installed: ${app}\n`);
+    if (running(app)) io.stdout('Forchetta is open with the previous version: quit it (⌘Q) and open it again.\n');
   } else {
-    io.stdout(`L'app è già aggiornata: ${app}\n`);
+    io.stdout(`The app is up to date: ${app}\n`);
   }
-  io.stdout(`I dati di Forchetta stanno in ${paths.varDir}\n\n`);
+  io.stdout(`Forchetta keeps its data in ${paths.varDir}\n\n`);
 
   const code = await hooksCommand('install', { yes: options.yes }, io);
   if (code !== 0) return code;
   io.stdout(
-    `\nPronto. Apri l'app con: open ${JSON.stringify(app)}\n` +
-      'Le sessioni avviate con forchetta run claude, o dall\'app, si aprono anche nei suoi terminali.\n',
+    `\nReady. Open the app with: open ${JSON.stringify(app)}\n` +
+      'Sessions started with forchetta run claude, or from the app, also open in its terminals.\n',
   );
   return 0;
 }

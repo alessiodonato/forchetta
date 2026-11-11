@@ -19,7 +19,7 @@ const COLORS: Partial<Record<Agent['state'], string>> = {
 const contextCell = (agent: Agent): string => (agent.context ? `${shortTokens(agent.context.tokens)} ${percentText(agent.context)}` : '—');
 
 export function renderList(agents: readonly Agent[], now: number, width: number, color: boolean): string {
-  if (agents.length === 0) return 'Nessuna sessione Claude Code attiva.\n';
+  if (agents.length === 0) return 'No Claude Code session running.\n';
   const fixed = { project: 22, state: 13, context: 11, cache: 15, last: 9, control: 12, pid: 6, session: 8 };
   const gaps = 2 * 8;
   const used = Object.values(fixed).reduce((sum, value) => sum + value, 0);
@@ -27,15 +27,15 @@ export function renderList(agents: readonly Agent[], now: number, width: number,
   const row = (cells: string[]): string => cells.join('  ').trimEnd();
   const lines = [
     row([
-      fit('PROGETTO', fixed.project),
-      fit('STATO', fixed.state),
-      fit('ATTIVITÀ', flex),
-      fit('CONTESTO', fixed.context),
+      fit('PROJECT', fixed.project),
+      fit('STATE', fixed.state),
+      fit('ACTIVITY', flex),
+      fit('CONTEXT', fixed.context),
       fit('CACHE', fixed.cache),
-      fit('ULTIMO', fixed.last),
-      fit('CONTROLLO', fixed.control),
+      fit('LAST', fixed.last),
+      fit('CONTROL', fixed.control),
       fit('PID', fixed.pid),
-      'SESSIONE',
+      'SESSION',
     ]),
   ];
   for (const agent of agents) {
@@ -57,14 +57,14 @@ export function renderList(agents: readonly Agent[], now: number, width: number,
   }
   const live = agents.filter((agent) => agent.state !== 'ended').length;
   const waiting = agents.filter((agent) => agent.state === 'waiting').length;
-  lines.push('', `${live} ${live === 1 ? 'sessione attiva' : 'sessioni attive'}${waiting ? ` · ${waiting} ${waiting === 1 ? 'ti aspetta' : 'ti aspettano'}` : ''}`);
+  lines.push('', `${live} ${live === 1 ? 'session running' : 'sessions running'}${waiting ? ` · ${waiting} ${waiting === 1 ? 'waits for you' : 'wait for you'}` : ''}`);
   return `${lines.join('\n')}\n`;
 }
 
 export async function listSessions(io: RunIO): Promise<number> {
   const daemon = await runningDaemon();
   if (!daemon) {
-    io.stdout('Il daemon di Forchetta non è attivo. Si avvia con "forchetta daemon start" o con "forchetta run claude".\n');
+    io.stdout('The Forchetta daemon is not running. Start it with "forchetta daemon start" or "forchetta run claude".\n');
     return 1;
   }
   // fresh=1: the daemon reads `arricurdai status` again before answering, so context and cache are current.

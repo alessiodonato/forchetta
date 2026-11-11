@@ -33,7 +33,7 @@ export function unifiedDiff(before: string, after: string, label: string): strin
   writeFileSync(a, before, { mode: 0o600 });
   writeFileSync(b, after, { mode: 0o600 });
   try {
-    const result = spawnSync('/usr/bin/diff', ['-u', '--label', `${label} (ora)`, '--label', `${label} (dopo)`, a, b], { encoding: 'utf8' });
+    const result = spawnSync('/usr/bin/diff', ['-u', '--label', `${label} (now)`, '--label', `${label} (after)`, a, b], { encoding: 'utf8' });
     return result.stdout;
   } finally {
     rmSync(a, { force: true });
@@ -43,7 +43,7 @@ export function unifiedDiff(before: string, after: string, label: string): strin
 
 async function confirm(question: string, io: RunIO): Promise<boolean> {
   if (!process.stdin.isTTY) {
-    io.stdout('Nessuna modifica: non è un terminale interattivo. Per applicarle senza domanda: --yes\n');
+    io.stdout('No change: this is not an interactive terminal. To apply the changes without a question: --yes\n');
     return false;
   }
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -93,9 +93,9 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
   try {
     settings = before === undefined || before.trim() === '' ? {} : JSON.parse(before);
   } catch {
-    throw new UserError(`${file} non è JSON valido: lo lascio com'è. Correggilo e riprova.`);
+    throw new UserError(`${file} is not valid JSON: left as it is. Fix it and try again.`);
   }
-  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) throw new UserError(`${file} non è un oggetto JSON: lo lascio com'è.`);
+  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) throw new UserError(`${file} is not a JSON object: left as it is.`);
 
   const config = withToolPaths(loadConfig(), before);
   if (action === 'install') saveConfig(config);
@@ -118,28 +118,28 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
       if (status.changes.length > 0) saveCommand = null;
     }
   } catch (error) {
-    if (error instanceof UnexpectedSettings) throw new UserError(`${file} lasciato com'è: ${error.message}.`);
+    if (error instanceof UnexpectedSettings) throw new UserError(`${file} left as it is: ${error.message}.`);
     throw error;
   }
 
   if (plan.changes.length === 0) {
-    io.stdout(action === 'install' ? `Gli hook di Forchetta sono già in ${file}.\n` : `Nessun hook di Forchetta in ${file}.\n`);
+    io.stdout(action === 'install' ? `The hooks of Forchetta are already in ${file}.\n` : `No hook of Forchetta in ${file}.\n`);
     return 0;
   }
 
   const after = formatSettings(plan.settings);
-  io.stdout(`${action === 'install' ? 'Aggiungo' : 'Tolgo'} questi hook in ${file}:\n\n${plan.changes.map((line) => `  ${line}`).join('\n')}\n\n`);
-  io.stdout(`Diff completo:\n\n${unifiedDiff(before ?? '', after, file)}\n`);
+  io.stdout(`${action === 'install' ? 'Adding' : 'Removing'} these hooks in ${file}:\n\n${plan.changes.map((line) => `  ${line}`).join('\n')}\n\n`);
+  io.stdout(`The whole diff:\n\n${unifiedDiff(before ?? '', after, file)}\n`);
   if (before !== undefined && formatSettings(settings as Record<string, unknown>) !== before) {
-    io.stdout('Nota: il file sarà riscritto con due spazi di rientro, come lo scrive Claude Code; il diff lo mostra.\n\n');
+    io.stdout('Note: the file will be written again with an indent of two spaces, as Claude Code writes it; the diff shows it.\n\n');
   }
 
-  if (!options.yes && !(await confirm('Applico le modifiche? [s/N] ', io))) {
-    if (process.stdin.isTTY) io.stdout('Nessuna modifica.\n');
+  if (!options.yes && !(await confirm('Apply the changes? [y/N] ', io))) {
+    if (process.stdin.isTTY) io.stdout('No change.\n');
     return 0;
   }
   const now = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
-  if (now !== before) throw new UserError(`${file} è cambiato nel frattempo: lo lascio com'è. Riesegui il comando.`);
+  if (now !== before) throw new UserError(`${file} changed meanwhile: left as it is. Run the command again.`);
 
   // The command you had goes in place before the status line that runs it.
   if (typeof saveCommand === 'string') {
@@ -149,9 +149,9 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
   const backup = writeSettings(file, after);
   if (saveCommand === null) rmSync(paths.statusCommand, { force: true });
   io.stdout(
-    `Fatto.${backup ? ` Copia del file precedente: ${backup}` : ''}\n` +
+    `Done.${backup ? ` Copy of the previous file: ${backup}` : ''}\n` +
       (action === 'install'
-        ? 'Claude Code rilegge gli hook da solo: valgono anche per le sessioni già aperte.\nPer toglierli: forchetta hooks uninstall\n'
+        ? 'Claude Code reads the hooks again by itself: they work for the sessions already open too.\nTo remove them: forchetta hooks uninstall\n'
         : ''),
   );
   return 0;

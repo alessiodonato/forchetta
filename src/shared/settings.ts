@@ -72,26 +72,26 @@ export function wantedHook(event: string, targets: HookTargets): Json {
 
 function hooksOf(settings: Json): Json {
   const hooks = settings.hooks ?? {};
-  if (!isObject(hooks)) throw new UnexpectedSettings('"hooks" non è un oggetto');
+  if (!isObject(hooks)) throw new UnexpectedSettings('"hooks" is not an object');
   return hooks;
 }
 
 function groupsOf(hooks: Json, event: string): Json[] {
   const groups = hooks[event] ?? [];
-  if (!Array.isArray(groups) || !groups.every(isObject)) throw new UnexpectedSettings(`gli hook di ${event} non sono una lista di gruppi`);
+  if (!Array.isArray(groups) || !groups.every(isObject)) throw new UnexpectedSettings(`the hooks of ${event} are not a list of groups`);
   return groups;
 }
 
 function handlersOf(group: Json, event: string): Json[] {
   const handlers = group.hooks ?? [];
-  if (!Array.isArray(handlers) || !handlers.every(isObject)) throw new UnexpectedSettings(`un gruppo di ${event} non ha una lista di hook`);
+  if (!Array.isArray(handlers) || !handlers.every(isObject)) throw new UnexpectedSettings(`a group of ${event} has no list of hooks`);
   return handlers;
 }
 
 const describe = (hook: Json): string =>
   hook.type === 'http'
     ? `http ${String(hook.url)}`
-    : `command ${String(hook.command)}${hook.async === true ? ' (async)' : typeof hook.timeout === 'number' ? ` (attende, timeout ${hook.timeout} s)` : ''}`;
+    : `command ${String(hook.command)}${hook.async === true ? ' (async)' : typeof hook.timeout === 'number' ? ` (waits, timeout ${hook.timeout} s)` : ''}`;
 
 /** The settings with every hook of Forchetta in place, and one line for each change. */
 export function withForchettaHooks(settings: Json, targets: HookTargets): { settings: Json; changes: string[] } {
@@ -172,7 +172,7 @@ export function withForchettaStatusLine(settings: Json, targets: { port: number;
   const next = structuredClone(settings);
   const current = next.statusLine;
   const command = `${quoteIfNeeded(targets.statusScript)} ${targets.port}`;
-  if (current !== undefined && !isObject(current)) throw new UnexpectedSettings('"statusLine" non è un oggetto');
+  if (current !== undefined && !isObject(current)) throw new UnexpectedSettings('"statusLine" is not an object');
   if (isOurStatusLine(current)) {
     if (current!.command === command) return { settings: next, changes: [] };
     next.statusLine = { ...current, command };
@@ -182,7 +182,7 @@ export function withForchettaStatusLine(settings: Json, targets: { port: number;
   next.statusLine = { ...(isObject(current) ? current : {}), type: 'command', command };
   return {
     settings: next,
-    changes: [original ? `~ statusLine: ${command}, che poi esegue il tuo comando di prima` : `+ statusLine: ${command} (prima non c'era)`],
+    changes: [original ? `~ statusLine: ${command}, which then runs the command you had` : `+ statusLine: ${command} (there was none)`],
     original,
   };
 }
@@ -194,7 +194,7 @@ export function withoutForchettaStatusLine(settings: Json, original: string | un
   if (!isOurStatusLine(current)) return { settings: next, changes: [] };
   if (original) {
     next.statusLine = { ...(current as Json), command: original };
-    return { settings: next, changes: [`~ statusLine: di nuovo ${original}`] };
+    return { settings: next, changes: [`~ statusLine: back to ${original}`] };
   }
   delete next.statusLine;
   return { settings: next, changes: ['- statusLine'] };

@@ -29,7 +29,7 @@ Forchetta finds the Claude Code sessions you have running and shows, live, what 
 
 ## What it does
 
-Version 0.7.0:
+Version 0.7.1:
 - finds the Claude Code sessions that are running and shows a box for each one, with its state, current action, summary, context, cache and cost;
 - opens up to 4 sessions side by side, in real terminals attached to tmux;
 - sends `/btw`, `/compact` and `/clear` to one session or to several, only when it is safe;
@@ -127,8 +127,6 @@ forchetta daemon start|stop|status
 Sessions started with plain `claude` show up in `forchetta ls` too, but **read only**: Forchetta cannot send them commands.
 
 The daemon starts by itself with `forchetta run`. Stopping it stops no session.
-
-`forchetta ls` and the other commands of the CLI still write in Italian; the app is in English.
 
 ### Optional alias: `claude` → `forchetta run claude`
 

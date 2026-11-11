@@ -52,7 +52,7 @@ const LOG_LIMIT = 5 * 1024 * 1024;
 export async function ensureDaemon(node: string, waitMs = 5000): Promise<DaemonInfo | undefined> {
   const running = await runningDaemon();
   if (running) return running;
-  if (!existsSync(paths.daemonJs)) throw new Error(`manca ${paths.daemonJs}: esegui prima "pnpm build"`);
+  if (!existsSync(paths.daemonJs)) throw new Error(`${paths.daemonJs} is missing: run "pnpm build" first`);
   ensurePrivateDir(paths.varDir);
   try {
     if (existsSync(paths.log) && statSync(paths.log).size > LOG_LIMIT) renameSync(paths.log, `${paths.log}.1`);

@@ -80,7 +80,7 @@ describe('install', () => {
       },
     };
     const { settings: after, changes } = withForchettaHooks(old, targets(47821));
-    expect(changes).toContain(`~ PermissionRequest: command ${SCRIPT} 47821 (async) → command ${PERMISSION_SCRIPT} 47821 (attende, timeout 3600 s)`);
+    expect(changes).toContain(`~ PermissionRequest: command ${SCRIPT} 47821 (async) → command ${PERMISSION_SCRIPT} 47821 (waits, timeout 3600 s)`);
     expect((after.hooks as Groups).PermissionRequest).toEqual([{ hooks: [{ type: 'command', command: 'say ok' }] }, { hooks: [PERMISSION] }]);
   });
 

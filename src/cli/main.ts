@@ -8,16 +8,16 @@ import { ago, listSessions } from './ls.ts';
 import { type RunIO, runClaude } from './run.ts';
 import { defaultAppDir, setupCommand } from './setup.ts';
 
-const USAGE = `forchetta ${VERSION}: centro di controllo per sessioni Claude Code parallele
+const USAGE = `forchetta ${VERSION}: control center for parallel Claude Code sessions
 
-Uso:
-  forchetta setup                     prepara Forchetta: compila l'app in ~/Applications e installa gli hook
-                                      (--yes per non chiedere, --force per ricompilare, --app-dir <cartella>)
-  forchetta run claude [argomenti]    avvia Claude Code in tmux, visibile e comandabile da Forchetta
-  forchetta ls                        elenca le sessioni Claude Code e il loro stato
-  forchetta daemon start|stop|status  gestisce il daemon locale (le sessioni non si fermano mai)
-  forchetta hooks install|uninstall   aggiunge o toglie gli hook in ~/.claude/settings.json
-                                      (mostra il diff e chiede prima; --yes per non chiedere)
+Usage:
+  forchetta setup                     gets Forchetta ready: builds the app in ~/Applications and installs the hooks
+                                      (--yes for no question, --force to build again, --app-dir <folder>)
+  forchetta run claude [arguments]    starts Claude Code in tmux, where Forchetta shows it and sends it commands
+  forchetta ls                        lists the Claude Code sessions and their state
+  forchetta daemon start|stop|status  manages the local daemon (sessions never stop with it)
+  forchetta hooks install|uninstall   adds or removes the hooks in ~/.claude/settings.json
+                                      (shows the diff and asks first; --yes for no question)
 `;
 
 const io: RunIO = {
@@ -29,33 +29,33 @@ async function daemonCommand(action: string | undefined): Promise<number> {
   switch (action) {
     case 'start': {
       const info = await ensureDaemon(resolveTool('node', loadConfig()));
-      if (!info) throw new UserError(`il daemon non è partito: guarda ${paths.log}`);
-      io.stdout(`Daemon attivo (pid ${info.pid}, porta ${info.port}).\n`);
+      if (!info) throw new UserError(`the daemon did not start: see ${paths.log}`);
+      io.stdout(`Daemon running (pid ${info.pid}, port ${info.port}).\n`);
       return 0;
     }
     case 'stop': {
       const info = await runningDaemon();
       if (!info) {
-        io.stdout('Il daemon non è attivo.\n');
+        io.stdout('The daemon is not running.\n');
         return 0;
       }
       await api(info, 'POST', '/api/shutdown');
       for (let attempt = 0; attempt < 30 && (await runningDaemon()); attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
-      io.stdout('Daemon fermato. Le sessioni Claude e tmux restano attive.\n');
+      io.stdout('Daemon stopped. The Claude and tmux sessions go on.\n');
       return 0;
     }
     case 'status': {
       const info = await runningDaemon();
       if (!info) {
-        io.stdout(readDaemonInfo() ? `Il daemon non risponde (${paths.daemonInfo} è di un daemon fermato).\n` : 'Il daemon non è attivo.\n');
+        io.stdout(readDaemonInfo() ? `The daemon does not answer (${paths.daemonInfo} belongs to a stopped daemon).\n` : 'The daemon is not running.\n');
         return 1;
       }
       const health = await api<{ agents: number; startedAt: number; version: string }>(info, 'GET', '/api/health');
-      io.stdout(`Daemon ${health.version} attivo: pid ${info.pid}, porta ${info.port}, da ${ago(Date.now() - health.startedAt)}, ${health.agents} sessioni note.\n`);
+      io.stdout(`Daemon ${health.version} running: pid ${info.pid}, port ${info.port}, for ${ago(Date.now() - health.startedAt)}, ${health.agents} sessions known.\n`);
       return 0;
     }
     default:
-      throw new UserError('uso: forchetta daemon start|stop|status');
+      throw new UserError('usage: forchetta daemon start|stop|status');
   }
 }
 
@@ -71,12 +71,12 @@ async function main(argv: string[]): Promise<number> {
     case 'setup': {
       const at = rest.indexOf('--app-dir');
       const appDir = at >= 0 ? rest[at + 1] : defaultAppDir();
-      if (!appDir) throw new UserError('uso: forchetta setup [--yes] [--force] [--app-dir <cartella>]');
+      if (!appDir) throw new UserError('usage: forchetta setup [--yes] [--force] [--app-dir <folder>]');
       return setupCommand({ yes: rest.includes('--yes'), force: rest.includes('--force'), appDir }, io);
     }
     case 'hooks': {
       const action = rest[0];
-      if (action !== 'install' && action !== 'uninstall') throw new UserError('uso: forchetta hooks install|uninstall [--yes]');
+      if (action !== 'install' && action !== 'uninstall') throw new UserError('usage: forchetta hooks install|uninstall [--yes]');
       return hooksCommand(action, { yes: rest.includes('--yes') }, io);
     }
     case undefined:
@@ -90,7 +90,7 @@ async function main(argv: string[]): Promise<number> {
       io.stdout(`${VERSION}\n`);
       return 0;
     default:
-      throw new UserError(`comando sconosciuto: ${command}\n\n${USAGE}`);
+      throw new UserError(`unknown command: ${command}\n\n${USAGE}`);
   }
 }
 

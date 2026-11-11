@@ -36,14 +36,14 @@ describe('forchetta ls', () => {
       false,
     );
     const lines = text.trimEnd().split('\n');
-    expect(lines[0]).toMatch(/^PROGETTO\s+STATO\s+ATTIVITÀ\s+CONTESTO\s+CACHE\s+ULTIMO\s+CONTROLLO\s+PID\s+SESSIONE$/);
+    expect(lines[0]).toMatch(/^PROJECT\s+STATE\s+ACTIVITY\s+CONTEXT\s+CACHE\s+LAST\s+CONTROL\s+PID\s+SESSION$/);
     expect(lines[1]).toMatch(/^progetto\s+working\s+.*357k ≈36%\s+42 min\s+12 s\s+read only\s+123\s+abcdef12$/);
     expect(lines[2]).toMatch(/waiting\s+.*—\s+—\s+3 min\s+tmux\s+—\s+—$/);
-    expect(lines.at(-1)).toBe('2 sessioni attive · 1 ti aspetta');
-    expect(renderList([], NOW, 100, false)).toBe('Nessuna sessione Claude Code attiva.\n');
+    expect(lines.at(-1)).toBe('2 sessions running · 1 waits for you');
+    expect(renderList([], NOW, 100, false)).toBe('No Claude Code session running.\n');
   });
 
-  it('writes durations in Italian', () => {
+  it('writes durations in short English', () => {
     expect(ago(4_000)).toBe('4 s');
     expect(ago(125_000)).toBe('2 min');
     expect(ago(3_900_000)).toBe('1 h 5 min');

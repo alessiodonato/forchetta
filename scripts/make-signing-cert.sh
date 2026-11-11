@@ -9,7 +9,7 @@
 set -eu
 NAME="Forchetta (firma locale)"
 if security find-certificate -c "$NAME" >/dev/null 2>&1; then
-  echo "Il certificato \"$NAME\" è già nel portachiavi."
+  echo "The certificate \"$NAME\" is already in the keychain."
   exit 0
 fi
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -36,4 +36,4 @@ EOF
 PASS=$(/usr/bin/openssl rand -hex 16)
 /usr/bin/openssl pkcs12 -export -inkey "$WORK/key.pem" -in "$WORK/cert.pem" -name "$NAME" -out "$WORK/cert.p12" -passout "pass:$PASS"
 security import "$WORK/cert.p12" -k "$HOME/Library/Keychains/login.keychain-db" -P "$PASS" -T /usr/bin/codesign >/dev/null
-echo "Certificato \"$NAME\" creato nel portachiavi login: build-app.sh lo usa da ora."
+echo "Certificate \"$NAME\" created in the login keychain: build-app.sh uses it from now on."

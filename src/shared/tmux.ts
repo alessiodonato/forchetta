@@ -43,9 +43,9 @@ export class Tmux {
    * command, so such an argument could chain a second command: it is refused.
    */
   argv(command: string, args: readonly string[]): string[] {
-    if (!allowed.has(command)) throw new TmuxRefused(`comando tmux non permesso: ${command}`);
+    if (!allowed.has(command)) throw new TmuxRefused(`tmux command not allowed: ${command}`);
     for (const arg of args) {
-      if (arg.endsWith(';')) throw new TmuxRefused(`argomento tmux non permesso (finisce con ";"): ${JSON.stringify(arg)}`);
+      if (arg.endsWith(';')) throw new TmuxRefused(`tmux argument not allowed (it ends with ";"): ${JSON.stringify(arg)}`);
     }
     // -u: UTF-8 also when LANG is not set, as for an app opened from the Finder.
     return ['-u', '-S', this.socket, '-f', this.conf, command, ...args];
