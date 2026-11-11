@@ -37,12 +37,12 @@ const TOOLS = [
   ['Read', { file_path: 'README.md' }],
   ['Grep', { pattern: 'TODO' }],
   ['WebFetch', { url: 'https://code.claude.com/docs/en/hooks' }],
-  ['Task', { description: 'Cerca i test lenti', subagent_type: 'Explore' }],
+  ['Task', { description: 'Find the slow tests', subagent_type: 'Explore' }],
   ['Write', { file_path: 'docs/api.md' }],
   ['Bash', { command: 'git status' }],
 ];
 
-const session = (index) => ({ session_id: `sim-${String(index).padStart(2, '0')}`, cwd: `/Users/dev/progetti/${PROJECTS[index]}`, transcript_path: `/tmp/sim-${index}.jsonl` });
+const session = (index) => ({ session_id: `sim-${String(index).padStart(2, '0')}`, cwd: `/Users/dev/projects/${PROJECTS[index]}`, transcript_path: `/tmp/sim-${index}.jsonl` });
 
 async function post(index, event, extra = {}) {
   const body = JSON.stringify({ ...session(index), hook_event_name: event, ...extra });
@@ -83,32 +83,46 @@ async function finish(index, reply) {
   await post(index, 'Stop', { last_assistant_message: reply });
 }
 
+const PROMPTS = [
+  'Add retries with backoff to the order client, then the tests',
+  'Move the settings page to the new layout',
+  'Rebuild the docs site and fix the broken links',
+  'Migrate the jobs to the new schema',
+  'Check the staging changes before the deploy',
+  'Fix the crash on the onboarding screen',
+  'Validate IBANs on the payment form',
+  'Find why the search endpoint is slow',
+  'Design the login for the internal tools',
+  'Generate the weekly report',
+  'Put the legacy invoice code behind an adapter',
+];
+
 async function mix() {
-  for (let index = 0; index < 12; index++) await start(index, index === 11 ? undefined : `Lavoro sul modulo ${PROJECTS[index]}: sistema i test e aggiorna la documentazione`);
+  for (let index = 0; index < 12; index++) await start(index, PROMPTS[index]);
   await tool(0, 0);
   await tool(1, 1);
   await post(2, 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'rm -rf dist && npm run build' } });
-  await finish(3, 'Fatto. Ho migrato la pipeline al nuovo schema e i 42 test passano.');
+  await finish(3, 'Done. The pipeline runs on the new schema and the 42 tests pass.');
   await post(4, 'PreCompact', { trigger: 'auto' });
-  await post(5, 'StopFailure', { error: 'rate_limit', last_assistant_message: 'API Error: 429 rate limit exceeded, riprova tra qualche minuto' });
-  await finish(6, 'Ho aggiunto la validazione degli IBAN e il test che mancava.');
+  await post(5, 'StopFailure', { error: 'rate_limit', last_assistant_message: 'API Error: 429 rate limit exceeded, try again in a few minutes' });
+  await finish(6, 'Added IBAN validation to the payment form, and the missing test.');
   await post(7, 'PreToolUse', { tool_name: 'Grep', tool_input: { pattern: 'slowQuery' }, agent_id: 'a1', agent_type: 'Explore' });
-  await post(8, 'PreToolUse', { tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Uso OAuth o le chiavi API per i client interni?' }] } });
-  await finish(9, 'Report settimanale generato in reports/2026-11.md.');
-  await finish(10, 'Ho isolato il codice legacy dietro un adattatore, nessun cambiamento di comportamento.');
+  await post(8, 'PreToolUse', { tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'OAuth or API keys for the internal clients?' }] } });
+  await finish(9, 'Weekly report written to reports/2026-11.md.');
+  await finish(10, 'The legacy invoice code now sits behind an adapter, with no change in behavior.');
   await post(11, 'SessionEnd', { reason: 'prompt_input_exit' });
 }
 
 async function rest() {
   for (let index = 0; index < 12; index++) {
-    await start(index, `Lavoro sul modulo ${PROJECTS[index]}`);
-    await finish(index, `Fatto: ${PROJECTS[index]} aggiornato e verificato.`);
+    await start(index, `Work on the ${PROJECTS[index]} module`);
+    await finish(index, `Done: ${PROJECTS[index]} updated and checked.`);
   }
 }
 
 async function busy() {
   for (let index = 0; index < 12; index++) {
-    await start(index, `Refactoring di ${PROJECTS[index]}`);
+    await start(index, `Refactor ${PROJECTS[index]}`);
     await tool(index);
   }
 }
@@ -124,9 +138,9 @@ async function loop(seconds) {
       continue;
     }
     if (step % 9 === 0) {
-      await finish(index, `Fatto il passo ${step} di ${PROJECTS[index]}.`);
+      await finish(index, `Done step ${step} of ${PROJECTS[index]}.`);
       await pause(1200);
-      await post(index, 'UserPromptSubmit', { prompt: `Continua con ${PROJECTS[index]}` });
+      await post(index, 'UserPromptSubmit', { prompt: `Go on with ${PROJECTS[index]}` });
     } else {
       await tool(index, step);
     }

@@ -2,15 +2,19 @@
 
 Centro di controllo locale per le sessioni Claude Code che girano in parallelo su macOS. Sito: <https://alessiodonato.github.io/forchetta/>
 
+[English](README.md) · **Italiano**
+
 **Cosa fa** (versione 0.6.0):
 - trova da sola le sessioni Claude Code attive e mostra per ognuna un box con stato, azione in corso, riassunto, contesto, cache e costo;
 - apre fino a 4 sessioni affiancate in terminali veri, agganciati a tmux;
 - manda `/btw`, `/compact` e `/clear` a una o più sessioni, solo quando è sicuro;
-- risponde ai permessi dal box (una volta o "sempre"), notifica le attese, gli stalli e gli errori, avvisa dei conflitti tra sessioni sugli stessi file;
+- risponde ai permessi dal box (una volta o "always"), notifica le attese, gli stalli e gli errori, avvisa dei conflitti tra sessioni sugli stessi file;
 - mostra le modifiche di ogni sessione, avvia sessioni nuove, organizza le sessioni in gruppi e ruoli, cerca nelle sessioni passate con arricurdAI;
 - sta nella barra dei menu, con la scorciatoia ⌃⌥F.
 
 Tutto gira in locale. L'unico servizio esterno, facoltativo e spento di default, è la Claude API per i riassunti.
+
+L'interfaccia dell'app è in inglese: in questo README i pulsanti e i messaggi sono citati come compaiono.
 
 ## Requisiti
 
@@ -101,11 +105,13 @@ Un box per ogni sessione. Compare da solo quando la sessione parte e sbiadisce q
 - il tempo dall'ultimo evento e se la sessione è comandabile (`tmux`) o in sola lettura.
 
 **Gli stati si riconoscono anche da lontano:**
-- **al lavoro**: il bordo pulsa piano;
-- **in attesa di te** (permesso, domanda, piano da approvare): ambra, con un respiro;
-- **turno finito**: verde per un attimo, con un check;
-- **errore**: rosso, con un solo scuotimento;
-- **compattazione**: la barra del contesto si stringe.
+- **working**, al lavoro: il bordo pulsa piano;
+- **waiting**, in attesa di te (permesso, domanda, piano da approvare): ambra, con un respiro;
+- **turn finished**: verde per un attimo, con un check;
+- **error**: rosso, con un solo scuotimento;
+- **compacting**: la barra del contesto si stringe.
+
+Ambra, verde e rosso indicano solo uno stato. L'arancione di Claude segna invece quello su cui puoi agire: i pulsanti che avviano qualcosa, ciò che hai scelto, il riquadro in cui stai scrivendo.
 
 **Prestazioni e accessibilità.** Con "Riduci movimento" attivo (Preferenze di Sistema → Accessibilità → Monitor) gli stati restano riconoscibili ma fermi. Quando la finestra è ridotta a icona, nascosta o coperta, nulla si muove e il daemon smette di leggere arricurdAI.
 
@@ -119,17 +125,17 @@ Passando sopra un box compare **✎**, che permette di dare alla sessione:
 - un **nome**, mostrato al posto della cartella (la cartella resta accanto, più piccola);
 - un **gruppo**;
 - un **ruolo** (testo libero, per esempio "revisione" o "test");
-- il segno **capo del gruppo**.
+- il segno **lead of the group** (capo del gruppo).
 
-L'assegnazione vale anche per la sua cartella (`var/teams.json`): una sessione che riparte nella stessa cartella, magari il giorno dopo, ritrova il suo posto. **Togli** cancella tutto.
+L'assegnazione vale anche per la sua cartella (`var/teams.json`): una sessione che riparte nella stessa cartella, magari il giorno dopo, ritrova il suo posto. **Remove** cancella tutto.
 
-Quando esiste almeno un gruppo, in alto compare **griglia / organigramma**. Nell'organigramma ogni gruppo ha la sua sezione, con i capi in alto e gli altri sotto, collegati; le sessioni senza gruppo stanno in fondo. Il nome scelto compare ovunque: nella colonna a sinistra, nei riquadri, nelle notifiche e negli avvisi di conflitto.
+Quando esiste almeno un gruppo, in alto compare **grid / org chart**. Nell'organigramma ogni gruppo ha la sua sezione, con i capi in alto e gli altri sotto, collegati; le sessioni senza gruppo stanno in fondo. Il nome scelto compare ovunque: nella colonna a sinistra, nei riquadri, nelle notifiche e negli avvisi di conflitto.
 
 ### Costo e token
 
-- **In alto, il totale di oggi**: "oggi ≈ $46.20 · 142M token". Comprende tutte le chiamate di tutte le sessioni da mezzanotte, anche quelle chiuse, a prezzi API. Viene da `arricurdai status`, come il contesto e la cache; passandoci sopra si leggono anche il numero di chiamate e le chiamate escluse perché il modello non ha un prezzo noto.
+- **In alto, il totale di oggi**: "today ≈ $46.20 · 142M tokens". Comprende tutte le chiamate di tutte le sessioni da mezzanotte, anche quelle chiuse, a prezzi API. Viene da `arricurdai status`, come il contesto e la cache; passandoci sopra si leggono anche il numero di chiamate e le chiamate escluse perché il modello non ha un prezzo noto.
 - **In ogni box, il costo della sessione** dal suo avvio (nel piè di pagina: "≈ $0.42"). Lo calcola Claude Code, come `/cost`, e arriva dalla statusline a ogni messaggio. Una sessione aperta da giorni può quindi costare più del totale di oggi.
-- **I token della sessione** sono quelli del contesto, accanto alla barra: "≈36% · 357k". Con un arricurdAI che dà la parte di oggi di ogni sessione (`sessions[].today` in `status --json`), il piè di pagina aggiunge i token di oggi, subagenti compresi: "≈ $0.42 · oggi 1.2M tok". Il tooltip spiega le due fonti; la somma dei box dà il totale in alto.
+- **I token della sessione** sono quelli del contesto, accanto alla barra: "≈36% · 357k". Con un arricurdAI che dà la parte di oggi di ogni sessione (`sessions[].today` in `status --json`), il piè di pagina aggiunge i token di oggi, subagenti compresi: "≈ $0.42 · today 1.2M tok". Il tooltip spiega le due fonti; la somma dei box dà il totale in alto.
 
 Per il costo della sessione `forchetta hooks install` mette `bin/forchetta-statusline` davanti alla tua statusline:
 - il tuo comando viene salvato in `var/statusline-command` ed eseguito con lo stesso input, quindi la riga in basso resta identica;
@@ -140,14 +146,14 @@ La statusline di Claude Code dà anche dei token, ma sono quelli dell'ultima chi
 
 ### Le modifiche di una sessione
 
-Quando una sessione ha scritto dei file, il suo box mostra "3 file" nel piè di pagina; lo stesso pulsante è nell'intestazione di un riquadro aperto. Il clic apre un pannello con i file scritti dalla sessione, dal più recente, e due viste:
-- **di questa sessione**: solo quello che ha cambiato lei, modifica per modifica ("modifica · 3 min fa", "file creato"), come lo ha riportato Claude Code. Le modifiche di altre sessioni o tue allo stesso file qui non compaiono. Sono salvate in `var/patches/` (leggibili solo da te) e vengono cancellate quando la sessione esce dall'elenco;
-- **dall'ultimo commit**: il diff della sua repo (`git diff HEAD`), cioè lo stato attuale del file. Un file nuovo compare per intero.
+Quando una sessione ha scritto dei file, il suo box mostra "3 files" nel piè di pagina; lo stesso pulsante è nell'intestazione di un riquadro aperto. Il clic apre un pannello con i file scritti dalla sessione, dal più recente, e due viste:
+- **by this session**: solo quello che ha cambiato lei, modifica per modifica ("edit · 3 min ago", "file created"), come lo ha riportato Claude Code. Le modifiche di altre sessioni o tue allo stesso file qui non compaiono. Sono salvate in `var/patches/` (leggibili solo da te) e vengono cancellate quando la sessione esce dall'elenco;
+- **since the last commit**: il diff della sua repo (`git diff HEAD`), cioè lo stato attuale del file. Un file nuovo compare per intero.
 
 Altri dettagli:
-- Esc o un clic fuori chiudono il pannello; **aggiorna** rilegge le modifiche;
+- Esc o un clic fuori chiudono il pannello; **refresh** rilegge le modifiche;
 - un file fuori da git non ha diff;
-- un file già committato dice "nessuna differenza dall'ultimo commit";
+- un file già committato dice "no difference since the last commit";
 - la vista dall'ultimo commit comprende anche le modifiche fatte da altri allo stesso file: per sapere chi altro l'ha toccato c'è l'avviso di conflitto;
 - l'elenco comprende solo le scritture fatte con `Edit` e `Write`, come per i conflitti;
 - il diff viene letto solo quando apri il pannello;
@@ -155,7 +161,7 @@ Altri dettagli:
 
 ### Conflitti tra sessioni
 
-Se due sessioni attive hanno scritto lo stesso file nell'ultima ora, entrambi i box lo dicono: "⚠ stesso file di beta: src/api.ts". Se hanno scritto file diversi nella stessa repo, l'avviso è più leggero: "⚠ stessa repo di beta (app)". Nella colonna a sinistra compare un'etichetta "⚠ stesso file" o "⚠ stessa repo"; passandoci sopra si leggono tutti i file.
+Se due sessioni attive hanno scritto lo stesso file nell'ultima ora, entrambi i box lo dicono: "⚠ same file as beta: src/api.ts". Se hanno scritto file diversi nella stessa repo, l'avviso è più leggero: "⚠ same repo as beta (app)". Nella colonna a sinistra compare un'etichetta "⚠ same file" o "⚠ same repo"; passandoci sopra si leggono tutti i file.
 
 - Contano le scritture fatte con `Edit`, `Write`, `MultiEdit` e `NotebookEdit` andate a buon fine. Quello che cambia un comando Bash (`sed -i`, `git checkout`, un formatter) gli hook non lo vedono.
 - La repo è la cartella di lavoro con `.git`: due worktree della stessa repo sono due posti diversi e non vanno in conflitto.
@@ -164,16 +170,16 @@ Se due sessioni attive hanno scritto lo stesso file nell'ultima ora, entrambi i 
 
 ### Sessioni ferme
 
-Se una sessione risulta "al lavoro" ma da 10 minuti non manda eventi, il box lo dice: "◷ nessun evento da 12 min · Bash npm test in corso". Nella colonna a sinistra compare "◷ ferma?".
+Se una sessione risulta al lavoro ("working") ma da 10 minuti non manda eventi, il box lo dice: "◷ no event for 12 min · Bash npm test running". Nella colonna a sinistra compare "◷ stuck?".
 
-Prima che l'avviso compaia, Forchetta ha già chiesto a `claude agents --json` com'è davvero la sessione (lo fa quando gli hook tacciono): se nel frattempo è finita o ti aspetta, non è più "al lavoro". Quello che resta è un comando lungo, una risposta lunga o una sessione bloccata, e il comando in corso aiuta a capire quale dei tre. Anche un costo che sale conta come segno di vita. La soglia si cambia in `var/config.json` con `"stallMin": 10`.
+Prima che l'avviso compaia, Forchetta ha già chiesto a `claude agents --json` com'è davvero la sessione (lo fa quando gli hook tacciono): se nel frattempo è finita o ti aspetta, non è più "working". Quello che resta è un comando lungo, una risposta lunga o una sessione bloccata, e il comando in corso aiuta a capire quale dei tre. Anche un costo che sale conta come segno di vita. La soglia si cambia in `var/config.json` con `"stallMin": 10`.
 
 ### Icona nella barra dei menu e scorciatoia
 
 Con l'app aperta, nella barra dei menu c'è una forchetta, con accanto il numero di sessioni che ti aspettano. Il suo menu mostra:
 - quante sessioni ti aspettano e il costo di oggi;
 - ogni sessione, prima quelle che ti aspettano, con lo stato e cosa chiede, oppure il contesto, il tempo rimasto della cache e il costo. Un clic riporta Forchetta su quella sessione;
-- **Mostra Forchetta**, **Nuova sessione…** ed **Esci da Forchetta**.
+- **Show Forchetta**, **New session…** e **Quit Forchetta**.
 
 Sostituisce il plugin di arricurdAI per SwiftBar (`arricurdai.1m.sh` nella cartella dei plugin di SwiftBar): mostra gli stessi numeri, perché vengono da `arricurdai status`, più lo stato delle sessioni. Forchetta non tocca né SwiftBar né il plugin: se vuoi, li togli tu.
 
@@ -189,15 +195,15 @@ sh scripts/make-signing-cert.sh
 
 Lo script crea nel portachiavi login il certificato di firma "Forchetta (firma locale)", usabile solo da `codesign`, e da quel momento `pnpm build:app` firma con quello: dopo un ultimo "Consenti", macOS ricorda l'app anche dopo ogni ricompilazione. Il certificato non è riconosciuto da Apple e serve solo a firmare le tue build; si toglie da Accesso Portachiavi.
 
-**Chiudere la finestra la nasconde**: l'app resta attiva nella barra dei menu, con notifiche e badge. Per uscire davvero: Esci da Forchetta (⌘Q). L'icona nel Dock, l'icona nella barra o ⌃⌥F riaprono la finestra.
+**Chiudere la finestra la nasconde**: l'app resta attiva nella barra dei menu, con notifiche e badge. Per uscire davvero: Quit Forchetta (⌘Q). L'icona nel Dock, l'icona nella barra o ⌃⌥F riaprono la finestra.
 
 ### Notifiche e badge
 
-Arriva una notifica di macOS anche quando una sessione **sembra ferma** ("alpha sembra ferma · nessun evento da 10 min · Bash npm test in corso", con la stessa soglia del box) e quando un turno **finisce con un errore** ("alpha: errore · rate_limit · …"). Queste due restano nel Centro Notifiche finché non le togli tu.
+Arriva una notifica di macOS anche quando una sessione **sembra ferma** ("alpha seems stuck · no event for 10 min · Bash npm test running", con la stessa soglia del box) e quando un turno **finisce con un errore** ("alpha: error · rate_limit · …"). Queste due restano nel Centro Notifiche finché non le togli tu.
 
 Quando una sessione ti aspetta (un permesso, una domanda, un piano da approvare) da almeno 5 secondi:
-- l'icona di Forchetta nel Dock mostra quante sessioni ti aspettano: è lo stesso numero di "ti aspetta" in alto;
-- arriva una notifica di macOS con la sessione e cosa chiede, per esempio "alpha ti aspetta · Permesso: Bash npm test". Un clic riporta in primo piano Forchetta, con il terminale di quella sessione aperto.
+- l'icona di Forchetta nel Dock mostra quante sessioni ti aspettano: è lo stesso numero di "wait for you" in alto;
+- arriva una notifica di macOS con la sessione e cosa chiede, per esempio "alpha waits for you · Permission: Bash npm test". Un clic riporta in primo piano Forchetta, con il terminale di quella sessione aperto.
 
 I 5 secondi servono a non disturbarti quando rispondi subito nel Terminale; Claude Code fa lo stesso con i suoi avvisi.
 
@@ -221,7 +227,7 @@ Un clic su un box apre il terminale della sessione nell'area di lavoro. Funziona
 
 Aprire, chiudere e riordinare i riquadri avviene con transizioni a molla.
 
-**Il quinto clic** sostituisce il riquadro usato meno di recente: aperto, cliccato o scritto da più tempo. Chi preferisce scegliere ogni volta scrive in `var/config.json` `"panes": { "replace": "chiedi" }`. Scrivere in un riquadro non lo sposta: nel layout a 3 il grande resta quello attivato.
+**Il quinto clic** sostituisce il riquadro usato meno di recente: aperto, cliccato o scritto da più tempo. Chi preferisce scegliere ogni volta scrive in `var/config.json` `"panes": { "replace": "chiedi" }`. Scrivere in un riquadro non lo sposta: nel layout a 3 il grande resta quello attivato. E non sposta nemmeno la tastiera: resta nel riquadro in cui scrivi, anche mentre Claude risponde in un altro.
 
 **La ✕ chiude solo il riquadro.** Claude continua a lavorare in tmux e resta nella colonna, pronto per essere riaperto. Se la sessione termina mentre il riquadro è aperto, il riquadro lo dice e mostra l'ultima schermata.
 
@@ -243,9 +249,9 @@ Passando sopra un box compaiono **btw…**, **compact** e **clear**; nell'intest
   - con le versioni precedenti non può: il transcript resta su disco e `recall` lo trova.
 
 **Quando parte un comando.** Forchetta scrive il comando nella sessione come lo scriveresti tu, solo quando è sicuro:
-- **la sessione aspetta un nuovo prompt.** Se Claude lavora, o aspetta una tua risposta (un permesso, una domanda), il comando resta in coda e il box lo mostra: "in coda: /compact · aspetto la fine del turno". In un dialogo non scrive mai: un tasto potrebbe rispondere al posto tuo;
+- **la sessione aspetta un nuovo prompt.** Se Claude lavora, o aspetta una tua risposta (un permesso, una domanda), il comando resta in coda e il box lo mostra: "queued: /compact · waiting for the turn to end". In un dialogo non scrive mai: un tasto potrebbe rispondere al posto tuo;
 - **nessuno ha scritto nella sessione negli ultimi 10 secondi**, dal Terminale o da un riquadro;
-- **la casella del prompt è vuota.** Una tua bozza non viene mai toccata: il comando resta "bloccato" finché la cancelli o la invii, poi parte da solo. Anche una risposta di `/btw` ancora aperta lo blocca, finché non la chiudi con Esc;
+- **la casella del prompt è vuota.** Una tua bozza non viene mai toccata: il comando resta bloccato ("blocked") finché la cancelli o la invii, poi parte da solo. Anche una risposta di `/btw` ancora aperta lo blocca, finché non la chiudi con Esc;
 - **il pane è ancora quello della sessione giusta**, controllato con il pid di Claude a ogni invio. Dopo aver scritto il comando, Forchetta preme Invio solo se il prompt mostra esattamente quel testo.
 
 **Come si conferma.**
@@ -253,18 +259,18 @@ Passando sopra un box compaiono **btw…**, **compact** e **clear**; nell'intest
 - `/clear`: dagli hook di fine e inizio sessione. Il box resta lo stesso, con una conversazione nuova.
 - Un comando ancora in coda si può annullare.
 
-**La risposta di `/btw` non si può catturare, quindi non compare nel box.** Claude Code la mostra solo in una finestra sopra il terminale: non entra nella conversazione né nel transcript, e nessun hook la riceve (provato anche con `MessageDisplay`). Il box dice "la risposta è nel terminale" e "apri" porta al riquadro della sessione.
+**La risposta di `/btw` non si può catturare, quindi non compare nel box.** Claude Code la mostra solo in una finestra sopra il terminale: non entra nella conversazione né nel transcript, e nessun hook la riceve (provato anche con `MessageDisplay`). Il box dice "the answer is in the terminal" e "open" porta al riquadro della sessione.
 
 ### I permessi dal box
 
-Quando una sessione chiede un permesso (un comando, una modifica a un file, un indirizzo), il box mostra cosa chiede, per intero, con **Consenti** e **Rifiuta**. Nella colonna a sinistra, con i riquadri aperti, compaiono solo i pulsanti; passando sopra la riga si legge la richiesta completa. Vale per tutte le sessioni interattive, anche quelle avviate fuori da Forchetta.
+Quando una sessione chiede un permesso (un comando, una modifica a un file, un indirizzo), il box mostra cosa chiede, per intero, con **Allow** e **Deny**. Nella colonna a sinistra, con i riquadri aperti, compaiono solo i pulsanti; passando sopra la riga si legge la richiesta completa. Vale per tutte le sessioni interattive, anche quelle avviate fuori da Forchetta.
 
-- **Consenti** vale una volta sola, come «Yes» nel Terminale.
-- **sempre…** mostra le scelte che restano, le stesse che Claude Code propone per quella richiesta: una regola per il comando, una cartella da aggiungere, una modalità (per esempio «accetta modifiche»). Ogni scelta dice dove vale: solo in questa sessione, oppure nel progetto, solo per te (`.claude/settings.local.json`) o per chi lo condivide (`.claude/settings.json`). Servono due clic: **sempre…** e poi la scelta. La regola la scrive Claude Code. Nel box non compaiono le scelte valide in tutti i progetti (scriverebbero nel tuo `~/.claude/settings.json`) né quella che salta tutti i permessi: restano nel Terminale. La regola che Claude Code manda al box può essere più stretta di quella del Terminale: per esempio vale per quel comando esatto invece che per tutti i `python3 …`.
-- **Rifiuta** ferma Claude, come «No» nel Terminale. Claude legge "L'utente ha rifiutato questa richiesta da Forchetta." e aspetta il tuo prossimo prompt.
+- **Allow** vale una volta sola, come «Yes» nel Terminale.
+- **always…** mostra le scelte che restano, le stesse che Claude Code propone per quella richiesta: una regola per il comando, una cartella da aggiungere, una modalità (per esempio «accept edits»). Ogni scelta dice dove vale: solo in questa sessione ("only in this session"), oppure nel progetto, solo per te ("in this project, only for you", `.claude/settings.local.json`) o per chi lo condivide ("in this project, for everyone who shares it", `.claude/settings.json`). Servono due clic: **always…** e poi la scelta. La regola la scrive Claude Code. Nel box non compaiono le scelte valide in tutti i progetti (scriverebbero nel tuo `~/.claude/settings.json`) né quella che salta tutti i permessi: restano nel Terminale. La regola che Claude Code manda al box può essere più stretta di quella del Terminale: per esempio vale per quel comando esatto invece che per tutti i `python3 …`.
+- **Deny** ferma Claude, come «No» nel Terminale. Claude legge "The user denied this request from Forchetta." e aspetta il tuo prossimo prompt.
 - Il dialogo resta anche nel Terminale, e **vince chi risponde prima**. Una risposta arrivata dopo viene ignorata da Claude Code.
 - I pulsanti si attivano dopo 0,7 s dalla comparsa della richiesta, così un clic fatto per altro non risponde per sbaglio.
-- **Prima di inviare la risposta Forchetta chiede a `claude agents --json` se la sessione aspetta ancora.** Se nel frattempo hai risposto nel Terminale, il box dice "Già risposto nel terminale" e non invia nulla. Per questo il clic impiega circa mezzo secondo.
+- **Prima di inviare la risposta Forchetta chiede a `claude agents --json` se la sessione aspetta ancora.** Se nel frattempo hai risposto nel Terminale, il box dice "Already answered in the terminal" e non invia nulla. Per questo il clic impiega circa mezzo secondo.
 - Se rispondi nel Terminale, il box se ne accorge:
   - con «Yes», al termine del comando;
   - con «No» o Esc, subito.
@@ -275,16 +281,16 @@ Quando una sessione chiede un permesso (un comando, una modifica a un file, un i
 
 ### Cercare nelle sessioni passate
 
-**cerca**, in alto, apre un pannello: scegli il progetto tra le cartelle delle sessioni note, scrivi le parole (Invio cerca) e compaiono i brani delle sessioni passate che ne parlano, con la data e la richiesta a cui rispondevano. Cerca arricurdAI (`arricurdai recall`), che nasconde i segreti; Forchetta mostra solo quello che trova. La ricerca parte solo quando la chiedi.
+**search**, in alto, apre un pannello: scegli il progetto tra le cartelle delle sessioni note, scrivi le parole (Invio cerca) e compaiono i brani delle sessioni passate che ne parlano, con la data e la richiesta a cui rispondevano. Cerca arricurdAI (`arricurdai recall`), che nasconde i segreti; Forchetta mostra solo quello che trova. La ricerca parte solo quando la chiedi.
 
 ### Nuova sessione dall'app
 
-**nuova sessione**, in alto, apre un pannello. La cartella si scrive (anche con `~/`), si sceglie tra quelle delle sessioni recenti o con **Scegli…**, che apre il pannello di macOS. Il primo prompt è facoltativo: ⌘↩ avvia.
+**new session**, in alto, apre un pannello. La cartella si scrive (anche con `~/`), si sceglie tra quelle delle sessioni recenti o con **Choose…**, che apre il pannello di macOS. Il primo prompt è facoltativo: ⌘↩ avvia.
 
-**Opzioni** (valgono solo per quella sessione, sono opzioni di `claude`):
-- **modello**: Opus, Sonnet, Haiku, Fable (`--model`). A differenza di `/model`, non cambia il tuo modello predefinito;
-- **permessi**: chiede ogni volta, accetta modifiche, auto, piano (`--permission-mode`). "Salta tutti i permessi" resta nel Terminale;
-- **worktree nuovo**, con un nome facoltativo: Claude Code crea un worktree git solo per la sessione (`--worktree`), così più agenti nella stessa repo non toccano gli stessi file. Serve una cartella in una repo git che Claude Code consideri fidata: se non l'hai mai aperta con `claude` e accettato il dialogo di fiducia, Claude esce subito e il pannello te lo dice.
+**Options** (valgono solo per quella sessione, sono opzioni di `claude`):
+- **model**: Opus, Sonnet, Haiku, Fable (`--model`). A differenza di `/model`, non cambia il tuo modello predefinito;
+- **permissions**: asks every time, accepts edits, auto, plan (`--permission-mode`). "Salta tutti i permessi" resta nel Terminale;
+- **new worktree**, con un nome facoltativo: Claude Code crea un worktree git solo per la sessione (`--worktree`), così più agenti nella stessa repo non toccano gli stessi file. Serve una cartella in una repo git che Claude Code consideri fidata: se non l'hai mai aperta con `claude` e accettato il dialogo di fiducia, Claude esce subito e il pannello te lo dice.
 
 La sessione parte nel tmux di Forchetta, come con `forchetta run claude`, e il suo terminale si apre subito: una cartella mai usata prima chiede lì se ti fidi dei suoi file. Claude parte attraverso la tua shell di login (`zsh -l -i`), quindi ha il PATH e le variabili di una nuova scheda del Terminale, anche se l'app è stata aperta dal Finder.
 
@@ -292,15 +298,15 @@ Il prompt non passa né da tmux né da una shell: va nel file d'ambiente privato
 
 ### Un comando a più sessioni
 
-Con almeno due sessioni comandabili, in alto compare **comando a più sessioni**. Il pannello permette di:
+Con almeno due sessioni comandabili, in alto compare **command to several**. Il pannello permette di:
 - scegliere `/compact`, `/clear` o `/btw` (con la domanda);
-- scegliere le sessioni: una per una, oppure "contesto ≥ 80%" (la scelta iniziale), "tutte" e "nessuna".
+- scegliere le sessioni: una per una, oppure "context ≥ 80%" (la scelta iniziale), "all" e "none".
 
 Ogni sessione riceve il suo comando come se partisse dal suo box: con la stessa coda, gli stessi controlli (prompt vuoto, nessun dialogo, nessuno che scrive) e le stesse conferme, che il box mostra. Per `/clear` il pannello chiede una conferma con il totale dei token che verranno azzerati. Prima di ogni `/clear` arricurdAI salva la nota della sessione, se la sua versione lo permette (vedi sopra). Per `/compact` non serve: il transcript resta intero e `recall` lo trova.
 
 ### Riassunto con Haiku (facoltativo, spento)
 
-Al posto del riassunto ricavato dagli eventi, il box può mostrare una riga scritta da `claude-haiku-5-5`:
+Al posto del riassunto ricavato dagli eventi, il box può mostrare una riga, in inglese, scritta da `claude-haiku-5-5`:
 - solo quando cambia lo stato;
 - al massimo ogni 30 secondi per sessione.
 
