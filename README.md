@@ -25,7 +25,9 @@ Forchetta finds the Claude Code sessions you have running and shows, live, what 
 
 <br>
 
-<img src="docs/img/overview.png" alt="The Forchetta window: twelve sessions, each in a box with its state, what it is doing, a summary, its context and its cost. Two wait for you, in amber." width="100%">
+<img src="docs/img/demo.gif" alt="A team of agents in Forchetta: a team is created from a template, its four terminals open, the lead gets a goal, gives work to developer, then to reviewer and tester, collects their answers and reports back." width="100%">
+
+<sub>A team of agents at work. Recorded in the simulation of this repository (<code>scripts/dev</code>): the sessions are scripted stand-ins for Claude Code, the app, the daemon and the queue are the real ones.</sub>
 
 </div>
 
@@ -143,6 +145,8 @@ alias claude='forchetta run claude'
 `forchetta run` uses the full path of `claude` saved in `var/config.json`, so there is no loop. To run the original `claude` once: `command claude`.
 
 ## The app
+
+<img src="docs/img/overview.png" alt="The Forchetta window: twelve sessions, each in a box with its state, what it is doing, a summary, its context and its cost. Two wait for you, in amber." width="100%">
 
 One box per session. It shows up by itself when the session starts and fades when it ends; 10 minutes later it goes away. Each box shows:
 - the project and the state;
@@ -449,7 +453,7 @@ pnpm build       # dist/: CLI, daemon and page (esbuild)
 pnpm build:app   # build/Forchetta.app (swiftc of the Command Line Tools)
 ```
 
-To try the app without real sessions there is a test daemon, on another port and with its state in `var/sim`. It runs 12 simulated sessions and a fake arricurdAI; sessions and teams started from the app run `scripts/dev/fake-claude.sh`, which shows a demo screen and needs no Claude:
+To try the app without real sessions there is a test daemon, on another port and with its state in `var/sim`. It runs 12 simulated sessions and a fake arricurdAI; sessions and teams started from the app run `scripts/dev/fake-agent.mjs`, a scripted Claude Code that takes requests, sends the hooks of a real session and, as the lead of a team, gives work to its members and waits for their answers. It needs no Claude and spends no tokens:
 
 ```sh
 sh scripts/dev/sim.sh                                       # test daemon on port 47822

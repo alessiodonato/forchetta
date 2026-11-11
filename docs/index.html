@@ -7,7 +7,10 @@
 <meta name="description" content="Forchetta finds the Claude Code sessions running on your Mac and shows, live, what each one is doing, what it waits for and what it costs, and runs teams of agents that work together. Free, open source, local.">
 <meta property="og:title" content="Forchetta">
 <meta property="og:description" content="Every Claude Code session on your Mac, in one window.">
-<meta property="og:image" content="https://alessiodonato.github.io/forchetta/img/workspace.png">
+<meta property="og:image" content="https://alessiodonato.github.io/forchetta/img/social.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
@@ -292,7 +295,7 @@
   .list b { color: var(--text); font-weight: 600; }
 
   .shot { margin: 32px 0 0; }
-  .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--line-strong); border-radius: 12px; }
+  .shot img, .shot video { display: block; width: 100%; height: auto; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
   .shot figcaption { margin-top: 12px; font-size: 14px; color: var(--text-3); }
 
   /* Three close-ups of the app side by side; one under the other on a phone. */
@@ -525,16 +528,16 @@
         </ul>
       </div>
       <figure class="shot">
+        <video src="img/demo.mp4" poster="img/demo-poster.jpg" width="1600" height="950" autoplay muted loop playsinline preload="metadata" aria-label="A team of agents in Forchetta: a team is created from a template, its four terminals open, the lead gets a goal, gives work to developer, then to reviewer and tester, collects their answers and reports back."></video>
+        <figcaption>A team at work, from the template to the answer for you. Recorded in the simulation of the repository: the sessions are scripted stand-ins for Claude Code, the app, the daemon and the queue are the real ones.</figcaption>
+      </figure>
+      <figure class="shot">
         <img src="img/org-chart.png" width="2400" height="1597" loading="lazy" alt="The org chart: the team checkout, its lead above and its three members below, each with the request it works on; three other sessions below.">
         <figcaption>The team checkout at work: the lead waits for the answers it needs, each member shows the request it is working on.</figcaption>
       </figure>
       <figure class="shot">
         <img src="img/team.png" width="2400" height="1418" loading="lazy" alt="The panel of the team checkout: the thread of requests, answers and a question between the lead and its members, then the field to write a new request.">
         <figcaption>The thread of the team: what the lead asked, what came back, a question of the reviewer.</figcaption>
-      </figure>
-      <figure class="shot">
-        <img src="img/new-team.png" width="2400" height="984" loading="lazy" alt="The new team panel, filled from the feature squad template: a Claude lead and three members, the tester set to execute only.">
-        <figcaption>A new team from a template: the roles, who answers and who executes, a worktree each.</figcaption>
       </figure>
     </section>
 
@@ -599,6 +602,13 @@
   // motion" the grid stays as the page loads it.
   (function () {
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // The demo of a team: with "reduce motion" it does not play by itself, it waits for its controls.
+    var video = document.querySelector('video[src="img/demo.mp4"]');
+    if (video && reduce) {
+      video.removeAttribute('autoplay');
+      video.pause();
+      video.controls = true;
+    }
     if (reduce) {
       var b1 = document.getElementById('b1');
       b1.dataset.state = 'waiting';
