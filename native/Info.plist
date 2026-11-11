@@ -10,6 +10,8 @@
   <string>local.forchetta.app</string>
   <key>CFBundleExecutable</key>
   <string>Forchetta</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

@@ -9,6 +9,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -target "$(uname -m)-apple-macos12.0" -framework AppKit -framework WebKit -framework UserNotifications -framework Carbon \
   "$ROOT"/native/*.swift -o "$APP/Contents/MacOS/Forchetta"
 sed -e "s|@ROOT@|$ROOT|g" -e "s|@VERSION@|$VERSION|g" "$ROOT/native/Info.plist" > "$APP/Contents/Info.plist"
+# The icon: drawn by scripts/make-icon.swift (swift scripts/make-icon.swift <folder.iconset>, then iconutil).
+cp "$ROOT/native/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 # With the local certificate (scripts/make-signing-cert.sh) macOS keeps the permissions of the app across builds;
 # without it, an ad-hoc signature, as before.
 IDENTITY="Forchetta (firma locale)"
