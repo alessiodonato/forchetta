@@ -6,33 +6,32 @@ import { useEffect, useRef } from 'preact/hooks';
 import { token } from './connection.ts';
 import { GlyphFilter } from './glyphs.ts';
 import { isFocusReport, keyInput } from './layout.ts';
+import { TERMINAL_THEME } from './terminal-theme.ts';
 
 // The terminal of a pane: xterm.js on a WebSocket of the daemon, which runs `tmux attach` for the session. Closing
 // the pane closes the socket, and the daemon detaches that tmux client: the session goes on.
 
-const THEME = {
-  background: '#1a1917',
-  foreground: '#e3e5e8',
-  cursor: '#e3e5e8',
-  cursorAccent: '#1a1917',
-  selectionBackground: 'rgba(163, 168, 176, 0.32)',
-  black: '#2b2a27',
-  red: '#ef5b5b',
-  green: '#46c48a',
-  yellow: '#e2b85c',
-  blue: '#6aa7ec',
-  magenta: '#c08ae0',
-  cyan: '#5ec2c8',
-  white: '#c8ccd2',
-  brightBlack: '#5c616b',
-  brightRed: '#ff7a7a',
-  brightGreen: '#6bd8a3',
-  brightYellow: '#f0cd7f',
-  brightBlue: '#8cbcf3',
-  brightMagenta: '#d2a6ee',
-  brightCyan: '#82d6db',
-  brightWhite: '#f2f3f5',
-};
+// Apple Symbols draws ⏺ and the other symbols of Claude Code as text, one cell wide: without it WebKit falls back
+// to the color emoji, two cells wide over the next letter.
+const FALLBACK_FONTS = 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", monospace';
+const FONTS = `"JetBrains Mono", ${FALLBACK_FONTS}`;
+
+/**
+ * JetBrains Mono, loaded once for all the panes. xterm.js measures its cells with the font it has when it opens:
+ * a terminal that opens before the font is there starts with the fallback and switches when it arrives.
+ */
+let fontReady = false;
+const fontLoaded: Promise<void> =
+  typeof document === 'undefined' || !document.fonts
+    ? Promise.resolve()
+    : Promise.all([document.fonts.load('400 13px "JetBrains Mono"'), document.fonts.load('700 13px "JetBrains Mono"')]).then(
+        () => {
+          fontReady = true;
+        },
+        () => {
+          // No font: the fallback stays.
+        },
+      );
 
 /** Ended: tmux closed the client because the session is over. Lost: the daemon cannot be reached. */
 export type TerminalStatus = 'connecting' | 'open' | 'ended' | 'lost';
@@ -64,18 +63,20 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
     const auth = token();
     if (!element || !auth) return;
     const term = new Terminal({
-      // Apple Symbols draws ⏺ and the other symbols of Claude Code as text, one cell wide: without it WebKit falls
-      // back to the color emoji, two cells wide over the next letter.
-      fontFamily: 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", monospace',
-      fontSize: 12,
-      lineHeight: 1.15,
+      fontFamily: fontReady ? FONTS : FALLBACK_FONTS,
+      fontSize: 13,
+      lineHeight: 1.3,
+      // A safety net under the colors of terminal-theme.ts: xterm.js lightens any text that would read below this
+      // contrast with its background. 3, not 4.5: higher, the subtle grays of Claude Code would become as light
+      // as the inactive ones, and the difference between them would go.
+      minimumContrastRatio: 3,
       cursorBlink: false,
       // Option must stay Option: on an Italian keyboard it types @, # and the square brackets.
       macOptionIsMeta: false,
       macOptionClickForcesSelection: true,
       // The history is in tmux: the wheel scrolls it (mouse on). A second one here would only show a scrollbar.
       scrollback: 0,
-      theme: THEME,
+      theme: TERMINAL_THEME,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -91,6 +92,19 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
     fit.fit();
     terminal.current = term;
     window.forchettaDebug?.terminals.set(agentId, term);
+    let disposed = false;
+    if (!fontReady) {
+      void fontLoaded.then(() => {
+        if (disposed || !fontReady) return;
+        // A new font family makes xterm.js measure its cells again; then the pane fits them.
+        term.options.fontFamily = FONTS;
+        try {
+          fit.fit();
+        } catch {
+          // Not visible right now: the ResizeObserver fits it later.
+        }
+      });
+    }
 
     const url = `ws://${location.host}/term?token=${encodeURIComponent(auth)}&agent=${encodeURIComponent(agentId)}&cols=${term.cols}&rows=${term.rows}`;
     const socket = new WebSocket(url);
@@ -140,6 +154,7 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
     observer.observe(element);
 
     return () => {
+      disposed = true;
       observer.disconnect();
       cancelAnimationFrame(frame);
       element.removeEventListener('mousedown', onPointer);

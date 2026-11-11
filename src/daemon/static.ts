@@ -11,6 +11,7 @@ const TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.map': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
 };
 
 export function contentSecurityPolicy(port: number): string {
@@ -20,6 +21,8 @@ export function contentSecurityPolicy(port: number): string {
     // xterm.js writes some of its styles into <style> elements: inline styles yes, inline scripts never.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
+    // The font of the terminals, from dist/ui/fonts.
+    "font-src 'self'",
     `connect-src ws://127.0.0.1:${port}`,
     "base-uri 'none'",
     "form-action 'none'",

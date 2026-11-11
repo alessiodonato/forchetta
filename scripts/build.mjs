@@ -32,6 +32,9 @@ await build({
   target: ['safari15'],
   jsx: 'automatic',
   jsxImportSource: 'preact',
+  // The font of the terminals: styles.css points to it, esbuild copies it next to the page.
+  loader: { '.woff2': 'file' },
+  assetNames: 'fonts/[name]-[hash]',
   minify: true,
   sourcemap: 'linked',
   logLevel: 'warning',

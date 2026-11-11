@@ -411,3 +411,5 @@ FORCHETTA_VAR="$PWD/var/sim" node dist/cli.js daemon stop  # alla fine
 ## Licenza
 
 Apache 2.0: vedi [LICENSE](LICENSE).
+
+I terminali dell'app usano [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono), con licenza SIL Open Font License 1.1: vedi [src/ui/fonts/OFL.txt](src/ui/fonts/OFL.txt).
