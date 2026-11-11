@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -61,6 +61,16 @@ describe('bin/forchetta-hook', () => {
     expect(received?.headers['x-forchetta-agent']).toBe('agent-1');
     expect(received?.headers['x-forchetta-claude-pid']).toBe('777');
     expect(Number(received?.headers['x-forchetta-pid'])).toBe(process.pid);
+  });
+});
+
+describe('bin/forchetta-statusline', () => {
+  it('runs the status line you had, saved in the private folder of Forchetta', async () => {
+    const data = join(temp.dir, 'dati con spazi');
+    mkdirSync(data, { recursive: true });
+    writeFileSync(join(data, 'statusline-command'), 'read line; echo "prima: $line"');
+    const result = await run(paths.statusScript, ['1'], { ...BASE_ENV, FORCHETTA_VAR: data }, '{"x":1}\n');
+    expect(result).toMatchObject({ code: 0, stdout: 'prima: {"x":1}\n' });
   });
 });
 

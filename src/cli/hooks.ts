@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline/promises';
 import { dirname, join } from 'node:path';
 import { type Config, detectArricurdai, loadConfig, saveConfig, which } from '../shared/config.ts';
 import { UserError } from '../shared/errors.ts';
-import { claudeConfigDir, ensurePrivateDir, paths } from '../shared/paths.ts';
+import { claudeConfigDir, ensurePrivateDir, paths, stablePath } from '../shared/paths.ts';
 import {
   formatSettings,
   isOurStatusLine,
@@ -77,7 +77,8 @@ function withToolPaths(config: Config, settingsText: string | undefined): Config
   return {
     ...config,
     paths: {
-      node: config.paths.node ?? process.execPath,
+      // node of Homebrew lives in a folder per version: its opt path survives `brew upgrade node`.
+      node: stablePath(config.paths.node ?? process.execPath),
       tmux: config.paths.tmux ?? which('tmux'),
       claude: config.paths.claude ?? which('claude'),
     },

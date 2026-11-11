@@ -1,14 +1,18 @@
 import { loadConfig, resolveTool } from '../shared/config.ts';
 import { api, ensureDaemon, readDaemonInfo, runningDaemon } from '../shared/daemon-client.ts';
 import { UserError } from '../shared/errors.ts';
+import { paths } from '../shared/paths.ts';
 import { VERSION } from '../shared/version.ts';
 import { hooksCommand } from './hooks.ts';
 import { ago, listSessions } from './ls.ts';
 import { type RunIO, runClaude } from './run.ts';
+import { defaultAppDir, setupCommand } from './setup.ts';
 
 const USAGE = `forchetta ${VERSION}: centro di controllo per sessioni Claude Code parallele
 
 Uso:
+  forchetta setup                     prepara Forchetta: compila l'app in ~/Applications e installa gli hook
+                                      (--yes per non chiedere, --force per ricompilare, --app-dir <cartella>)
   forchetta run claude [argomenti]    avvia Claude Code in tmux, visibile e comandabile da Forchetta
   forchetta ls                        elenca le sessioni Claude Code e il loro stato
   forchetta daemon start|stop|status  gestisce il daemon locale (le sessioni non si fermano mai)
@@ -25,7 +29,7 @@ async function daemonCommand(action: string | undefined): Promise<number> {
   switch (action) {
     case 'start': {
       const info = await ensureDaemon(resolveTool('node', loadConfig()));
-      if (!info) throw new UserError('il daemon non è partito: guarda var/daemon.log');
+      if (!info) throw new UserError(`il daemon non è partito: guarda ${paths.log}`);
       io.stdout(`Daemon attivo (pid ${info.pid}, porta ${info.port}).\n`);
       return 0;
     }
@@ -43,7 +47,7 @@ async function daemonCommand(action: string | undefined): Promise<number> {
     case 'status': {
       const info = await runningDaemon();
       if (!info) {
-        io.stdout(readDaemonInfo() ? 'Il daemon non risponde (var/daemon.json è di un daemon fermato).\n' : 'Il daemon non è attivo.\n');
+        io.stdout(readDaemonInfo() ? `Il daemon non risponde (${paths.daemonInfo} è di un daemon fermato).\n` : 'Il daemon non è attivo.\n');
         return 1;
       }
       const health = await api<{ agents: number; startedAt: number; version: string }>(info, 'GET', '/api/health');
@@ -64,6 +68,12 @@ async function main(argv: string[]): Promise<number> {
       return listSessions(io);
     case 'daemon':
       return daemonCommand(rest[0]);
+    case 'setup': {
+      const at = rest.indexOf('--app-dir');
+      const appDir = at >= 0 ? rest[at + 1] : defaultAppDir();
+      if (!appDir) throw new UserError('uso: forchetta setup [--yes] [--force] [--app-dir <cartella>]');
+      return setupCommand({ yes: rest.includes('--yes'), force: rest.includes('--force'), appDir }, io);
+    }
     case 'hooks': {
       const action = rest[0];
       if (action !== 'install' && action !== 'uninstall') throw new UserError('uso: forchetta hooks install|uninstall [--yes]');

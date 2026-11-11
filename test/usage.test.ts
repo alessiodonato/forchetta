@@ -109,10 +109,11 @@ describe('bin/forchetta-statusline', () => {
   const temp = tempDir('statusline');
   afterAll(() => temp.cleanup());
 
-  /** A copy of the script in a folder of its own, with its own var/statusline-command. */
+  /** A copy of the script in a checkout of its own (.git), with its own var/statusline-command. */
   function install(command: string | undefined): string {
     const root = join(temp.dir, `root-${Math.random().toString(36).slice(2)}`);
     mkdirSync(join(root, 'bin'), { recursive: true });
+    mkdirSync(join(root, '.git'), { recursive: true });
     mkdirSync(join(root, 'var'), { recursive: true });
     const script = join(root, 'bin', 'forchetta-statusline');
     writeFileSync(script, readFileSync(join(ROOT, 'bin', 'forchetta-statusline')), { mode: 0o755 });

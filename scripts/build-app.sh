@@ -1,16 +1,23 @@
 #!/bin/sh
-# Builds build/Forchetta.app from native/ with the Command Line Tools: no Xcode needed.
+# Builds Forchetta.app from native/ with the Command Line Tools: no Xcode needed. By default in build/; with an
+# argument, at that path (forchetta setup builds it there, then moves it to ~/Applications). The app runs the Forchetta
+# folder written in its Info.plist: FORCHETTA_ROOT when given (the stable path of an installed copy), else this one.
 set -eu
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-APP="$ROOT/build/Forchetta.app"
-VERSION=$(node -p "require('$ROOT/package.json').version")
+SRC=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=${FORCHETTA_ROOT:-$SRC}
+APP=${1:-$SRC/build/Forchetta.app}
+case $APP in
+  *.app) ;;
+  *) echo "build-app.sh: the app must end in .app: $APP" >&2; exit 2 ;;
+esac
+VERSION=$(node -p "require('$SRC/package.json').version")
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -target "$(uname -m)-apple-macos12.0" -framework AppKit -framework WebKit -framework UserNotifications -framework Carbon \
-  "$ROOT"/native/*.swift -o "$APP/Contents/MacOS/Forchetta"
-sed -e "s|@ROOT@|$ROOT|g" -e "s|@VERSION@|$VERSION|g" "$ROOT/native/Info.plist" > "$APP/Contents/Info.plist"
+  "$SRC"/native/*.swift -o "$APP/Contents/MacOS/Forchetta"
+sed -e "s|@ROOT@|$ROOT|g" -e "s|@VERSION@|$VERSION|g" "$SRC/native/Info.plist" > "$APP/Contents/Info.plist"
 # The icon: drawn by scripts/make-icon.swift (swift scripts/make-icon.swift <folder.iconset>, then iconutil).
-cp "$ROOT/native/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+cp "$SRC/native/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 # With the local certificate (scripts/make-signing-cert.sh) macOS keeps the permissions of the app across builds;
 # without it, an ad-hoc signature, as before.
 IDENTITY="Forchetta (firma locale)"

@@ -740,8 +740,13 @@ while let argument = arguments.next() {
 let info = Bundle.main.infoDictionary
 let root = (info?["ForchettaRoot"] as? String).map { URL(fileURLWithPath: $0) }
     ?? Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
-let varDir = ProcessInfo.processInfo.environment["FORCHETTA_VAR"].map { URL(fileURLWithPath: $0) }
-    ?? root.appendingPathComponent("var")
+/// The private folder of Forchetta, by the rule of src/shared/paths.ts: FORCHETTA_VAR; var/ in a git checkout;
+/// otherwise ~/Library/Application Support/Forchetta, for an installed copy.
+let varDir: URL = {
+    if let value = ProcessInfo.processInfo.environment["FORCHETTA_VAR"], !value.isEmpty { return URL(fileURLWithPath: value) }
+    if FileManager.default.fileExists(atPath: root.appendingPathComponent(".git").path) { return root.appendingPathComponent("var") }
+    return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Forchetta")
+}()
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)

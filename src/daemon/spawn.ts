@@ -96,7 +96,7 @@ export function startCommand(shell: string, startScript: string, claude: string,
 
 export async function spawnSession(options: SpawnOptions, input: { cwd: unknown; prompt?: unknown } & SpawnChoices): Promise<SpawnResult> {
   const { tmux, registry, claude, log } = options;
-  if (!claude) return { ok: false, error: 'claude not found: set its path in var/config.json (paths.claude)' };
+  if (!claude) return { ok: false, error: `claude not found: set its path in ${paths.config} (paths.claude)` };
   const cwd = typeof input.cwd === 'string' ? folderOf(input.cwd) : undefined;
   if (!cwd) return { ok: false, error: 'write a folder with its full path (~/… works too)' };
   try {

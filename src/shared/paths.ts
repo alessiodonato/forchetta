@@ -3,8 +3,9 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Where Forchetta keeps its files. Everything it writes at run time stays in `var/` inside its own
-// folder: the daemon token, the tmux socket, the snapshot of the sessions, the log, the backups.
+// Where Forchetta keeps its files. Everything it writes at run time stays in one private folder: the daemon token,
+// the tmux socket, the snapshot of the sessions, the log, the backups. In a git checkout it is `var/` inside the
+// folder, as it always was; installed (by Homebrew, say), it is ~/Library/Application Support/Forchetta.
 
 /** The Forchetta folder: the nearest folder above this file that holds the package.json of forchetta. */
 function findRoot(): string {
@@ -24,7 +25,31 @@ function findRoot(): string {
   }
 }
 
-export const ROOT = process.env.FORCHETTA_ROOT ?? findRoot();
+/**
+ * A path that stays the same across upgrades. Homebrew keeps each version in a folder of its own,
+ * `<prefix>/Cellar/forchetta/0.7.0/libexec`, and points `<prefix>/opt/forchetta` at the current one; node gives
+ * the first, since it follows links. What Forchetta writes down for later (the hooks in the settings of Claude Code,
+ * the folder the app runs, the path of node) uses the second, so that `brew upgrade` does not break it.
+ */
+export function stablePath(path: string, exists: (path: string) => boolean = existsSync): string {
+  const match = /^(.*)\/Cellar\/([^/]+)\/[^/]+(\/.*)?$/.exec(path);
+  if (!match) return path;
+  const candidate = `${match[1]}/opt/${match[2]}${match[3] ?? ''}`;
+  return exists(candidate) ? candidate : path;
+}
+
+export const ROOT = process.env.FORCHETTA_ROOT ?? stablePath(findRoot());
+
+/**
+ * The private folder of Forchetta: FORCHETTA_VAR when set; `var/` inside the folder when it is a git checkout;
+ * otherwise ~/Library/Application Support/Forchetta. The app (native/main.swift) and bin/forchetta-statusline
+ * follow the same rule.
+ */
+export function defaultVarDir(root = ROOT, env: NodeJS.ProcessEnv = process.env, exists: (path: string) => boolean = existsSync, home = homedir()): string {
+  if (env.FORCHETTA_VAR) return env.FORCHETTA_VAR;
+  if (exists(join(root, '.git'))) return join(root, 'var');
+  return join(home, 'Library', 'Application Support', 'Forchetta');
+}
 
 export interface Paths {
   varDir: string;
@@ -75,7 +100,7 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
   };
 }
 
-export const paths = pathsFor(process.env.FORCHETTA_VAR ?? join(ROOT, 'var'));
+export const paths = pathsFor(defaultVarDir());
 
 /** The folder of Claude Code: ~/.claude, or CLAUDE_CONFIG_DIR. */
 export const claudeConfigDir = (env: NodeJS.ProcessEnv = process.env): string => env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
