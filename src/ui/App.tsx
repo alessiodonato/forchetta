@@ -6,6 +6,9 @@ import { Box } from './Box.tsx';
 import { BroadcastButton, BroadcastPanel } from './Broadcast.tsx';
 import { FilesPanel } from './Files.tsx';
 import { NewSessionPanel } from './NewSession.tsx';
+import { NewTeamPanel } from './NewTeam.tsx';
+import { TeamPanel } from './TeamRequests.tsx';
+import { crewLineOf } from '../shared/crew.ts';
 import { RecallPanel } from './Recall.tsx';
 import { hasGroups, OrgChart } from './Team.tsx';
 import { animateMove, onReducedMotionChange } from './motion.ts';
@@ -116,7 +119,7 @@ export function App({ store }: { store: Store }) {
   const open = useCallback((id: string) => store.open(id), [store]);
   const entered = useCallback((id: string) => store.entering.delete(id), [store]);
   const working = state.panes.open.length > 0;
-  const [panel, setPanel] = useState<'broadcast' | 'new' | 'recall' | undefined>(undefined);
+  const [panel, setPanel] = useState<'broadcast' | 'new' | 'team' | 'crew' | 'recall' | undefined>(undefined);
   const [view, setView] = useState<'grid' | 'org'>(savedView);
   const chooseView = (next: 'grid' | 'org'): void => {
     setView(next);
@@ -128,8 +131,9 @@ export function App({ store }: { store: Store }) {
   };
   const grouped = hasGroups(agents);
   const showOrg = view === 'org' && grouped;
-  const toggle = (which: 'broadcast' | 'new' | 'recall'): void => {
+  const toggle = (which: 'broadcast' | 'new' | 'team' | 'crew' | 'recall'): void => {
     store.endSpawn();
+    store.endCrewSpawn();
     setPanel(panel === which ? undefined : which);
   };
   // "Nuova sessione…" from the menu of the icon.
@@ -139,6 +143,15 @@ export function App({ store }: { store: Store }) {
     store.endSpawn();
     setPanel('new');
   }, [requestedAt]);
+  // A team started with every session: the panel closes, their terminals open. With something that did not
+  // start, it stays open to say what.
+  const crewCreated = state.crewSpawn?.createdId;
+  const crewError = state.crewSpawn?.error;
+  useEffect(() => {
+    if (!crewCreated || crewError) return;
+    setPanel(undefined);
+    store.endCrewSpawn();
+  }, [crewCreated, crewError]);
   // A session started from the panel: the panel closes, its terminal opens.
   const startedId = state.spawn?.startedId;
   useEffect(() => {
@@ -169,6 +182,16 @@ export function App({ store }: { store: Store }) {
               search
             </button>
           )}
+          {state.ready && state.crews.length > 0 && (
+            <button type="button" class={`broadcast-toggle${panel === 'crew' ? ' active' : ''}`} title="Write a request to the members of a team, and see where the last ones stand" onClick={() => toggle('crew')}>
+              team
+            </button>
+          )}
+          {state.ready && (
+            <button type="button" class={`broadcast-toggle${panel === 'team' ? ' active' : ''}`} title="Start a team of Claude Code sessions that work together: a lead and its members" onClick={() => toggle('team')}>
+              new team
+            </button>
+          )}
           {state.ready && (
             <button type="button" class={`broadcast-toggle primary${panel === 'new' ? ' active' : ''}`} title="Start a Claude Code session in a folder" onClick={() => toggle('new')}>
               new session
@@ -178,6 +201,8 @@ export function App({ store }: { store: Store }) {
       </header>
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && panel === 'new' && <NewSessionPanel agents={agents} store={store} onClose={() => toggle('new')} />}
+      {state.ready && panel === 'team' && <NewTeamPanel agents={agents} store={store} onClose={() => toggle('team')} />}
+      {state.ready && panel === 'crew' && <TeamPanel crews={state.crews} store={store} onClose={() => toggle('crew')} />}
       {state.ready && panel === 'recall' && <RecallPanel agents={agents} store={store} onClose={() => toggle('recall')} />}
       {state.ready && !state.connected && <p class="notice">Daemon unreachable: trying again…</p>}
       {!state.ready ? (
@@ -194,12 +219,15 @@ export function App({ store }: { store: Store }) {
       ) : showOrg ? (
         <OrgChart
           agents={agents}
-          render={(agent) => <Box key={agent.id} agent={agent} now={now} entering={store.entering.has(agent.id)} onEntered={entered} onOpen={open} store={store} />}
+          crews={state.crews}
+          render={(agent) => (
+            <Box key={agent.id} agent={agent} now={now} entering={store.entering.has(agent.id)} onEntered={entered} onOpen={open} store={store} crewLine={crewLineOf(agent.id, state.crews)} />
+          )}
         />
       ) : (
         <main class="grid" ref={grid}>
           {agents.map((agent) => (
-            <Box key={agent.id} agent={agent} now={now} entering={store.entering.has(agent.id)} onEntered={entered} onOpen={open} store={store} />
+            <Box key={agent.id} agent={agent} now={now} entering={store.entering.has(agent.id)} onEntered={entered} onOpen={open} store={store} crewLine={crewLineOf(agent.id, state.crews)} />
           ))}
         </main>
       )}

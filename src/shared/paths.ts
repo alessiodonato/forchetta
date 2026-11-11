@@ -57,6 +57,14 @@ export interface Paths {
   config: string;
   state: string;
   teams: string;
+  /** The teams of agents, one file each (daemon/crews.ts). */
+  crews: string;
+  /** The MCP configuration of each session of a team that has its tools, one file per agent. */
+  crewMcp: string;
+  /** The templates of teams you saved. */
+  crewTemplates: string;
+  /** The MCP server of the tools of a team (mcp/team.ts). */
+  teamMcpJs: string;
   patches: string;
   log: string;
   tmuxSocket: string;
@@ -82,6 +90,9 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     config: join(varDir, 'config.json'),
     state: join(varDir, 'state.json'),
     teams: join(varDir, 'teams.json'),
+    crews: join(varDir, 'crews'),
+    crewMcp: join(varDir, 'crews', 'mcp'),
+    crewTemplates: join(varDir, 'crew-templates.json'),
     patches: join(varDir, 'patches'),
     log: join(varDir, 'daemon.log'),
     tmuxSocket: join(varDir, 'tmux.sock'),
@@ -96,6 +107,7 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     startScript: join(root, 'bin', 'forchetta-start'),
     statusCommand: join(varDir, 'statusline-command'),
     execScript: join(root, 'bin', 'forchetta-exec'),
+    teamMcpJs: join(root, 'dist', 'team-mcp.js'),
     daemonJs: join(root, 'dist', 'daemon.js'),
   };
 }

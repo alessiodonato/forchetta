@@ -4,12 +4,16 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { Conflicts } from '../src/daemon/conflicts.ts';
 import { changesOf, countLines } from '../src/daemon/diffs.ts';
-import { tempDir } from './helpers.ts';
+import { outsideGitDir, tempDir } from './helpers.ts';
 
 // The panel of the changes of a session: git diff from the last commit of the files it wrote.
 
 const temp = tempDir('diffs');
-afterAll(() => temp.cleanup());
+const plain = outsideGitDir('diffs');
+afterAll(() => {
+  temp.cleanup();
+  plain.cleanup();
+});
 
 const git = (repo: string, ...args: string[]) =>
   execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, stdio: 'pipe' });
@@ -30,7 +34,7 @@ describe('changes of a session', () => {
     const dir = repo();
     writeFileSync(join(dir, 'src', 'a.ts'), 'uno\nDUE\ntre\nquattro\n');
     writeFileSync(join(dir, 'src', 'nuovo.ts'), 'ciao\n');
-    const outside = join(temp.dir, 'fuori.txt');
+    const outside = join(plain.dir, 'fuori.txt');
     writeFileSync(outside, 'x');
     const conflicts = new Conflicts();
     for (const file of ['src/fermo.ts', 'src/a.ts', 'src/nuovo.ts', 'src/sparito.ts']) conflicts.wrote('s', join(dir, file));

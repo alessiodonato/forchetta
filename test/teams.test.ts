@@ -27,7 +27,7 @@ describe('team fields', () => {
     const a = { ...agent('a1'), team: { label: 'Rita', role: 'revisione', lead: true, group: 'g' } };
     expect(displayName(a)).toBe('Rita');
     expect(displayName(agent('a2'))).toBe('a2');
-    expect(roleText(a)).toBe('revisione · lead');
+    expect(roleText(a)).toBe('lead · revisione');
     expect(roleText({ ...a, team: { group: 'g', lead: true } })).toBe('lead');
   });
 });

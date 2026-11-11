@@ -1,6 +1,8 @@
+import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { contextWindowOf, detectArricurdai, loadConfig, resolveTool } from '../shared/config.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
 import { listPanes, Tmux } from '../shared/tmux.ts';
@@ -13,8 +15,10 @@ import { Conflicts, writtenFile } from './conflicts.ts';
 import { changesOf } from './diffs.ts';
 import { editOf, Patches } from './patches.ts';
 import { runRecall } from './recall.ts';
-import { spawnSession } from './spawn.ts';
+import { folderOf, inGitRepo, spawnSession } from './spawn.ts';
 import { Teams } from './teams.ts';
+import { crewApi, CrewTemplates, Crews } from './crews.ts';
+import { cleanCrewSpec, templateOf } from '../shared/crew.ts';
 import { Hub } from './hub.ts';
 import { Permissions } from './permissions.ts';
 import { isInteractiveCommand, readCommandLine } from './process.ts';
@@ -93,6 +97,40 @@ function main(): void {
   const attention = new Attention({ notify: (notice) => hub?.notify(notice), stallMs: config.stallMin * 60_000 });
   const conflicts = new Conflicts();
   const teams = new Teams(paths.teams, log);
+  const crews = new Crews(paths.crews, log);
+  const templates = new CrewTemplates(paths.crewTemplates, log);
+  crews.agent = (agentId) => registry.agents.get(agentId);
+  crews.inGit = inGitRepo;
+  // The trust of Claude Code, read (never written) from its global configuration. Claude Code trusts a git
+  // repository at its root (a folder inside a trusted repository asks nothing; a repository of its own inside a
+  // trusted folder asks again, and refuses a worktree until then); outside git, a folder or one above it.
+  crews.trusted = (dir) => {
+    try {
+      const file = process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : join(homedir(), '.claude.json');
+      const projects = (JSON.parse(readFileSync(file, 'utf8')) as { projects?: Record<string, { hasTrustDialogAccepted?: boolean }> }).projects ?? {};
+      const root = crews.gitInfo(dir).root;
+      if (root) return projects[root]?.hasTrustDialogAccepted === true;
+      for (let current = dir; ; current = dirname(current)) {
+        if (projects[current]?.hasTrustDialogAccepted === true) return true;
+        if (dirname(current) === current) return false;
+      }
+    } catch {
+      // Not readable: try, and let the start of the session say how it went.
+      return true;
+    }
+  };
+  // The root of the repository of a folder and its branch, for the tool team: two small calls to git.
+  crews.gitInfo = (dir) => {
+    const git = (args: string[]): string | undefined => {
+      // By its full path: the daemon started by the app has the short PATH of the Finder.
+      const result = spawnSync('/usr/bin/git', ['-C', dir, ...args], { encoding: 'utf8', timeout: 2000 });
+      return result.status === 0 ? result.stdout.trim() || undefined : undefined;
+    };
+    return { root: git(['rev-parse', '--show-toplevel']), branch: git(['branch', '--show-current']) };
+  };
+  // The tools of a team: Claude Code starts this server for each session that gets them (see mcp/team.ts).
+  const teamMcp = { command: resolveTool('node', config), args: [paths.teamMcpJs] };
+  crews.spawn = (choices, extras) => spawnSession({ tmux, registry, claude, log, teamMcp }, choices, extras);
   const patches = new Patches(paths.patches);
   // Conflicts are worked out again after a write, when a session ends, and every minute (old writes drop out).
   let conflictsTimer: NodeJS.Timeout | undefined;
@@ -160,6 +198,47 @@ function main(): void {
     },
     onFiles: (agentId) => changesOf(conflicts.filesOf(agentId), patches.byFile(agentId)),
     onSpawn: (input) => spawnSession({ tmux, registry, claude, log }, input),
+    crews: () => crews.summaries(),
+    onCrewRequest: (crewId, to, text) => crews.request(crewId, to, text),
+    crewThread: (crewId) => crews.thread(crewId),
+    templates: () => templates.list(),
+    onTemplate: (message) => {
+      if (message.type === 'deleteCrewTemplate') return templates.delete(message.name);
+      // From an existing team: the daemon has its roles and models, the page does not.
+      const crew = message.crewId ? crews.get(message.crewId) : undefined;
+      if (message.crewId && !crew) return { ok: false, error: 'unknown team' };
+      return templates.save(crew ? templateOf(crew) : message.template);
+    },
+    onEditCrew: async (message) => {
+      // The box and the chart follow a change of the place of a session in its team.
+      const place = (agentId: string, team: Agent['team']): void => {
+        const agent = registry.agents.get(agentId);
+        if (!agent) return;
+        agent.team = team;
+        registry.touch(agent);
+      };
+      if (message.action === 'talk' && message.name && (message.talk === 'oneway' || message.talk === 'twoway')) {
+        const result = crews.setTalk(message.crewId, message.name, message.talk);
+        if (result.ok) for (const change of result.changes) place(change.agentId, { ...registry.agents.get(change.agentId)?.team, talk: change.talk });
+        return result;
+      }
+      if (message.action === 'remove' && message.name) {
+        const result = crews.removeMember(message.crewId, message.name, (agentId, commandId) => commander?.cancel(agentId, commandId));
+        if (result.ok && result.agentId) place(result.agentId, undefined);
+        return result;
+      }
+      if (message.action === 'add') {
+        return crews.addMember(message.crewId, message.member);
+      }
+      return { ok: false, error: 'unknown change' };
+    },
+    onCreateCrew: async (input) => {
+      const checked = cleanCrewSpec(input);
+      if ('error' in checked) return { ok: false, error: checked.error };
+      // The folder as the team keeps it: ~ and the rest resolved, like a session started from the panel.
+      checked.spec.cwd = folderOf(checked.spec.cwd) ?? checked.spec.cwd;
+      return crews.create(checked.spec);
+    },
     onRecall: (project, query) => runRecall(arricurdai, project, query),
     onTeam: (agentId, team) => {
       const agent = registry.agents.get(agentId);
@@ -239,8 +318,11 @@ function main(): void {
     }
   }
 
+  crews.onChange = () => hub?.crewsChanged();
   const terminals = new Terminals({ token, port: () => config.port, registry, tmux, log });
-  commander = new Commander({ registry, tmux, log, notes });
+  commander = new Commander({ registry, tmux, log, notes, onRequest: (_agent, command) => crews.commandChanged(command) });
+  const queue = commander;
+  crews.enqueue = (agentId, text, link) => queue.enqueueRequest(agentId, text, link);
 
   // Whether a claude process shows its dialogs in a terminal: read once per pid (see process.ts).
   const interactiveByPid = new Map<number, boolean>();
@@ -275,9 +357,11 @@ function main(): void {
     port: () => config.port,
     recordFile: process.env.FORCHETTA_RECORD === '1' ? paths.payloads : undefined,
     log,
+    crew: (route, input) => crewApi(crews, route, input),
     onHook: (agent, payload) => {
       quietInterval = QUIET_RECONCILE_MIN_MS;
       commander?.hook(agent, payload);
+      crews.hook(agent, payload);
       permissions?.hook(agent, payload);
       const edit = editOf(payload, agent.cwd, Date.now());
       if (edit) {

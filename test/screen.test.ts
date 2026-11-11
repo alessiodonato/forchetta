@@ -7,6 +7,10 @@ import { readPromptBox, screenShows } from '../src/daemon/screen.ts';
 const screen = (name: string): string => readFileSync(join(import.meta.dirname, 'fixtures', 'screens', `${name}.txt`), 'utf8');
 
 describe('the input box of Claude Code', () => {
+  it('is found in a session with a name, whose name sits in the rule above, with a pasted request on three lines', () => {
+    expect(readPromptBox(screen('nome-incollato'))).toEqual({ found: true, typed: 'Request #1 from the user: Reply only with the word OK. Nothing else.' });
+  });
+
   it('is found and empty after a turn', () => {
     expect(readPromptBox(screen('vuota'))).toEqual({ found: true, typed: '' });
     expect(readPromptBox(screen('dopo-btw'))).toEqual({ found: true, typed: '' });

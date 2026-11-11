@@ -1,6 +1,7 @@
 #!/bin/sh
 # Starts the test daemon of the simulation: port 47822, state in var/sim, a fake arricurdAI, no real session
-# (claude is /usr/bin/false, so `claude agents --json` finds nothing). The real daemon is not touched.
+# (claude is scripts/dev/fake-claude.sh: `claude agents --json` finds nothing, and a session or a team started
+# from the app shows the lines of demo-tui.sh). The real daemon is not touched.
 set -eu
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 export FORCHETTA_VAR="$ROOT/var/sim"
@@ -11,7 +12,7 @@ TMUX_BIN=$(command -v tmux || echo /usr/local/bin/tmux)
 cat > "$FORCHETTA_VAR/config.json" <<JSON
 {
   "port": 47822,
-  "paths": { "node": "$NODE", "tmux": "$TMUX_BIN", "claude": "/usr/bin/false" },
+  "paths": { "node": "$NODE", "tmux": "$TMUX_BIN", "claude": "$ROOT/scripts/dev/fake-claude.sh" },
   "arricurdai": ["$NODE", "$ROOT/scripts/dev/fake-arricurdai.mjs"]
 }
 JSON

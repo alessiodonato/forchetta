@@ -172,6 +172,10 @@ export interface TeamInfo {
   role?: string;
   /** The head of its group: it sits above the others in the chart. */
   lead?: boolean;
+  /** The team of agents it was started for (shared/crew.ts): set by the daemon, never by the box. */
+  crew?: string;
+  /** In a team of agents, how a member talks with its lead: → executes, ⇄ also answers. */
+  talk?: 'oneway' | 'twoway';
 }
 
 export const TEAM_TEXT_MAX = 40;
@@ -193,7 +197,8 @@ export function cleanTeam(input: unknown): TeamInfo | undefined {
 /** How a box calls its session: the name you gave it, or the folder. */
 export const displayName = (agent: Pick<Agent, 'project' | 'team'>): string => agent.team?.label ?? agent.project;
 
-export type CommandKind = 'btw' | 'compact' | 'clear';
+/** The commands of the box, and the requests of a team of agents (pasted as a prompt). */
+export type CommandKind = 'btw' | 'compact' | 'clear' | 'request';
 
 export type CommandStatus =
   /** Waits for the session to be ready for input. */
@@ -211,8 +216,10 @@ export type CommandStatus =
 export interface QueuedCommand {
   id: string;
   kind: CommandKind;
-  /** The question of /btw. */
+  /** The question of /btw; the whole text of a request. */
   arg?: string;
+  /** A request of a team of agents: its team and its number. */
+  request?: { crew: string; n: number };
   status: CommandStatus;
   reason?: string;
   createdAt: number;

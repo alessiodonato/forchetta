@@ -40,8 +40,16 @@ export class Teams {
   /** From the box: the new team of a session, or none; remembered for its folder. */
   set(agent: Agent, input: unknown): void {
     const team = cleanTeam(input);
-    agent.team = team;
     this.checked.add(agent.id);
+    const crew = agent.team?.crew;
+    if (crew) {
+      // A member of a team of agents: name and role can change, its team and how it talks stay. Nothing is
+      // remembered for the folder, where the other members live too. "Remove" takes it out of the team.
+      const talk = agent.team?.talk;
+      agent.team = team ? { ...team, crew, ...(talk ? { talk } : {}) } : undefined;
+      return;
+    }
+    agent.team = team;
     if (!agent.cwd) return;
     if (team) this.byFolder[agent.cwd] = team;
     else delete this.byFolder[agent.cwd];

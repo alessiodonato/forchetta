@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { request } from 'node:http';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ROOT } from '../src/shared/paths.ts';
 
@@ -8,6 +9,15 @@ import { ROOT } from '../src/shared/paths.ts';
 export function tempDir(name: string): { dir: string; cleanup: () => void } {
   const dir = join(ROOT, 'var', 'test', `${name}-${process.pid}-${randomUUID().slice(0, 8)}`);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+/**
+ * A temporary folder in no git repository: the one exception to tempDir, since the project folder is a git
+ * checkout and every folder inside it counts as in git. It goes in the temporary folder of the system.
+ */
+export function outsideGitDir(name: string): { dir: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), `forchetta-${name}-`));
   return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 

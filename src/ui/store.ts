@@ -1,5 +1,6 @@
 import type { Agent, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
+import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Talk } from '../shared/crew.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
 
 // What the page knows: the agents sent by the daemon, the open panes, whether the connection is up, whether the
@@ -24,13 +25,28 @@ export interface UiState {
   panelRequest?: { which: 'new'; at: number };
   /** A new session being started from the panel, or the reason it did not start. */
   spawn?: { busy: boolean; error?: string; startedId?: string };
+  /** The teams of agents. */
+  crews: readonly CrewSummary[];
+  /** A team being started from its panel; when it started, its id; what did not start, if anything. */
+  crewSpawn?: { busy: boolean; error?: string; createdId?: string };
+  /** The templates of teams: the ones of Forchetta, then yours. */
+  templates: readonly CrewTemplate[];
+  /** The last change of a team or of the templates asked from a panel, and how it went. */
+  crewEdit?: { action: string; busy: boolean; ok?: boolean; error?: string; at: number };
+  /** The whole thread of the team the panel shows: asked again each time the teams change. */
+  crewThread?: { crewId: string; requests?: CrewRequest[] };
+  /** The last request sent from the panel of a team: its number once it is in the queues, or why not. */
+  crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
 }
+
+/** At most 4 panes: the lead and the first members of a new team open, the lead last, in the large pane. */
+export const panesToOpen = (agentIds: readonly string[]): string[] => agentIds.slice(0, 4).reverse();
 
 /** A session whose terminal can be shown: run in the tmux of Forchetta, and not ended. */
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
 export class Store {
-  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false } };
+  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [] };
   /** Sends a message to the daemon (set by the connection). */
   send: (message: ClientMessage) => void = () => {};
   /** A notification asked by the daemon (see attention.ts). */
@@ -71,6 +87,35 @@ export class Store {
       } else this.set({ spawn: { busy: false, error: message.error ?? 'the session did not start' } });
       return;
     }
+    if (message.type === 'crews') {
+      this.set({ crews: message.crews });
+      // The thread on screen follows: a step of its team moved.
+      if (this.state.crewThread) this.send({ type: 'crewThread', crewId: this.state.crewThread.crewId });
+      return;
+    }
+    if (message.type === 'crewTemplates') {
+      this.set({ templates: message.templates });
+      return;
+    }
+    if (message.type === 'crewEdited') {
+      this.set({ crewEdit: { action: message.action, busy: false, ok: message.ok, ...(message.error ? { error: message.error } : {}), at: Date.now() } });
+      return;
+    }
+    if (message.type === 'crewThread') {
+      if (this.state.crewThread?.crewId === message.crewId) this.set({ crewThread: { crewId: message.crewId, requests: message.requests } });
+      return;
+    }
+    if (message.type === 'crewRequested') {
+      this.set({ crewRequest: { crewId: message.crewId, busy: false, ...(message.ok ? { n: message.n } : { error: message.error ?? 'the request did not go' }) } });
+      return;
+    }
+    if (message.type === 'crewCreated') {
+      if (message.ok && message.crewId) {
+        this.set({ crewSpawn: { busy: false, createdId: message.crewId, ...(message.error ? { error: message.error } : {}) } });
+        this.openWhenThere(...panesToOpen(message.agentIds ?? []));
+      } else this.set({ crewSpawn: { busy: false, error: message.error ?? 'the team did not start' } });
+      return;
+    }
     if (message.type === 'files') {
       if (this.state.files?.agentId === message.agentId) this.set({ files: { agentId: message.agentId, list: message.files } });
       return;
@@ -83,6 +128,8 @@ export class Store {
         for (const agent of message.agents) agents.set(agent.id, agent);
         extra.settings = message.settings;
         extra.today = message.today;
+        extra.crews = message.crews ?? [];
+        extra.templates = message.templates ?? [];
         break;
       case 'agents':
         for (const agent of message.agents) {
@@ -97,7 +144,11 @@ export class Store {
     // A pane whose agent went away closes; one whose session ended stays, showing its last screen.
     extra.panes = prunePanes(this.state.panes, (id) => agents.has(id));
     this.set({ ...extra, agents, ready: true });
-    if (this.pendingOpen && agents.has(this.pendingOpen)) this.openWhenThere(this.pendingOpen);
+    if (this.pendingOpen.some((id) => agents.has(id))) {
+      const waiting = this.pendingOpen;
+      this.pendingOpen = [];
+      this.openWhenThere(...waiting);
+    }
   }
 
   setConnected(connected: boolean): void {
@@ -138,16 +189,14 @@ export class Store {
     this.send({ type: 'cancel', agentId, commandId });
   }
 
-  private pendingOpen: string | undefined;
+  private pendingOpen: string[] = [];
 
-  /** Opens the pane of a session as soon as the daemon has told about it. */
-  private openWhenThere(agentId: string): void {
-    if (!this.state.agents.has(agentId)) {
-      this.pendingOpen = agentId;
-      return;
+  /** Opens the panes of sessions as soon as the daemon has told about them, in this order. */
+  private openWhenThere(...agentIds: string[]): void {
+    for (const id of agentIds) {
+      if (this.state.agents.has(id)) this.open(id);
+      else if (!this.pendingOpen.includes(id)) this.pendingOpen.push(id);
     }
-    this.pendingOpen = undefined;
-    this.open(agentId);
   }
 
   requestPanel(which: 'new'): void {
@@ -171,6 +220,48 @@ export class Store {
 
   endSpawn(): void {
     if (this.state.spawn) this.set({ spawn: undefined });
+  }
+
+  /** A new team of agents: the daemon checks it, starts its sessions and keeps it. */
+  createCrew(spec: CrewSpec): void {
+    this.set({ crewSpawn: { busy: true } });
+    this.send({ type: 'createCrew', spec });
+  }
+
+  endCrewSpawn(): void {
+    if (this.state.crewSpawn) this.set({ crewSpawn: undefined });
+  }
+
+  /** A change of a team: a member added, taken away, or its → / ⇄. */
+  editCrew(crewId: string, change: { action: 'add'; member: CrewMemberSpec } | { action: 'remove'; name: string } | { action: 'talk'; name: string; talk: Talk }): void {
+    this.set({ crewEdit: { action: change.action, busy: true, at: Date.now() } });
+    this.send({ type: 'editCrew', crewId, ...change });
+  }
+
+  /** Saves a template: what the panel of a new team holds, or an existing team. */
+  saveTemplate(source: { template: Omit<CrewTemplate, 'builtin'> } | { crewId: string }): void {
+    this.set({ crewEdit: { action: 'saveCrewTemplate', busy: true, at: Date.now() } });
+    this.send({ type: 'saveCrewTemplate', ...source });
+  }
+
+  deleteTemplate(name: string): void {
+    this.send({ type: 'deleteCrewTemplate', name });
+  }
+
+  /** Shows the thread of a team: the daemon sends it whole, then again at every change of the team. */
+  showThread(crewId: string): void {
+    if (this.state.crewThread?.crewId !== crewId) this.set({ crewThread: { crewId } });
+    this.send({ type: 'crewThread', crewId });
+  }
+
+  closeThread(): void {
+    if (this.state.crewThread) this.set({ crewThread: undefined });
+  }
+
+  /** A request from you to some recipients of a team; none means all its members. */
+  sendCrewRequest(crewId: string, to: string[], text: string): void {
+    this.set({ crewRequest: { crewId, busy: true } });
+    this.send({ type: 'crewRequest', crewId, to, text });
   }
 
   /** Name, group and role of a session; undefined takes them away. */

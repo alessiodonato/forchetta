@@ -153,9 +153,11 @@ interface BoxProps {
   /** A click opens the terminal of the session; only sessions in the tmux of Forchetta have one. */
   onOpen: (id: string) => void;
   store: Store;
+  /** In a team of agents: the request it works on, or the ones the lead waits on (shared/crew.ts, crewLineOf). */
+  crewLine?: string;
 }
 
-function BoxView({ agent, now, entering, onEntered, onOpen, store }: BoxProps) {
+function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: BoxProps) {
   const [commanding, setCommanding] = useState(false);
   const [editingTeam, setEditingTeam] = useState(false);
   const ref = useRef<HTMLElement>(null);
@@ -221,7 +223,11 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store }: BoxProps) {
           ✎
         </button>
         <span class="grow" />
-        {roleText(agent) && <span class="role">{roleText(agent)}</span>}
+        {roleText(agent) && (
+          <span class="role" title={roleText(agent)}>
+            {roleText(agent)}
+          </span>
+        )}
         <span class="state">{STATE_LABEL[agent.state]}</span>
       </header>
       {editingTeam && <TeamEditor agent={agent} agents={[...store.state.agents.values()]} store={store} onClose={() => setEditingTeam(false)} />}
@@ -253,6 +259,11 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store }: BoxProps) {
             {agent.conflicts.length > 1 ? ` · +${agent.conflicts.length - 1}` : ''}
           </span>
         </div>
+      )}
+      {crewLine && (
+        <p class="crew-line" title={crewLine}>
+          {crewLine}
+        </p>
       )}
       <CommandStatus agent={agent} store={store} now={now} />
       <ContextBar agent={agent} />
@@ -286,6 +297,7 @@ export const Box = memo(
   BoxView,
   (before, after) =>
     before.agent === after.agent &&
+    before.crewLine === after.crewLine &&
     before.entering === after.entering &&
     before.onOpen === after.onOpen &&
     clockKey(before.agent, before.now) === clockKey(after.agent, after.now),

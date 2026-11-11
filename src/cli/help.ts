@@ -3,7 +3,7 @@ import type { Style } from './style.ts';
 
 // The help of `forchetta` and of each command, and the command you probably meant when you mistype one.
 
-export const HOMEPAGE = 'https://alessiodonato.github.io/forchetta/';
+export const HOMEPAGE = 'https://alessiodonato.github.io/forchetta/manual.html';
 
 interface Entry {
   /** What you type, painted in Claude orange: "setup", "--app-dir". */

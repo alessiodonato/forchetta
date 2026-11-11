@@ -3,6 +3,8 @@ import { existsSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { envFileText, paneEnv } from '../cli/pane-env.ts';
+import type { TeamInfo } from '../shared/agent.ts';
+import { MODELS, MODES, TEAM_MCP } from '../shared/crew.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import { type Tmux, tmuxSessionName } from '../shared/tmux.ts';
 import type { Registry } from './registry.ts';
@@ -19,10 +21,7 @@ import { markEnded } from './state.ts';
 
 export const MAX_PROMPT = 20_000;
 
-/** The models the panel offers: aliases of Claude Code, valid for that session only (unlike /model). */
-export const MODELS = ['opus', 'sonnet', 'haiku', 'fable'] as const;
-/** The permission modes the panel offers. bypassPermissions and dontAsk stay in the terminal. */
-export const MODES = ['manual', 'acceptEdits', 'auto', 'plan'] as const;
+export { MODELS, MODES } from '../shared/crew.ts';
 const WORKTREE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/;
 
 export interface SpawnChoices {
@@ -64,6 +63,8 @@ export interface SpawnOptions {
   env?: NodeJS.ProcessEnv;
   shell?: string;
   log: (message: string) => void;
+  /** The MCP server of the tools of a team, for the sessions that get them. */
+  teamMcp?: TeamMcpServer;
 }
 
 /** A folder as typed: ~ for the home, and absolute. */
@@ -75,7 +76,7 @@ export function folderOf(input: string): string | undefined {
 }
 
 /** Whether a folder is inside a git working tree: .git in it or in a folder above. */
-function inGitRepo(dir: string): boolean {
+export function inGitRepo(dir: string): boolean {
   for (let current = dir; ; current = dirname(current)) {
     if (existsSync(join(current, '.git'))) return true;
     if (dirname(current) === current) return false;
@@ -94,7 +95,48 @@ export function startCommand(shell: string, startScript: string, claude: string,
   return [shell, '-l', '-i', '-c', ['exec', start, target, ...args.map((arg) => `'${arg}'`)].join(' ')];
 }
 
-export async function spawnSession(options: SpawnOptions, input: { cwd: unknown; prompt?: unknown } & SpawnChoices): Promise<SpawnResult> {
+/** What a session of a team gets on top of the choices of the panel. */
+export interface SpawnExtras {
+  /** Added to the system prompt of claude (--append-system-prompt). */
+  system?: string;
+  /** Its name in Claude Code (--name). */
+  name?: string;
+  /** Its place in the team, set before it starts: the box is in its group from the first moment. */
+  team?: TeamInfo;
+  /** The tools of its team (mcp/team.ts), when it has some: an MCP server of its own, allowed without asking. */
+  teamTools?: readonly string[];
+}
+
+/** How long Claude Code lets a call to a tool of the team run: the longest wait for answers, and a margin. */
+export const TEAM_MCP_TIMEOUT_MS = 11 * 60_000;
+
+/** How Claude Code starts the MCP server of the tools of a team: node and its script. */
+export interface TeamMcpServer {
+  command: string;
+  args: string[];
+}
+
+/**
+ * The MCP configuration of one session: the server knows the session by FORCHETTA_AGENT, the daemon by
+ * FORCHETTA_VAR, and its tools by FORCHETTA_TEAM_TOOLS (Claude Code lists them once, when the daemon may be
+ * restarting; the daemon still checks every call).
+ */
+export function teamMcpConfig(server: TeamMcpServer, agentId: string, varDir: string, tools: readonly string[]): object {
+  return {
+    mcpServers: {
+      [TEAM_MCP]: {
+        type: 'stdio',
+        command: server.command,
+        args: server.args,
+        env: { FORCHETTA_AGENT: agentId, FORCHETTA_VAR: varDir, FORCHETTA_TEAM_TOOLS: tools.join(',') },
+        // wait_for_answers waits up to 10 minutes: more than the default time of a call to a tool.
+        timeout: TEAM_MCP_TIMEOUT_MS,
+      },
+    },
+  };
+}
+
+export async function spawnSession(options: SpawnOptions, input: { cwd: unknown; prompt?: unknown } & SpawnChoices, extras: SpawnExtras = {}): Promise<SpawnResult> {
   const { tmux, registry, claude, log } = options;
   if (!claude) return { ok: false, error: `claude not found: set its path in ${paths.config} (paths.claude)` };
   const cwd = typeof input.cwd === 'string' ? folderOf(input.cwd) : undefined;
@@ -119,9 +161,24 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   const envFile = join(paths.runDir, `${id}.env`);
   const env = paneEnv(options.env ?? process.env, id);
   if (prompt) env.FORCHETTA_PROMPT = prompt;
+  // Like the prompt, the texts of a team go through the private env file: forchetta-start gives them to claude.
+  if (extras.system) env.FORCHETTA_SYSTEM_PROMPT = extras.system;
+  if (extras.name) env.FORCHETTA_NAME = extras.name;
+  if (extras.teamTools?.length && options.teamMcp) {
+    // Its own file, kept while the session lives: Claude Code starts the server again after /clear.
+    ensurePrivateDir(paths.crewMcp);
+    const mcpFile = join(paths.crewMcp, `${id}.json`);
+    writeFileSync(mcpFile, `${JSON.stringify(teamMcpConfig(options.teamMcp, id, paths.varDir, extras.teamTools), null, 2)}\n`, { mode: 0o600 });
+    env.FORCHETTA_MCP_CONFIG = mcpFile;
+    env.FORCHETTA_ALLOWED_TOOLS = `mcp__${TEAM_MCP}`;
+  }
   writeFileSync(envFile, envFileText(env), { mode: 0o600 });
 
-  registry.register({ id, cwd, tmuxSession: session });
+  const agent = registry.register({ id, cwd, tmuxSession: session });
+  if (extras.team) {
+    agent.team = { ...extras.team };
+    registry.touch(agent);
+  }
   const created = await tmux.run('new-session', ['-d', '-s', session, '-c', cwd, '-x', '200', '-y', '50', '--', '/bin/sh', paths.execScript, envFile, '--', ...command]);
   if (created.code !== 0) {
     rmSync(envFile, { force: true });

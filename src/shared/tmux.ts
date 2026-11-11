@@ -12,6 +12,9 @@ export const TMUX_ALLOWED = [
   'list-panes',
   'display-message',
   'has-session',
+  // A request of a team, pasted as one block (bracketed paste): from a private file into a buffer, then into the pane.
+  'load-buffer',
+  'paste-buffer',
 ] as const;
 
 export type TmuxCommand = (typeof TMUX_ALLOWED)[number];

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Forchetta: every Claude Code session on your Mac, in one window</title>
-<meta name="description" content="Forchetta finds the Claude Code sessions running on your Mac and shows, live, what each one is doing, what it waits for and what it costs. Free, open source, local.">
+<meta name="description" content="Forchetta finds the Claude Code sessions running on your Mac and shows, live, what each one is doing, what it waits for and what it costs, and runs teams of agents that work together. Free, open source, local.">
 <meta property="og:title" content="Forchetta">
 <meta property="og:description" content="Every Claude Code session on your Mac, in one window.">
 <meta property="og:image" content="https://alessiodonato.github.io/forchetta/img/workspace.png">
@@ -375,6 +375,7 @@
     Forchetta
   </a>
   <nav aria-label="Page">
+    <a href="manual.html">Manual</a>
     <a class="optional" href="#install">Install</a>
     <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
   </nav>
@@ -383,7 +384,7 @@
 <main>
   <div class="wrap hero">
     <h1>Every Claude Code session on your Mac, in one window.</h1>
-    <p class="lead">Forchetta finds the Claude Code sessions you have running and shows, live, what each one is doing, what it is waiting for and what it has cost. Open up to four side by side, answer permission prompts from their box, and get a notification when one needs you.</p>
+    <p class="lead">Forchetta finds the Claude Code sessions you have running and shows, live, what each one is doing, what it is waiting for and what it has cost. Open up to four side by side, answer permission prompts from their box, get a notification when one needs you, and start teams of agents that work together.</p>
     <div class="actions">
       <a class="button" href="#install">Install with Homebrew</a>
       <a class="button secondary" href="https://github.com/alessiodonato/forchetta">
@@ -491,7 +492,7 @@
         <li><b>Answer permission prompts</b> from the box: allow once, deny, or pick one of the lasting rules Claude Code offers. The terminal shows the same prompt, and whichever answers first wins.</li>
         <li><b>Send <code>/btw</code>, <code>/compact</code> and <code>/clear</code></b> to one session, or to several at once. Forchetta types a command only when it is safe: the session is idle, nobody is typing, the prompt is empty.</li>
         <li><b>Start a new session</b> in any folder, with a first prompt, a model, a permission mode, or a git worktree of its own.</li>
-        <li><b>Name your sessions,</b> group them and give them roles, and see a team of agents as an org chart.</li>
+        <li><b>Name your sessions,</b> group them and give them roles, and see them as an org chart.</li>
         <li><b>Search earlier sessions</b> of a project for what was asked, decided or changed.</li>
       </ul>
       </div>
@@ -511,6 +512,32 @@
       </div>
     </section>
 
+    <section class="part" id="teams">
+      <div class="text">
+        <h2>Teams of agents that work together</h2>
+        <p>Start a team from one panel: a lead, which is a Claude session or you, and up to six members, each a Claude Code session with its own role. The lead splits the goal into numbered requests, and each member gets its own as a new prompt as soon as it is free.</p>
+        <ul class="list">
+          <li><b>⇄ answers or → executes:</b> for each member, choose whether its final message goes back to the lead or it just does the work. Change it later with one click.</li>
+          <li><b>Real tools, not copy and paste:</b> the lead sends requests and waits for the answers through a small MCP server of Forchetta; a member that is stuck asks the lead a question.</li>
+          <li><b>A worktree each:</b> every member can work on a branch of its own, and the lead merges the work when it is good.</li>
+          <li><b>One thread for it all:</b> every request, answer and question in order, and a field to write to the lead or to any member yourself.</li>
+          <li><b>Templates:</b> start from developer + reviewer, a feature squad or research + writing, or from a team you saved.</li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <img src="img/org-chart.png" width="2400" height="1597" loading="lazy" alt="The org chart: the team checkout, its lead above and its three members below, each with the request it works on; three other sessions below.">
+        <figcaption>The team checkout at work: the lead waits for the answers it needs, each member shows the request it is working on.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="img/team.png" width="2400" height="1418" loading="lazy" alt="The panel of the team checkout: the thread of requests, answers and a question between the lead and its members, then the field to write a new request.">
+        <figcaption>The thread of the team: what the lead asked, what came back, a question of the reviewer.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="img/new-team.png" width="2400" height="984" loading="lazy" alt="The new team panel, filled from the feature squad template: a Claude lead and three members, the tester set to execute only.">
+        <figcaption>A new team from a template: the roles, who answers and who executes, a worktree each.</figcaption>
+      </figure>
+    </section>
+
     <section class="part text">
       <h2>It tells you when you're needed</h2>
       <ul class="list">
@@ -525,6 +552,15 @@
       <h2>It stays on your Mac</h2>
       <p>The hooks talk to a small daemon that listens on <code>127.0.0.1</code> only. Your sessions are not sent anywhere. The one network call Forchetta can make is an optional one-line summary from the Claude API, off unless you turn it on.</p>
       <p>Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change, asks, and keeps a backup. Your other hooks stay exactly as they are, and <code>forchetta hooks uninstall</code> takes its own away.</p>
+    </section>
+
+    <section class="part text" id="manual">
+      <h2>The manual</h2>
+      <p>Everything Forchetta does, step by step: the window and its states, the terminals, the commands and when they go, the permissions, new sessions, the teams of agents, the command line, the settings and what to do when something looks wrong.</p>
+      <div class="actions">
+        <a class="button secondary" href="manual.html">Read the manual</a>
+        <span class="fine"><a href="manual.html#teams">Teams of agents</a> · <a href="manual.html#cli">Command line</a> · <a href="manual.html#config">Configuration</a> · <a href="manual.html#trouble">Troubleshooting</a></span>
+      </div>
     </section>
 
     <section class="part text" id="install">
@@ -546,7 +582,7 @@
           <small>To open a session's terminal from the app, start it with <code>forchetta run claude</code>, or with New session in the app.</small>
         </li>
       </ol>
-      <p>Forchetta works with <a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a> too: with it, every box shows its context and when its prompt cache expires, the top shows the cost of the day, you can search earlier sessions, and a <code>/clear</code> from the box leaves a note for the new session. The <a href="https://github.com/alessiodonato/forchetta#readme">README</a> has the rest, in English and in Italian, with how to build it from source.</p>
+      <p>Forchetta works with <a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a> too: with it, every box shows its context and when its prompt cache expires, the top shows the cost of the day, you can search earlier sessions, and a <code>/clear</code> from the box leaves a note for the new session. The <a href="manual.html">manual</a> explains the rest; the <a href="https://github.com/alessiodonato/forchetta#readme">README</a> has it in English and in Italian, with how to build it from source.</p>
     </section>
   </div>
 </main>

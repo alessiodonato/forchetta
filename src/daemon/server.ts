@@ -45,6 +45,8 @@ export interface ServerOptions {
   recordFile?: string;
   onShutdown: () => void;
   onHook?: (agent: Agent, payload: HookPayload) => void;
+  /** The routes of the MCP server of a team: /api/crew/<route>, POST with JSON. */
+  crew?: (route: string, input: Record<string, unknown>) => Promise<{ status: number; body: unknown }>;
   log: (message: string) => void;
   info: () => Record<string, unknown>;
 }
@@ -272,6 +274,17 @@ export function createDaemonServer(options: ServerOptions): Server {
           return send(res, 400, { error: 'campi non validi' });
         }
         return send(res, 200, { agent: registry.register({ id: id.toLowerCase(), cwd, tmuxSession }) });
+      }
+      if (url.pathname.startsWith('/api/crew/') && req.method === 'POST' && options.crew) {
+        const body = await readBody(req);
+        let input: Record<string, unknown> = {};
+        try {
+          input = JSON.parse(body?.toString('utf8') || '{}') as Record<string, unknown>;
+        } catch {
+          return send(res, 400, { ok: false, error: 'invalid JSON' });
+        }
+        const result = await options.crew(url.pathname.slice('/api/crew/'.length), input);
+        return send(res, result.status, result.body);
       }
       if (url.pathname === '/api/shutdown' && req.method === 'POST') {
         send(res, 200, { ok: true });

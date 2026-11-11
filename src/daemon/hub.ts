@@ -3,6 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
+import type { CrewRequest, CrewSummary, CrewTemplate } from '../shared/crew.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
 // that changed and the ids of those that went away. The page tells whether its window can be seen, so that the
@@ -11,7 +12,19 @@ import type { Agent, FileChange, RecallMatch, TodayInfo } from '../shared/agent.
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[] }
+  /** The templates of teams, after one was saved or deleted. */
+  | { type: 'crewTemplates'; now: number; templates: CrewTemplate[] }
+  /** How a change of a team went (a member added, taken away, → / ⇄), or a template saved: for the window that asked. */
+  | { type: 'crewEdited'; now: number; ok: boolean; crewId?: string; action: string; error?: string }
+  /** The teams of agents, after one was created. */
+  | { type: 'crews'; now: number; crews: CrewSummary[] }
+  /** How the start of a team went, for the window that asked. */
+  | { type: 'crewCreated'; now: number; ok: boolean; crewId?: string; agentIds?: string[]; error?: string }
+  /** The whole thread of a team, for the window that shows it. */
+  | { type: 'crewThread'; now: number; crewId: string; requests: CrewRequest[] }
+  /** How a request to a team went, for the window that asked: its number, or why it did not go. */
+  | { type: 'crewRequested'; now: number; ok: boolean; crewId: string; n?: number; error?: string }
   /** What every session cost since midnight, read again from arricurdAI. */
   | { type: 'today'; now: number; today: TodayInfo }
   | { type: 'agents'; now: number; agents: Agent[] }
@@ -44,6 +57,17 @@ export type ClientMessage =
   | { type: 'files'; agentId: string }
   | { type: 'spawn'; cwd: string; prompt?: string; model?: string; mode?: string; worktree?: string | boolean }
   | { type: 'team'; agentId: string; team: unknown }
+  /** A new team of agents, as the panel writes it (shared/crew.ts checks it). */
+  | { type: 'createCrew'; spec: unknown }
+  /** A request from you to some recipients of a team; none means all its members. */
+  | { type: 'crewRequest'; crewId: string; to: string[]; text: string }
+  /** The whole thread of a team. */
+  | { type: 'crewThread'; crewId: string }
+  /** A change of a team: a member added (member), taken away (name), or its → / ⇄ (name, talk). */
+  | { type: 'editCrew'; crewId: string; action: 'add' | 'remove' | 'talk'; name?: string; talk?: string; member?: unknown }
+  /** A template: from the panel of a new team (template), or from an existing team (crewId, with its name). */
+  | { type: 'saveCrewTemplate'; template?: unknown; crewId?: string }
+  | { type: 'deleteCrewTemplate'; name: string }
   | { type: 'recall'; id: number; project: string; query: string };
 
 export interface HubOptions {
@@ -59,6 +83,19 @@ export interface HubOptions {
   onTeam?: (agentId: string, team: unknown) => void;
   /** A new session from the app: a folder and a first prompt. */
   onSpawn?: (input: { cwd: string; prompt?: string; model?: unknown; mode?: unknown; worktree?: unknown }) => Promise<{ ok: true; agentId: string } | { ok: false; error: string }>;
+  /** A new team of agents: its sessions start, then it is kept. */
+  onCreateCrew?: (spec: unknown) => Promise<{ ok: boolean; crewId?: string; agentIds?: string[]; error?: string }>;
+  /** The teams of agents, for the page. */
+  crews?: () => CrewSummary[];
+  /** The whole thread of a team. */
+  crewThread?: (crewId: string) => CrewRequest[] | undefined;
+  /** A change of a team. */
+  onEditCrew?: (message: Extract<ClientMessage, { type: 'editCrew' }>) => Promise<{ ok: boolean; error?: string }>;
+  /** The templates of teams, and saving or deleting one. */
+  templates?: () => CrewTemplate[];
+  onTemplate?: (message: Extract<ClientMessage, { type: 'saveCrewTemplate' | 'deleteCrewTemplate' }>) => { ok: boolean; error?: string };
+  /** A request from you to a team. */
+  onCrewRequest?: (crewId: string, to: string[], text: string) => { ok: true; n: number } | { ok: false; error: string };
   /** The changes of a session, read when its panel opens. */
   onFiles?: (agentId: string) => Promise<FileChange[]>;
   /** The answer of a box to a permission dialog. */
@@ -76,7 +113,8 @@ function sameToken(given: string | null, token: string): boolean {
 }
 
 export class Hub {
-  private readonly server = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
+  // A request to a team can be 20000 characters, up to 80 KB in UTF-8.
+  private readonly server = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   private readonly clients = new Map<WebSocket, { visible: boolean }>();
   private readonly pending = new Map<string, Agent>();
   private readonly removed = new Set<string>();
@@ -102,7 +140,15 @@ export class Hub {
 
   private accept(ws: WebSocket): void {
     this.clients.set(ws, { visible: true });
-    this.send(ws, { type: 'hello', now: Date.now(), agents: this.options.snapshot(), settings: this.options.settings?.() ?? { replace: 'lru', arricurdaiNotes: false }, today: this.today });
+    this.send(ws, {
+      type: 'hello',
+      now: Date.now(),
+      agents: this.options.snapshot(),
+      settings: this.options.settings?.() ?? { replace: 'lru', arricurdaiNotes: false },
+      today: this.today,
+      crews: this.options.crews?.(),
+      templates: this.options.templates?.(),
+    });
     this.updateWatched();
     ws.on('message', (data) => {
       try {
@@ -153,6 +199,34 @@ export class Hub {
             (result) => this.send(ws, { type: 'spawned', now: Date.now(), ...result }),
             (error: unknown) => this.send(ws, { type: 'spawned', now: Date.now(), ok: false, error: String(error) }),
           );
+        } else if (message.type === 'createCrew' && this.options.onCreateCrew) {
+          void this.options.onCreateCrew(message.spec).then(
+            (result) => {
+              this.send(ws, { type: 'crewCreated', now: Date.now(), ...result });
+              if (result.ok) this.broadcast({ type: 'crews', now: Date.now(), crews: this.options.crews?.() ?? [] });
+            },
+            (error: unknown) => this.send(ws, { type: 'crewCreated', now: Date.now(), ok: false, error: String(error) }),
+          );
+        } else if (message.type === 'crewRequest' && typeof message.crewId === 'string' && typeof message.text === 'string' && this.options.onCrewRequest) {
+          const to = Array.isArray(message.to) ? message.to.filter((name): name is string => typeof name === 'string') : [];
+          const result = this.options.onCrewRequest(message.crewId, to, message.text);
+          this.send(ws, { type: 'crewRequested', now: Date.now(), crewId: message.crewId, ...result });
+        } else if (message.type === 'editCrew' && typeof message.crewId === 'string' && typeof message.action === 'string' && this.options.onEditCrew) {
+          const edit = { type: 'editCrew' as const, crewId: message.crewId, action: message.action as 'add' | 'remove' | 'talk', name: typeof message.name === 'string' ? message.name : undefined, talk: typeof message.talk === 'string' ? message.talk : undefined, member: message.member };
+          void this.options.onEditCrew(edit).then(
+            (result) => this.send(ws, { type: 'crewEdited', now: Date.now(), crewId: edit.crewId, action: edit.action, ...result }),
+            (error: unknown) => this.send(ws, { type: 'crewEdited', now: Date.now(), crewId: edit.crewId, action: edit.action, ok: false, error: String(error) }),
+          );
+        } else if ((message.type === 'saveCrewTemplate' || message.type === 'deleteCrewTemplate') && this.options.onTemplate) {
+          const result =
+            message.type === 'saveCrewTemplate'
+              ? this.options.onTemplate({ type: 'saveCrewTemplate', template: message.template, crewId: typeof message.crewId === 'string' ? message.crewId : undefined })
+              : this.options.onTemplate({ type: 'deleteCrewTemplate', name: String(message.name ?? '') });
+          this.send(ws, { type: 'crewEdited', now: Date.now(), action: message.type, ...result });
+          if (result.ok) this.broadcast({ type: 'crewTemplates', now: Date.now(), templates: this.options.templates?.() ?? [] });
+        } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
+          const requests = this.options.crewThread(message.crewId);
+          if (requests) this.send(ws, { type: 'crewThread', now: Date.now(), crewId: message.crewId, requests });
         } else if (message.type === 'files' && typeof message.agentId === 'string' && this.options.onFiles) {
           const agentId = message.agentId;
           void this.options.onFiles(agentId).then(
@@ -212,6 +286,18 @@ export class Hub {
       if (this.removed.size > 0) this.broadcast({ type: 'removed', now, ids: [...this.removed] });
       this.pending.clear();
       this.removed.clear();
+    });
+  }
+
+  private crewsPending = false;
+
+  /** A team or one of its requests changed: every window gets the teams again, once per tick. */
+  crewsChanged(): void {
+    if (this.crewsPending) return;
+    this.crewsPending = true;
+    setImmediate(() => {
+      this.crewsPending = false;
+      this.broadcast({ type: 'crews', now: Date.now(), crews: this.options.crews?.() ?? [] });
     });
   }
 

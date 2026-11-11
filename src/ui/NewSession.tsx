@@ -28,9 +28,9 @@ export function recentFolders(agents: readonly Agent[], max = 6): string[] {
   return out;
 }
 
-const lastPart = (path: string): string => path.split('/').filter(Boolean).at(-1) ?? path;
+export const lastPart = (path: string): string => path.split('/').filter(Boolean).at(-1) ?? path;
 
-const MODELS = [
+export const MODELS = [
   ['', 'default'],
   ['opus', 'Opus'],
   ['sonnet', 'Sonnet'],
@@ -38,7 +38,7 @@ const MODELS = [
   ['fable', 'Fable'],
 ] as const;
 
-const MODES = [
+export const MODES = [
   ['', 'default'],
   ['manual', 'asks every time'],
   ['acceptEdits', 'accepts edits'],

@@ -5,7 +5,8 @@ import { build } from 'esbuild';
 rmSync('dist', { recursive: true, force: true });
 
 await build({
-  entryPoints: { cli: 'src/cli/main.ts', daemon: 'src/daemon/main.ts' },
+  // team-mcp: the MCP server of the tools of a team, started by Claude Code (src/mcp/team.ts).
+  entryPoints: { cli: 'src/cli/main.ts', daemon: 'src/daemon/main.ts', 'team-mcp': 'src/mcp/team.ts' },
   outdir: 'dist',
   bundle: true,
   // The SDK of the optional summaries goes into a chunk of its own, loaded only when they are on.

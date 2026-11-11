@@ -13,7 +13,8 @@ export interface PromptBox {
 }
 
 const SGR = /\u001b\[([0-9;]*)m/g;
-const RULE = /^─{10,}$/;
+/** A rule; a session with a name (claude --name) has it in the rule above the box: "──── developer ─". */
+const RULE = /^─{10,}(?: \S.* ─+)?$/;
 /** A line of box drawing only: the rest of a rule wrapped by a resize. */
 const DRAWING = /^[─│┌┐└┘├┤┬┴┼╭╮╯╰\s]*$/;
 

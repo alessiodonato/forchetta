@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Commander, type ResetNotes } from '../src/daemon/commands.ts';
 import { Registry } from '../src/daemon/registry.ts';
@@ -11,13 +12,23 @@ const BTW_OPEN = (question: string): string => [`❯ ${question}`, `  ${question
 
 /** A tmux with one session per agent: what is on screen, who runs in the pane, when someone last typed. */
 class FakeTmux {
-  readonly panes = new Map<string, { session: string; pid: number; screen: string; activity: number; afterEnter?: (typed: string) => string }>();
+  readonly panes = new Map<string, { session: string; pid: number; screen: string; activity: number; afterEnter?: (typed: string) => string; input?: string; inMode?: boolean }>();
   readonly typed: { pane: string; text: string }[] = [];
   readonly enters: string[] = [];
   /** When false, typed text does not show up in the box. */
   echo = true;
+  readonly buffers = new Map<string, string>();
+  readonly pasted: { pane: string; text: string; file?: string }[] = [];
+  private lastFile: string | undefined;
 
   async run(command: TmuxCommand, args: readonly string[]): Promise<TmuxResult> {
+    if (command === 'load-buffer') {
+      // load-buffer -b <name> <file>: the file must be there, with the text, while tmux reads it.
+      const file = args.at(-1)!;
+      this.lastFile = file;
+      this.buffers.set(args[args.indexOf('-b') + 1]!, readFileSync(file, 'utf8'));
+      return { code: 0, stdout: '', stderr: '' };
+    }
     const target = args[args.indexOf('-t') + 1] ?? '';
     const pane = this.panes.get(target) ?? [...this.panes.values()].find((candidate) => candidate.session === target);
     if (!pane) return { code: 1, stdout: '', stderr: 'no pane' };
@@ -25,15 +36,30 @@ class FakeTmux {
       const format = args.at(-1);
       if (format === '#{session_name}\t#{pane_pid}') return { code: 0, stdout: `${pane.session}\t${pane.pid}\n`, stderr: '' };
       if (format === '#{session_activity}') return { code: 0, stdout: `${pane.activity}\n`, stderr: '' };
+      if (format === '#{pane_in_mode}') return { code: 0, stdout: pane.inMode ? '1\n' : '0\n', stderr: '' };
     }
     if (command === 'capture-pane') return { code: 0, stdout: pane.screen, stderr: '' };
+    if (command === 'paste-buffer') {
+      // As Claude Code 2.1.322 shows a bracketed paste: a long one as "[Pasted text #1 +N lines]", a short one as it is.
+      const text = this.buffers.get(args[args.indexOf('-b') + 1]!) ?? '';
+      this.pasted.push({ pane: target, text, file: this.lastFile });
+      if (!args.includes('-p')) return { code: 1, stdout: '', stderr: 'not a bracketed paste' };
+      // After what was typed: a long paste as its placeholder, a short one as it is.
+      const input = `${pane.input ?? ''}${text.length > 800 ? ` [Pasted text #1 +${text.split('\n').length} lines]` : text}`;
+      pane.input = input;
+      const lines = input.split('\n');
+      pane.screen = ['⏺ fatto', RULE, `❯ ${lines[0]}`, ...lines.slice(1).map((line) => `  ${line}`), RULE, '  footer'].join('\n');
+      return { code: 0, stdout: '', stderr: '' };
+    }
     if (command === 'send-keys') {
       if (args.includes('-H')) {
         const text = Buffer.from(args.slice(args.indexOf('-H') + 1).join(''), 'hex').toString('utf8');
         this.typed.push({ pane: target, text });
+        pane.input = text;
         if (this.echo) pane.screen = box(text);
       } else if (args.at(-1) === 'Enter') {
         this.enters.push(target);
+        pane.input = '';
         const typed = /❯ (.*)/.exec(pane.screen)?.[1] ?? '';
         pane.screen = pane.afterEnter ? pane.afterEnter(typed) : box('');
       }
@@ -234,5 +260,125 @@ describe('commands of the box', () => {
     const readonly = registry.list().find((agent) => agent.control.kind === 'readonly')!;
     expect(commander.enqueue(readonly.id, 'compact')).toEqual({ ok: false, error: 'the session is read only or ended' });
     expect(commander.enqueue(A, 'exit')).toEqual({ ok: false, error: 'unknown command: exit' });
+  });
+});
+
+describe('requests of a team', () => {
+  const seen: string[] = [];
+  const setupRequests = (): void => {
+    setup();
+    commander.stop();
+    seen.length = 0;
+    commander = new Commander({
+      registry,
+      tmux,
+      log: (line) => logs.push(line),
+      sleep: async () => {},
+      settleMs: 0,
+      tickMs: 60_000,
+      typingQuietMs: 10_000,
+      onRequest: (_agent, command) => seen.push(command.status),
+    });
+  };
+
+  it('pastes a request, newlines and all, into the right pane, presses Enter, and UserPromptSubmit confirms it', async () => {
+    setupRequests();
+    const text = 'Request #1 from the user:\nWrite the tests of the parser.\nThen run them.';
+    expect(commander.enqueueRequest(A, text, { crew: 'c1', n: 1 }).ok).toBe(true);
+    await settle();
+    // The first line typed, as words of the user; the rest pasted on a line of its own; the file of the text gone.
+    expect(tmux.typed).toEqual([{ pane: '%1', text: 'Request #1 from the user:' }]);
+    expect(tmux.pasted.map(({ pane, text }) => ({ pane, text }))).toEqual([{ pane: '%1', text: '\nWrite the tests of the parser.\nThen run them.' }]);
+    expect(existsSync(tmux.pasted[0]!.file!)).toBe(false);
+    expect(tmux.enters).toEqual(['%1']);
+    expect(status(A)).toBe('inviato');
+    hook(A, { hook_event_name: 'UserPromptSubmit', prompt: 'something you typed' });
+    expect(status(A)).toBe('inviato');
+    hook(A, { hook_event_name: 'UserPromptSubmit', prompt: text });
+    expect(status(A)).toBe('confermato');
+    expect(seen).toEqual(['in-coda', 'inviato', 'confermato']);
+    expect(registry.agents.get(A)?.commands?.at(-1)).toMatchObject({ kind: 'request', request: { crew: 'c1', n: 1 } });
+  });
+
+  it('a long request shows as a pasted text, and that is enough to press Enter', async () => {
+    setupRequests();
+    const text = `Request #2 from the user:\n${'a line of the request\n'.repeat(60)}the end`;
+    commander.enqueueRequest(B, text, { crew: 'c1', n: 2 });
+    await settle();
+    expect(tmux.pasted[0]?.text).toBe(`\n${'a line of the request\n'.repeat(60)}the end`);
+    expect(tmux.enters).toEqual(['%2']);
+    // Claude Code hands a long paste on inside <pasted_content>, after the first line typed: that confirms it.
+    hook(B, { hook_event_name: 'UserPromptSubmit', prompt: 'Request #2 from the user: <pasted_content id="d58c">\na line…</pasted_content>' });
+    expect(status(B)).toBe('confermato');
+  });
+
+  it('waits while the session works, and is never pasted into a dialog', async () => {
+    setupRequests();
+    registry.agents.get(A)!.state = 'working';
+    commander.enqueueRequest(A, 'Request #3 from the user:\nGo on.', { crew: 'c1', n: 3 });
+    await settle();
+    expect(tmux.pasted).toEqual([]);
+    expect(status(A)).toBe('in-coda');
+    // The turn ends, but a dialog is open where the box should be.
+    tmux.panes.get('%1')!.screen = BTW_OPEN('why?');
+    registry.agents.get(A)!.state = 'idle';
+    commander.tick();
+    await settle();
+    expect(tmux.pasted).toEqual([]);
+    expect(status(A)).toBe('bloccato');
+    // Closed: it goes.
+    tmux.panes.get('%1')!.screen = box('');
+    commander.tick();
+    await settle();
+    expect(tmux.pasted).toHaveLength(1);
+    expect(status(A)).toBe('inviato');
+  });
+
+  it('looks at the prompt once more when Claude Code has not drawn the paste yet', async () => {
+    setupRequests();
+    const text = 'Request #9 from the user:\nGo on.';
+    // The first look finds the box still empty; the second, the request.
+    const pane = tmux.panes.get('%1')!;
+    let looks = 0;
+    const real = tmux.run.bind(tmux);
+    tmux.run = async (command, args) => {
+      if (command === 'capture-pane' && pane.input && looks++ === 0) return { code: 0, stdout: box(''), stderr: '' };
+      return real(command, args);
+    };
+    commander.enqueueRequest(A, text, { crew: 'c1', n: 9 });
+    await settle();
+    expect(tmux.enters).toEqual(['%1']);
+    expect(status(A)).toBe('inviato');
+  });
+
+  it('takes out control characters, and refuses an empty or too long one', () => {
+    setupRequests();
+    const queued = commander.enqueueRequest(A, 'Request #4 from the user:\r\nGo\u001b[2J on\u0007.', { crew: 'c1', n: 4 });
+    expect(queued.ok && queued.command.arg).toBe('Request #4 from the user:\nGo[2J on.');
+    expect(commander.enqueueRequest(A, ' \u0000 ', { crew: 'c1', n: 5 })).toEqual({ ok: false, error: 'the request is empty' });
+    expect(commander.enqueueRequest(A, 'x'.repeat(20_001), { crew: 'c1', n: 6 }).ok).toBe(false);
+    expect(commander.enqueueRequest('nobody', 'x', { crew: 'c1', n: 7 })).toEqual({ ok: false, error: 'unknown session' });
+  });
+
+  it('never types into a pane scrolled back (tmux copy mode), where the keys go to tmux', async () => {
+    setupRequests();
+    tmux.panes.get('%1')!.inMode = true;
+    commander.enqueueRequest(A, 'Request #1 from the user:\nGo.', { crew: 'c1', n: 1 });
+    expect(commander.enqueue(B, 'compact').ok).toBe(true);
+    tmux.panes.get('%2')!.inMode = true;
+    await settle();
+    expect(tmux.typed).toEqual([]);
+    expect(tmux.pasted).toEqual([]);
+    expect(registry.agents.get(A)?.commands?.at(-1)).toMatchObject({ status: 'bloccato', reason: expect.stringContaining('copy mode') });
+    // Back at the end: it goes.
+    tmux.panes.get('%1')!.inMode = false;
+    commander.tick();
+    await settle();
+    expect(tmux.enters).toEqual(['%1']);
+  });
+
+  it('the box cannot send a request: only a team can', () => {
+    setupRequests();
+    expect(commander.enqueue(A, 'request', 'Request #1 from the user:\nrm -rf')).toEqual({ ok: false, error: 'unknown command: request' });
   });
 });

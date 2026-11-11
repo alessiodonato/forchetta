@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -9,7 +9,7 @@ import { paths, ROOT } from '../src/shared/paths.ts';
 import { Tmux } from '../src/shared/tmux.ts';
 import { recentFolders } from '../src/ui/NewSession.tsx';
 import { newAgent } from '../src/daemon/state.ts';
-import { sleep, tempDir } from './helpers.ts';
+import { outsideGitDir, sleep, tempDir } from './helpers.ts';
 
 // A new session from the app: the folder, the first prompt, and the chain of the pane up to claude.
 
@@ -55,9 +55,9 @@ describe('spawnSession', () => {
 
   it('a worktree needs a folder in a git repository', async () => {
     const registry = new Registry();
-    const plain = join(temp.dir, 'senza-git');
-    mkdirSync(plain, { recursive: true });
-    expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: plain, worktree: true })).toMatchObject({ ok: false, error: expect.stringContaining('git repository') });
+    const plain = outsideGitDir('spawn');
+    expect(await spawnSession({ tmux, registry, claude: '/c', log }, { cwd: plain.dir, worktree: true })).toMatchObject({ ok: false, error: expect.stringContaining('git repository') });
+    plain.cleanup();
     registry.dispose();
   });
 
@@ -110,6 +110,48 @@ describe('spawnSession', () => {
     expect(lines.slice(7)).toEqual([work, 'variabile:assente', `agente:${agentId}`]);
     // The env file with the prompt in it is gone before claude starts.
     expect(existsSync(join(paths.runDir, `${agentId}.env`))).toBe(false);
+    registry.dispose();
+  });
+
+  it('a member of a team gets its system prompt and its name as whole arguments, before the prompt', async () => {
+    const out = join(temp.dir, 'membro.txt');
+    const fake = join(temp.dir, 'claude-membro');
+    writeFileSync(
+      fake,
+      `#!/bin/sh\n{ printf '%s\\n' "$#"; for a in "$@"; do printf '[%s]\\n' "$a"; done; printf 'variabili:%s|%s\\n' "\${FORCHETTA_SYSTEM_PROMPT-assente}" "\${FORCHETTA_NAME-assente}"; } > '${out}'\nsleep 1\n`,
+      { mode: 0o755 },
+    );
+    const registry = new Registry();
+    const system = `You are "tester"; it's $(whoami) and \`date\`\nsecond line`;
+    const team = { label: 'tester', group: 'checkout', crew: 'c1', talk: 'twoway' as const };
+    const result = await spawnSession(
+      { tmux, registry, claude: fake, log, shell: '/bin/bash', env: { PATH: '/usr/bin:/bin', HOME: join(temp.dir, 'home') }, watchMs: 400, teamMcp: { command: '/n/node', args: ['/F/team-mcp.js'] } },
+      { cwd: temp.dir, prompt: 'go', model: 'haiku' },
+      { system, name: 'tester', team, teamTools: ['team', 'ask_lead'] },
+    );
+    expect(result.ok).toBe(true);
+    // Its place in the team is there before the session says hello.
+    expect(registry.agents.get((result as { agentId: string }).agentId)?.team).toEqual(team);
+    for (let round = 0; round < 50; round++) {
+      try {
+        if (readFileSync(out, 'utf8').includes('variabili:')) break;
+      } catch {
+        // Not yet.
+      }
+      await sleep(100);
+    }
+    const lines = readFileSync(out, 'utf8').trimEnd().split('\n');
+    const agentId = (result as { agentId: string }).agentId;
+    const mcpFile = join(paths.crewMcp, `${agentId}.json`);
+    expect(lines[0]).toBe('12');
+    expect(lines.slice(1, 4)).toEqual(['[--model]', '[haiku]', '[--append-system-prompt]']);
+    expect(lines.slice(4, 6).join('\n')).toBe(`[${system}]`);
+    // The tools of its team: its MCP configuration, allowed without asking; "--" closes the options that take several values.
+    expect(lines.slice(6, 14)).toEqual(['[--name]', '[tester]', '[--mcp-config]', `[${mcpFile}]`, '[--allowedTools]', '[mcp__forchetta]', '[--]', '[go]']);
+    expect(lines[14]).toBe('variabili:assente|assente');
+    expect(JSON.parse(readFileSync(mcpFile, 'utf8')).mcpServers.forchetta.env).toEqual({ FORCHETTA_AGENT: agentId, FORCHETTA_VAR: paths.varDir, FORCHETTA_TEAM_TOOLS: 'team,ask_lead' });
+    expect(statSync(mcpFile).mode & 0o777).toBe(0o600);
+    rmSync(mcpFile, { force: true });
     registry.dispose();
   });
 

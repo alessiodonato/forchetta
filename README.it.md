@@ -6,7 +6,7 @@
 
 ### Tutte le sessioni di Claude Code del tuo Mac, in una finestra.
 
-Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo reale cosa sta facendo ognuna, cosa aspetta e quanto è costata. Ne apri fino a quattro affiancate, rispondi ai permessi dal loro box e ricevi una notifica quando una ha bisogno di te.
+Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo reale cosa sta facendo ognuna, cosa aspetta e quanto è costata. Ne apri fino a quattro affiancate, rispondi ai permessi dal loro box, ricevi una notifica quando una ha bisogno di te e avvii team di agenti che lavorano insieme.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#installazione)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#installazione)
@@ -17,7 +17,9 @@ Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo real
 
 [Installazione](#installazione) ·
 [Cosa fa](#cosa-fa) ·
+[Team di agenti](#team-di-agenti) ·
 [arricurdAI](#funziona-con-arricurdai) ·
+[Manuale (in inglese)](https://alessiodonato.github.io/forchetta/manual.html) ·
 [Disinstallazione](#disinstallazione) ·
 [🇬🇧 English](README.md)
 
@@ -29,11 +31,12 @@ Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo real
 
 ## Cosa fa
 
-Versione 0.7.2:
+Versione 0.8.0:
 - trova da sola le sessioni Claude Code attive e mostra per ognuna un box con stato, azione in corso, riassunto, contesto, cache e costo;
 - apre fino a 4 sessioni affiancate in terminali veri, agganciati a tmux;
 - manda `/btw`, `/compact` e `/clear` a una o più sessioni, solo quando è sicuro;
 - risponde ai permessi dal box (una volta o "always"), notifica le attese, gli stalli e gli errori, avvisa dei conflitti tra sessioni sugli stessi file;
+- avvia **team di agenti**: un capo (una sessione Claude, oppure tu) e fino a 6 membri, ognuno una sessione di Claude Code, che si passano richieste, risposte e domande; ogni membro risponde al suo capo (⇄) o esegue soltanto (→), e può lavorare in un worktree git tutto suo;
 - mostra le modifiche di ogni sessione, avvia sessioni nuove, organizza le sessioni in gruppi e ruoli, cerca nelle sessioni passate con arricurdAI;
 - sta nella barra dei menu, con la scorciatoia ⌃⌥F.
 
@@ -168,7 +171,7 @@ Su un Mac Intel ogni animazione a 60 fps costa a WindowServer circa un quarto di
 
 ### Nomi, gruppi e ruoli
 
-<img src="docs/img/org-chart.png" alt="L'organigramma: due gruppi, checkout e platform, ognuno con il capo in alto e gli altri sotto; in fondo le sessioni senza gruppo." width="560">
+<img src="docs/img/org-chart.png" alt="L'organigramma: il team checkout, con il capo in alto e i tre membri sotto, ognuno con la richiesta su cui lavora; in fondo le sessioni senza gruppo." width="100%">
 
 Passando sopra un box compare **✎**, che permette di dare alla sessione:
 - un **nome**, mostrato al posto della cartella (la cartella resta accanto, più piccola);
@@ -179,6 +182,56 @@ Passando sopra un box compare **✎**, che permette di dare alla sessione:
 L'assegnazione vale anche per la sua cartella (`var/teams.json`): una sessione che riparte nella stessa cartella, magari il giorno dopo, ritrova il suo posto. **Remove** cancella tutto.
 
 Quando esiste almeno un gruppo, in alto compare **grid / org chart**. Nell'organigramma ogni gruppo ha la sua sezione, con i capi in alto e gli altri sotto, collegati; le sessioni senza gruppo stanno in fondo. Il nome scelto compare ovunque: nella colonna a sinistra, nei riquadri, nelle notifiche e negli avvisi di conflitto.
+
+Anche un team di agenti (sezione seguente) è un gruppo: le sue sessioni ricevono nome, gruppo e ruolo quando partono.
+
+### Team di agenti
+
+<img src="docs/img/new-team.png" alt="Il pannello new team: il modello feature squad, un capo Claude con il suo ruolo, tre membri con il loro, due che rispondono e un tester che esegue soltanto, ognuno nel suo worktree." width="100%">
+
+Un team è un gruppo di sessioni di Claude Code che lavorano insieme: un **capo** (lead) dà le richieste, i **membri** le eseguono. Il capo è una sessione Claude, oppure tu. **new team**, in alto, apre il pannello:
+- **Start from**: un modello che riempie il pannello con un clic: *developer + reviewer*, *feature squad* (frontend, backend, tester), *research + writing*, più quelli che hai salvato;
+- il **nome** del team, che è anche il suo gruppo nell'organigramma, e la sua **cartella**;
+- il **capo**: **Claude**, con nome, ruolo, modello e modalità dei permessi, oppure **you** (tu);
+- i **membri**, fino a 6: un nome e, in una frase, cosa fa ognuno. In **more** ci sono modello, permessi e worktree di quel membro;
+- come ogni membro parla con il suo capo:
+  - **⇄ answers** (risponde): quando finisce una richiesta, il suo messaggio finale torna al capo. Se non può andare avanti, può fare una domanda al capo;
+  - **→ executes** (esegue): fa il lavoro e non manda niente indietro;
+- **members in own worktree**, acceso di default: ogni membro lavora in un worktree git tutto suo, così i membri non toccano mai i file l'uno dell'altro (vedi sotto).
+
+**Create team** (⌘↩) avvia tutte le sessioni nel tmux di Forchetta, prima il capo. Dal suo prompt di sistema ognuna sa chi è, il suo ruolo, il suo capo e gli altri membri; il suo nome compare nel box, nel riquadro e in Claude Code (`--name`). **Save as template** salva il team senza la cartella (in `var/crew-templates.json`), per avviarlo di nuovo altrove.
+
+**Come va il lavoro.** Dai l'obiettivo al capo: dal pannello **team**, oppure nel suo terminale. Un capo Claude lo divide con gli strumenti del team, un server MCP chiamato `forchetta` che ricevono solo le sessioni del team, senza permessi da chiedere:
+- `send_request` dà lavoro a un membro, ad alcuni o a tutti. La richiesta riceve un numero e arriva a ogni membro come nuovo prompt, "Request #3 from lead:", appena la sua sessione è libera. Fino ad allora aspetta nella coda del membro, come i comandi del box e con gli stessi controlli;
+- il messaggio finale di un membro che risponde arriva al capo come nuovo prompt: "Answer from developer to request #2:";
+- `wait_for_answers` permette al capo di aspettare le risposte che gli servono, fino a 10 minuti, e di riceverle tutte insieme nello stesso turno, invece che un prompt ciascuna;
+- `ask_lead` permette a un membro che risponde di chiedere al capo qualcosa sulla sua richiesta. La risposta torna come nuova richiesta;
+- `team` mostra al capo i membri, cosa fa ognuno, su cosa sta lavorando e dov'è il suo worktree.
+
+Quando il capo sei tu, le risposte e le domande dei membri arrivano a te, nel pannello del team.
+
+<img src="docs/img/team.png" alt="Il pannello del team checkout: il filo di richieste, risposte e domande tra il capo e i membri, poi il campo per scrivere una nuova richiesta." width="100%">
+
+**Il pannello del team.** **team**, in alto, compare quando esiste almeno un team. Mostra il filo del team, dal più vecchio:
+- ogni richiesta, con chi l'ha mandata, a chi, e come va per ognuno: in coda, al lavoro, fatta;
+- le risposte, e dove sono andate: consegnate al capo, raccolte dalla sua attesa, per te, oppure non mandate indietro (un membro che esegue soltanto, o uno che ha fatto una domanda al posto della risposta);
+- le domande dei membri.
+
+Sotto il filo scrivi tu una richiesta: al capo, a un membro o a tutti. Arriva come "Request #n from the user:". I box del team dicono su cosa lavora ogni sessione ("#4 from lead: write the tests…"), e il box di un capo Claude dice quali richieste sta ancora aspettando.
+
+**edit team** cambia il team mentre lavora:
+- **→ / ⇄** di un membro: vale dalla sua prossima richiesta, che glielo dice;
+- **remove** toglie un membro dal team: le sue richieste ancora in coda vengono annullate e il suo box esce dal gruppo, ma la sua sessione continua (`/exit` la chiude);
+- **+ member** aggiunge un membro, avviato come gli altri;
+- **Save as template**.
+
+Un capo Claude viene a sapere di ogni cambiamento con il suo prossimo prompt.
+
+**Worktree e unione del lavoro.** Con **own worktree**, Claude Code crea per il membro un worktree git (`--worktree`, in `.claude/worktrees/` del repository), su un branch tutto suo. Il membro fa il commit del suo lavoro alla fine di ogni richiesta. Il capo resta nella cartella del team: il suo prompt di sistema gli dice di unire con git i branch dei membri quando il lavoro è buono, oppure di dirti che è pronto.
+- La cartella deve stare in un repository git: altrimenti i membri la condividono.
+- Claude Code crea un worktree solo in una cartella di cui si fida. Se non hai mai aperto quella cartella con `claude`, parte solo la prima sessione: rispondi al dialogo di fiducia nel suo terminale, e partono le altre, ognuna nel suo worktree.
+
+**Limiti.** Al massimo 6 membri per team, e 20 richieste aperte insieme in un team: un capo non può distribuire più lavoro di quanto tu riesca a seguire. Una richiesta è lunga al massimo 20.000 caratteri; una lunga compare nel terminale del membro come `[Pasted text #1 +N lines]`, come quando la incolli tu. I team stanno in `var/crews/`, un file ciascuno, e tornano quando il daemon riparte.
 
 ### Costo e token
 
@@ -302,6 +355,7 @@ Passando sopra un box compaiono **btw…**, **compact** e **clear**; nell'intest
 **Quando parte un comando.** Forchetta scrive il comando nella sessione come lo scriveresti tu, solo quando è sicuro:
 - **la sessione aspetta un nuovo prompt.** Se Claude lavora, o aspetta una tua risposta (un permesso, una domanda), il comando resta in coda e il box lo mostra: "queued: /compact · waiting for the turn to end". In un dialogo non scrive mai: un tasto potrebbe rispondere al posto tuo;
 - **nessuno ha scritto nella sessione negli ultimi 10 secondi**, dal Terminale o da un riquadro;
+- **il terminale non è tornato indietro nella cronologia** (modalità copia di tmux, dopo la rotellina): i tasti andrebbero a tmux, non a Claude. Il box lo dice: torna in fondo, o premi q nel riquadro;
 - **la casella del prompt è vuota.** Una tua bozza non viene mai toccata: il comando resta bloccato ("blocked") finché la cancelli o la invii, poi parte da solo. Anche una risposta di `/btw` ancora aperta lo blocca, finché non la chiudi con Esc;
 - **il pane è ancora quello della sessione giusta**, controllato con il pid di Claude a ogni invio. Dopo aver scritto il comando, Forchetta preme Invio solo se il prompt mostra esattamente quel testo.
 
@@ -397,7 +451,7 @@ pnpm build       # dist/: CLI, daemon e pagina (esbuild)
 pnpm build:app   # build/Forchetta.app (swiftc dei Command Line Tools)
 ```
 
-Per provare l'app senza le sessioni vere c'è un daemon di prova, su un'altra porta e con lo stato in `var/sim`. Ci girano 12 sessioni simulate e un arricurdAI finto:
+Per provare l'app senza le sessioni vere c'è un daemon di prova, su un'altra porta e con lo stato in `var/sim`. Ci girano 12 sessioni simulate e un arricurdAI finto; le sessioni e i team avviati dall'app eseguono `scripts/dev/fake-claude.sh`, che mostra una schermata di prova e non ha bisogno di Claude:
 
 ```sh
 sh scripts/dev/sim.sh                                       # daemon di prova sulla porta 47822

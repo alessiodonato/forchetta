@@ -1,17 +1,23 @@
 import { randomUUID } from 'node:crypto';
+import { rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import type { Agent, CommandKind, CommandStatus, QueuedCommand } from '../shared/agent.ts';
 import type { TmuxCommand, TmuxResult } from '../shared/tmux.ts';
 import type { Registry } from './registry.ts';
 import { readPromptBox, screenShows } from './screen.ts';
 import type { HookPayload } from './state.ts';
 
-// The commands of the box: /btw <question>, /compact, /clear. They are typed into the session through its tmux
+// The commands of the box: /btw <question>, /compact, /clear; and the requests of a team of agents, which go in
+// the same queue (so they never cross a command) and are pasted as one block. They are typed into the session through its tmux
 // pane, as you would type them, and only when it is safe:
 //
 //   - the session waits for a new prompt (state "inattiva"): at work, or with a dialog open, the command waits
 //     in a queue, and it is never typed into a dialog, where a key could answer it;
 //   - the pane is still the one of that session and of that claude process (checked by pid every time);
 //   - nobody typed into the session in the last seconds (tmux session_activity counts only keys from clients);
+//   - the pane is not scrolled back (tmux copy mode, the wheel in a pane): there every key goes to tmux, "/" starts
+//     a search and Enter copies the selection to the clipboard;
 //   - the input box is on screen and empty: a draft of yours is never touched, an open answer of /btw is not
 //     closed for you;
 //   - after typing, the box must show exactly the command, or Enter is not pressed.
@@ -19,7 +25,14 @@ import type { HookPayload } from './state.ts';
 // Then a hook confirms it: PostCompact for /compact (PreCompact only says it started: Claude Code may still give
 // up, "Not enough messages to compact", with no PostCompact), SessionEnd/SessionStart "clear" for /clear. /btw has no hook
 // and leaves no trace in the transcript: its answer is only on screen, and the command counts as confirmed when
-// its answer box shows the question.
+// its answer box shows the question. A request is confirmed by UserPromptSubmit with its first line.
+//
+// A request goes in two steps: its first line ("Request #3 from the user:") is typed, as words of the user, and
+// the rest is pasted after it with tmux paste-buffer -p (bracketed paste), so that its newlines stay newlines,
+// not Enters. Claude Code shows a short paste as it is and a long one as "[Pasted text #1 +32 lines]", and takes
+// it whole at Enter (verified with 2.1.322: 2163 characters, answered from the last line). A long paste reaches
+// the model, and UserPromptSubmit, inside <pasted_content>: with the first line typed before it, the request is
+// still the user's own words, and the prompt still starts with them.
 
 export interface CommanderTmux {
   run(command: TmuxCommand, args: readonly string[]): Promise<TmuxResult>;
@@ -45,11 +58,15 @@ export interface CommanderOptions {
   tickMs?: number;
   /** After a turn ends, a moment for the screen to settle before typing. */
   settleMs?: number;
+  /** A request of a team changed status: queued, blocked, sent, confirmed, failed, cancelled. */
+  onRequest?: (agent: Agent, command: QueuedCommand) => void;
 }
 
 export type EnqueueResult = { ok: true; command: QueuedCommand } | { ok: false; error: string };
 
-const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000 };
+const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000 };
+/** The longest request, as the first prompt of a new session. */
+export const MAX_REQUEST = 20_000;
 /** A compaction that started may take minutes on a large context. */
 const COMPACTION_MS = 10 * 60_000;
 const MAX_QUESTION_BYTES = 1000;
@@ -57,7 +74,29 @@ const KEEP_DONE = 3;
 const WAITING: CommandStatus[] = ['in-coda', 'bloccato'];
 const DONE: CommandStatus[] = ['confermato', 'non-confermato', 'fallito'];
 
-export const commandText = (command: Pick<QueuedCommand, 'kind' | 'arg'>): string => (command.kind === 'btw' ? `/btw ${command.arg ?? ''}` : `/${command.kind}`);
+/** What is typed: "/btw …", "/compact", or the whole text of a request. */
+export const commandText = (command: Pick<QueuedCommand, 'kind' | 'arg'>): string =>
+  command.kind === 'btw' ? `/btw ${command.arg ?? ''}` : command.kind === 'request' ? (command.arg ?? '') : `/${command.kind}`;
+
+/** How the log calls it: a request by its number, not by its text. */
+const commandLabel = (command: Pick<QueuedCommand, 'kind' | 'arg' | 'request'>): string => (command.kind === 'request' ? `request #${command.request?.n ?? '?'}` : commandText(command));
+
+/** What the prompt shows of a paste too long to show: "[Pasted text #1 +32 lines]". */
+const PASTED = /^\[Pasted text #\d+(?: \+\d+ lines?)?\]$/;
+
+/** A request split as it is typed: its first line, then the rest (pasted on a line of its own). */
+function requestParts(text: string): { head: string; body: string } {
+  const cut = text.indexOf('\n');
+  return cut < 0 ? { head: text.trim(), body: '' } : { head: text.slice(0, cut).trim(), body: text.slice(cut + 1) };
+}
+
+/** Whether the prompt shows the request: its first line, then the rest as it is or as a long paste. */
+function showsRequest(typed: string, text: string): boolean {
+  if (sameText(typed, text)) return true;
+  const { head } = requestParts(text);
+  const flat = typed.replace(/\s+/g, ' ').trim();
+  return flat.startsWith(head) && PASTED.test(flat.slice(head.length).trim());
+}
 
 /** Each byte as two hex digits: `send-keys -H` types them as they are, with nothing for tmux to interpret. */
 const hexBytes = (text: string): string[] => Buffer.from(text, 'utf8').toString('hex').match(/../g) ?? [];
@@ -124,6 +163,30 @@ export class Commander {
     return { ok: true, command };
   }
 
+  /** A request of a team of agents, whole: it waits in the queue of the session like a command. */
+  enqueueRequest(agentId: string, text: string, request: { crew: string; n: number }): EnqueueResult {
+    const agent = this.options.registry.agents.get(agentId);
+    if (!agent) return { ok: false, error: 'unknown session' };
+    if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'the session is read only or ended' };
+    // Control characters but newlines and tabs go: an Esc in a paste could close it early.
+    const clean = text.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim();
+    if (!clean) return { ok: false, error: 'the request is empty' };
+    if (clean.length > MAX_REQUEST) return { ok: false, error: `request too long (more than ${MAX_REQUEST} characters)` };
+    const command: QueuedCommand = { id: randomUUID(), kind: 'request', arg: clean, request, status: 'in-coda', createdAt: this.now() };
+    agent.commands = [...(agent.commands ?? []), command];
+    this.options.log(`richiesta #${request.n} in coda per ${agent.team?.label ?? agent.project}`);
+    this.prune(agent);
+    this.options.registry.touch(agent);
+    this.changed(agent, command);
+    this.kick(agent.id);
+    return { ok: true, command };
+  }
+
+  /** A request whose status changed: its team is told. */
+  private changed(agent: Agent, command: QueuedCommand): void {
+    if (command.kind === 'request') this.options.onRequest?.(agent, command);
+  }
+
   /**
    * A command waits for a session that `claude agents --json` saw waiting for you, with no hook since: the answer
    * of /btw, for one, closes without a hook. Only another reading tells when it is ready again.
@@ -144,6 +207,7 @@ export class Commander {
     command.doneAt = this.now();
     this.prune(agent);
     this.options.registry.touch(agent);
+    this.changed(agent, command);
     return true;
   }
 
@@ -178,6 +242,8 @@ export class Commander {
       this.finish(agent, flight.command, 'confermato', 'compaction done');
     } else if (flight.command.kind === 'clear' && ((event === 'SessionEnd' && payload.reason === 'clear') || (event === 'SessionStart' && payload.source === 'clear'))) {
       this.finish(agent, flight.command, 'confermato', 'session cleared');
+    } else if (flight.command.kind === 'request' && event === 'UserPromptSubmit' && (payload.prompt ?? '').trim().startsWith(requestParts(flight.command.arg ?? '').head)) {
+      this.finish(agent, flight.command, 'confermato', 'delivered');
     }
   }
 
@@ -209,6 +275,7 @@ export class Commander {
     command.status = status;
     command.reason = reason;
     this.options.registry.touch(agent);
+    this.changed(agent, command);
   }
 
   private finish(agent: Agent, command: QueuedCommand, status: CommandStatus, reason?: string): void {
@@ -216,9 +283,10 @@ export class Commander {
     command.reason = reason;
     command.doneAt = this.now();
     if (this.inflight.get(agent.id)?.command === command) this.inflight.delete(agent.id);
-    this.options.log(`comando ${commandText(command)} per ${agent.project}: ${status}${reason ? ` (${reason})` : ''}`);
+    this.options.log(`comando ${commandLabel(command)} per ${agent.project}: ${status}${reason ? ` (${reason})` : ''}`);
     this.prune(agent);
     this.options.registry.touch(agent);
+    this.changed(agent, command);
     if (agent.state === 'idle' && this.next(agent)) this.kick(agent.id, this.options.settleMs ?? 800);
   }
 
@@ -239,6 +307,7 @@ export class Commander {
         command.reason = 'session ended';
         command.doneAt = this.now();
         changed = true;
+        this.changed(agent, command);
       }
     }
     this.inflight.delete(agent.id);
@@ -248,9 +317,34 @@ export class Commander {
     }
   }
 
-  private async capture(pane: string): Promise<string> {
-    const result = await this.options.tmux.run('capture-pane', ['-p', '-e', '-t', pane]);
+  /**
+   * The screen of the pane. With history, also the last lines that scrolled off it: in a small pane a request of
+   * a few lines pushes the rule above the input box out of the screen, and Claude Code draws in the normal screen,
+   * so the rule is there, in the history of tmux.
+   */
+  private async capture(pane: string, history = false): Promise<string> {
+    const result = await this.options.tmux.run('capture-pane', ['-p', '-e', ...(history ? ['-S', '-60'] : []), '-t', pane]);
     return result.code === 0 ? result.stdout : '';
+  }
+
+  /**
+   * A request as one block, with bracketed paste: from a private file into a tmux buffer, then into the pane. The
+   * text is never an argument of tmux, and the file goes at once.
+   */
+  private async paste(pane: string, text: string): Promise<void> {
+    const { tmux } = this.options;
+    ensurePrivateDir(paths.tmpDir);
+    const id = randomUUID().slice(0, 8);
+    const file = join(paths.tmpDir, `request-${id}.txt`);
+    writeFileSync(file, text, { mode: 0o600 });
+    try {
+      const loaded = await tmux.run('load-buffer', ['-b', `forchetta-${id}`, file]);
+      if (loaded.code !== 0) throw new Error(`tmux did not load the request: ${loaded.stderr.trim()}`);
+    } finally {
+      rmSync(file, { force: true });
+    }
+    const pasted = await tmux.run('paste-buffer', ['-p', '-d', '-b', `forchetta-${id}`, '-t', pane]);
+    if (pasted.code !== 0) throw new Error(`tmux did not paste the request: ${pasted.stderr.trim()}`);
   }
 
   private async dispatch(agentId: string): Promise<void> {
@@ -277,8 +371,13 @@ export class Commander {
       if (Number.isFinite(activity) && this.now() - activity < (this.options.typingQuietMs ?? 10_000)) {
         return this.note(agent, command, 'in-coda', 'you are typing in the session: waiting');
       }
+      // Not scrolled back: in copy mode the keys would go to tmux, not to Claude Code.
+      const mode = await tmux.run('display-message', ['-p', '-t', pane, '#{pane_in_mode}']);
+      if (mode.code === 0 && mode.stdout.trim() === '1') {
+        return this.note(agent, command, 'bloccato', 'the terminal is scrolled back (tmux copy mode): scroll to the end, or press q in it');
+      }
       // The input box is on screen, and empty.
-      const box = readPromptBox(await this.capture(pane));
+      const box = readPromptBox(await this.capture(pane, true));
       if (!box.found) return this.note(agent, command, 'bloccato', 'a dialog or the answer of /btw is open in the terminal: close it with Esc');
       if (box.typed) return this.note(agent, command, 'bloccato', 'there is text in the prompt: it stays as it is');
       // A state that changed while checking: the next round decides again.
@@ -293,10 +392,23 @@ export class Commander {
       }
 
       const text = commandText(command);
-      await tmux.run('send-keys', ['-t', pane, '-H', ...hexBytes(text)]);
+      if (command.kind === 'request') {
+        const { head, body } = requestParts(text);
+        await tmux.run('send-keys', ['-t', pane, '-H', ...hexBytes(head)]);
+        if (body) await this.paste(pane, `\n${body}`);
+      } else await tmux.run('send-keys', ['-t', pane, '-H', ...hexBytes(text)]);
       await this.sleep(this.options.pasteSettleMs ?? 1000);
-      const typed = readPromptBox(await this.capture(pane));
-      if (!typed.found || !sameText(typed.typed, text)) {
+      const shows = (box: ReturnType<typeof readPromptBox>): boolean => box.found && (command.kind === 'request' ? showsRequest(box.typed, text) : sameText(box.typed, text));
+      let typed = readPromptBox(await this.capture(pane, true));
+      // Claude Code may still be drawing a paste of several lines (or the pane is being resized): one more look.
+      if (!shows(typed)) {
+        await this.sleep(this.options.pasteSettleMs ?? 1000);
+        typed = readPromptBox(await this.capture(pane, true));
+      }
+      const shown = shows(typed);
+      if (!shown) {
+        // What the prompt showed, for the log: what went wrong is seen only here.
+        this.options.log(`${commandLabel(command)} per ${agent.project}: il prompt mostra ${typed.found ? JSON.stringify(typed.typed.slice(0, 300)) : 'niente (riquadro non trovato)'}`);
         return this.finish(agent, command, 'fallito', 'the prompt does not show the command as typed: Enter not pressed, check the terminal');
       }
       await tmux.run('send-keys', ['-t', pane, 'Enter']);
@@ -304,8 +416,9 @@ export class Commander {
       command.reason = undefined;
       command.sentAt = this.now();
       this.inflight.set(agentId, { command, deadline: this.now() + ACK_MS[command.kind] });
-      this.options.log(`comando inviato a ${agent.project} (${session}, ${pane}, pid ${agent.pid}): ${text}`);
+      this.options.log(`comando inviato a ${agent.project} (${session}, ${pane}, pid ${agent.pid}): ${commandLabel(command)}`);
       this.options.registry.touch(agent);
+      this.changed(agent, command);
 
       if (command.kind === 'btw') {
         await this.sleep(1500);

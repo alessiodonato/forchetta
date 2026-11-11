@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forchetta manual</title>
+<meta name="description" content="The manual of Forchetta: install it, read your Claude Code sessions, open their terminals, send them commands, answer permissions, and run teams of agents.">
+<meta property="og:title" content="Forchetta manual">
+<meta property="og:description" content="Everything Forchetta does, step by step.">
+<meta property="og:image" content="https://alessiodonato.github.io/forchetta/img/org-chart.png">
+<meta property="og:type" content="article">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #1f1e1c;
+    --surface: #292825;
+    --surface-2: #33312d;
+    --line: #3a3834;
+    --line-strong: #4c4944;
+    --text: #f3f1ec;
+    --text-2: #bdb8ae;
+    --text-3: #8b867d;
+    --accent: #f0a43c;
+    --claude: #d97757;
+    --claude-strong: #c96442;
+    --claude-soft: rgba(217, 119, 87, 0.14);
+    --green: #46c48a;
+    --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 24px; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 var(--ui);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--text); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--claude); }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--claude); outline-offset: 3px; border-radius: 4px; }
+  code, pre, kbd { font-family: var(--mono); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; padding-top: 28px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: 0.01em; text-decoration: none; color: var(--claude); }
+  .brand svg { width: 22px; height: 22px; }
+  .top nav { display: flex; gap: 22px; font-size: 15px; }
+  .top nav a { color: var(--text-2); text-decoration: none; }
+  .top nav a:hover, .top nav a[aria-current] { color: var(--text); }
+
+  .intro { padding-top: 56px; padding-bottom: 8px; }
+  h1 { margin: 0; font-size: clamp(34px, 5vw, 52px); line-height: 1.05; font-weight: 650; letter-spacing: -0.03em; }
+  .intro p { max-width: 40em; margin: 18px 0 0; font-size: 18px; color: var(--text-2); }
+
+  /* The index on the left, sticky; the chapters on the right. On a phone the index folds above the text. */
+  .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 56px; padding-top: 40px; }
+  .toc { position: sticky; top: 24px; align-self: start; max-height: calc(100vh - 48px); overflow-y: auto; font-size: 14px; }
+  .toc summary { display: none; }
+  .toc ol { margin: 0; padding: 0; list-style: none; counter-reset: chapter; }
+  .toc li { counter-increment: chapter; }
+  .toc a { display: block; padding: 4px 0 4px 12px; border-left: 1px solid var(--line); color: var(--text-3); text-decoration: none; }
+  .toc a::before { content: counter(chapter) '. '; color: var(--text-3); }
+  .toc a:hover { color: var(--text); border-left-color: var(--claude); }
+
+  article { max-width: 760px; counter-reset: chapter; }
+  article > section { padding-bottom: 56px; }
+  h2 { counter-increment: chapter; margin: 0 0 16px; font-size: clamp(24px, 3vw, 30px); line-height: 1.2; font-weight: 650; letter-spacing: -0.02em; }
+  h2::before { content: counter(chapter) '. '; color: var(--text-3); font-weight: 500; }
+  h3 { margin: 30px 0 10px; font-size: 18px; font-weight: 620; }
+  p { margin: 0 0 14px; color: var(--text-2); }
+  p strong, li strong, td strong { color: var(--text); font-weight: 600; }
+  ul, ol.steps { margin: 0 0 16px; padding-left: 22px; color: var(--text-2); }
+  li { margin-bottom: 6px; }
+  li > ul { margin: 6px 0 0; }
+
+  pre { margin: 0 0 16px; padding: 14px 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 13.5px; line-height: 1.55; color: var(--text); }
+  :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--surface); font-size: 0.88em; color: var(--text); }
+  kbd { padding: 1px 6px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); font-size: 0.85em; color: var(--text); }
+
+  .ui { font-family: var(--mono); font-size: 0.9em; color: var(--text); }
+
+  .note { margin: 0 0 16px; padding: 12px 16px; border-left: 2px solid var(--claude); border-radius: 0 8px 8px 0; background: var(--claude-soft); color: var(--text-2); }
+  .note strong { color: var(--text); }
+
+  .table { margin: 0 0 18px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; color: var(--text-2); }
+  th { background: var(--surface); font-weight: 600; color: var(--text); }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { white-space: nowrap; }
+
+  figure { margin: 8px 0 22px; }
+  figure img { display: block; width: 100%; height: auto; border: 1px solid var(--line-strong); border-radius: 12px; }
+  figcaption { margin-top: 10px; font-size: 14px; color: var(--text-3); }
+
+  footer.end { margin-top: 40px; padding: 28px 0 48px; border-top: 1px solid var(--line); font-size: 14px; color: var(--text-3); }
+  footer.end .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
+  footer.end a { color: var(--text-2); }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 8px; padding-top: 28px; }
+    .toc { position: static; max-height: none; margin-bottom: 28px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .toc summary { display: block; padding: 12px 16px; cursor: pointer; font-weight: 600; color: var(--text); }
+    .toc ol { padding: 0 16px 12px; }
+  }
+
+  @media (max-width: 600px) {
+    body { font-size: 15.5px; }
+    .wrap { padding: 0 16px; }
+    .intro { padding-top: 40px; }
+    .intro p { font-size: 16.5px; }
+    /* On a phone each row of a table is a small card: its first cell on top, the others below it. */
+    table, tbody, tr, td { display: block; }
+    thead { display: none; }
+    tr { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+    tr:last-child { border-bottom: 0; }
+    td { padding: 2px 0; border: 0; }
+    td:first-child { white-space: normal; color: var(--text); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap top">
+  <a class="brand" href="./" aria-label="Forchetta, home">
+    <svg viewBox="0 0 18 18" aria-hidden="true"><g fill="#d97757"><rect x="5.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="7.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="10.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="12.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="5.1" y="6.4" width="8.8" height="2.6" rx="1.3"/><path d="M7.4 8.6h4.2l-1.5 2.8H8.9z"/><rect x="8.6" y="10.8" width="1.8" height="6.4" rx=".9"/></g></svg>
+    Forchetta
+  </a>
+  <nav aria-label="Site">
+    <a href="manual.html" aria-current="page">Manual</a>
+    <a href="./#install">Install</a>
+    <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
+  </nav>
+</div>
+
+<main>
+  <div class="wrap intro">
+    <h1>The manual</h1>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.8.0. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+  </div>
+
+  <div class="wrap layout">
+    <details class="toc" open>
+      <summary>Contents</summary>
+      <nav aria-label="Contents">
+        <ol>
+          <li><a href="#start">Getting started</a></li>
+          <li><a href="#window">The window</a></li>
+          <li><a href="#terminals">The terminals</a></li>
+          <li><a href="#commands">Commands to a session</a></li>
+          <li><a href="#permissions">Permissions from the box</a></li>
+          <li><a href="#new-session">New session</a></li>
+          <li><a href="#teams">Teams of agents</a></li>
+          <li><a href="#changes">Changes and conflicts</a></li>
+          <li><a href="#alerts">Notifications and the menu bar</a></li>
+          <li><a href="#cost">Context, cache and cost</a></li>
+          <li><a href="#search">Search and summaries</a></li>
+          <li><a href="#cli">Command line</a></li>
+          <li><a href="#config">Configuration</a></li>
+          <li><a href="#data">Your data</a></li>
+          <li><a href="#trouble">Troubleshooting</a></li>
+          <li><a href="#uninstall">Uninstall</a></li>
+        </ol>
+      </nav>
+    </details>
+
+    <article>
+      <section id="start">
+        <h2>Getting started</h2>
+        <p>You need macOS 12 or later and <a href="https://code.claude.com">Claude Code</a>. With <a href="https://brew.sh">Homebrew</a>:</p>
+        <pre>brew install alessiodonato/tap/forchetta
+forchetta setup</pre>
+        <p>Homebrew brings Node.js and tmux with it. <code>forchetta setup</code> checks tmux, Claude Code and the Xcode Command Line Tools, builds the app on your Mac and puts it in <code>~/Applications</code>, then adds the hooks of Forchetta to Claude Code. It shows you every change to <code>~/.claude/settings.json</code> first, and asks; answer <code>d</code> to see the whole diff. Built on your Mac, the app opens with no warning from macOS.</p>
+        <p>Open <strong>Forchetta</strong> from <code>~/Applications</code>. The Claude Code sessions already running show up on their own, wherever you started them: in the Terminal, in iTerm, in an editor.</p>
+
+        <h3>Sessions you can act on</h3>
+        <p>Forchetta shows every session, but it can type into a session, and open its terminal, only when the session runs in its own tmux. Start a session there in one of two ways:</p>
+        <ul>
+          <li>in a terminal, with <code>forchetta run claude</code>, which takes the same arguments as <code>claude</code> (<code>forchetta run claude --continue</code>);</li>
+          <li>in the app, with <span class="ui">new session</span> or <span class="ui">new team</span>.</li>
+        </ul>
+        <p>A session started with plain <code>claude</code> is <strong>read only</strong>: its box shows what it does, and you can answer its permissions, but Forchetta cannot send it commands. Hover its box to read why.</p>
+        <p>To go through Forchetta every time you type <code>claude</code>, add an alias to <code>~/.zshrc</code>. <code>forchetta run</code> uses the full path of <code>claude</code>, so there is no loop; <code>command claude</code> runs the original once.</p>
+        <pre>alias claude='forchetta run claude'</pre>
+
+        <h3>Living in tmux</h3>
+        <ul>
+          <li><strong>Closing the Terminal window does not end the session</strong>: it only detaches it. Claude goes on, and Forchetta goes on showing it. <code>/exit</code> ends it.</li>
+          <li><kbd>Ctrl-b</kbd> <kbd>d</kbd> detaches without closing the window.</li>
+          <li>To attach again from a terminal, open its pane in the app, or use tmux with the socket of Forchetta:<br><code>tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" attach -t fk-xxxxxxxx</code> (the names come from <code>… ls</code> with the same socket).</li>
+          <li>The daemon of Forchetta starts by itself. Stopping it, or quitting the app, stops no session.</li>
+        </ul>
+        <p>After <code>brew upgrade forchetta</code>, run <code>forchetta setup</code> again: it builds the app again only when it changed.</p>
+      </section>
+
+      <section id="window">
+        <h2>The window</h2>
+        <p>One box per session. It shows up when the session starts, fades when it ends, and goes away 10 minutes later. Each box shows:</p>
+        <ul>
+          <li>the project (or the name you gave it) and the state;</li>
+          <li>the current action, <code>Edit src/api.ts</code> or <code>Bash npm test</code> for example, or what the session is asking you;</li>
+          <li>a short summary, from the last request and the last reply;</li>
+          <li>the context, as a bar and in tokens, and the countdown of the prompt cache (with <a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a>);</li>
+          <li>the cost of the session, the time since its last event, and <span class="ui">tmux</span> or <span class="ui">read only</span>.</li>
+        </ul>
+
+        <h3>The states</h3>
+        <div class="table"><table>
+          <thead><tr><th>State</th><th>How it looks</th></tr></thead>
+          <tbody>
+            <tr><td><strong>working</strong></td><td>the border pulses slowly</td></tr>
+            <tr><td><strong>waiting</strong> for you</td><td>amber, with a breath: a permission, a question, a plan to approve</td></tr>
+            <tr><td><strong>turn finished</strong></td><td>green for a moment, with a check</td></tr>
+            <tr><td><strong>error</strong></td><td>red, with a single shake</td></tr>
+            <tr><td><strong>compacting</strong></td><td>the context bar squeezes</td></tr>
+          </tbody>
+        </table></div>
+        <p>Amber, green and red only ever mean a state. Claude orange marks what you can act on: the buttons that start something, what you chose, the pane you are typing in. With “Reduce motion” on in macOS, the states stay recognizable but still. When the window is hidden, nothing moves.</p>
+
+        <h3>Names, groups and roles</h3>
+        <p>Hover a box and click <strong>✎</strong> to give the session a <strong>name</strong> (shown in place of the folder), a <strong>group</strong>, a <strong>role</strong> in free text, and the mark <span class="ui">lead of the group</span>. The choice is kept for its folder too: a session that starts again in the same folder finds its place again. <span class="ui">Remove</span> clears it.</p>
+        <p>With at least one group, <span class="ui">grid / org chart</span> appears at the top. In the org chart each group has its section, the leads above and the others below; the sessions with no group come last. A team of agents is a group too.</p>
+      </section>
+
+      <section id="terminals">
+        <h2>The terminals</h2>
+        <p>Click a box to open the terminal of its session in the work area; the boxes become a column on the left. Up to four terminals stay open:</p>
+        <ul>
+          <li>1: the whole area; 2: side by side; 3: the one you activated last, large on the left, the other two stacked; 4: two by two.</li>
+          <li>The fifth click replaces the pane used longest ago. To choose every time, set <code>"panes": { "replace": "chiedi" }</code> in the <a href="#config">configuration</a>.</li>
+          <li><strong>✕ closes the pane only</strong>: the session goes on in tmux and stays in the column.</li>
+        </ul>
+        <h3>Inside a terminal</h3>
+        <ul>
+          <li>You type as in the Terminal, with the keys of Claude Code: <kbd>Esc</kbd> interrupts, <kbd>Shift</kbd>+<kbd>Return</kbd> starts a new line.</li>
+          <li><kbd>Option</kbd> stays Option: on an Italian keyboard it types @, # and the square brackets.</li>
+          <li>The wheel scrolls the history of tmux. That puts the pane in tmux <strong>copy mode</strong>: scroll back to the end, or press <kbd>q</kbd>, to type to Claude again.</li>
+          <li><kbd>Option</kbd> + drag selects text.</li>
+          <li>Typing in a pane keeps the keyboard there, even while Claude answers in another pane.</li>
+        </ul>
+      </section>
+
+      <section id="commands">
+        <h2>Commands to a session</h2>
+        <p>Hover a box, or look at the header of an open pane: <span class="ui">btw…</span>, <span class="ui">compact</span> and <span class="ui">clear</span>. They work for sessions in the tmux of Forchetta.</p>
+        <ul>
+          <li><strong>btw…</strong> opens a field for a side question; <kbd>Return</kbd> sends it. Its answer shows only in the terminal of the session: <span class="ui">open</span> takes you there.</li>
+          <li><strong>compact</strong> goes at once.</li>
+          <li><strong>clear</strong> asks first, with the tokens it will empty. With arricurdAI 0.5.0 or later, a note is written first, so the new conversation starts where the old one left off.</li>
+        </ul>
+        <h3>When a command goes</h3>
+        <p>Forchetta types a command as you would, and only when it is safe. Until then it waits in the queue of the session, and the box says why (<span class="ui">queued: /compact · waiting for the turn to end</span>). It goes when:</p>
+        <ul>
+          <li>the session waits for a new prompt: never into a dialog, where a key could answer for you;</li>
+          <li>nobody typed in the session in the last 10 seconds;</li>
+          <li>the prompt is empty: a draft of yours blocks it until you send or delete it;</li>
+          <li>the terminal is not scrolled back in copy mode;</li>
+          <li>the pane still belongs to the same Claude process.</li>
+        </ul>
+        <p>A command still in the queue can be cancelled from the box. <code>/compact</code> is confirmed by its hook; <code>/clear</code> by the end and the start of the conversation.</p>
+        <h3>One command to several sessions</h3>
+        <p>With at least two sessions you can act on, <span class="ui">command to several</span> appears at the top. Choose <code>/compact</code>, <code>/clear</code> or <code>/btw</code>, then the sessions: one by one, <span class="ui">context ≥ 80%</span>, all or none. Each one gets its command as if it came from its own box, with the same queue and the same checks.</p>
+      </section>
+
+      <section id="permissions">
+        <h2>Permissions from the box</h2>
+        <p>When a session asks for a permission, its box shows the request in full, with <span class="ui">Allow</span> and <span class="ui">Deny</span>. It works for every interactive session, read only ones too.</p>
+        <ul>
+          <li><strong>Allow</strong> works once, like “Yes” in the Terminal.</li>
+          <li><strong>always…</strong> shows the lasting choices Claude Code offers for that request (a rule, a folder, a mode), each with where it applies: this session, or the project for you or for everyone. Claude Code writes the rule. Choices for every project, and skipping all permissions, stay in the Terminal.</li>
+          <li><strong>Deny</strong> stops Claude, like “No”: it reads that you denied it from Forchetta, and waits for your next prompt.</li>
+        </ul>
+        <p>The dialog stays in the Terminal too, and <strong>whoever answers first wins</strong>. Before it sends your answer, Forchetta checks that the session still waits. The buttons wake up 0.7 s after the request appears, so a click meant for something else does not answer it. Questions and plan approvals have no buttons: answer them in the terminal.</p>
+      </section>
+
+      <section id="new-session">
+        <h2>New session</h2>
+        <p><span class="ui">new session</span>, at the top, opens a panel. Type the folder (<code>~/</code> works), pick one of the recent ones, or use <span class="ui">Choose…</span>. The first prompt is optional; <kbd>⌘</kbd><kbd>↩</kbd> starts.</p>
+        <ul>
+          <li><strong>model</strong>: Opus, Sonnet, Haiku or Fable, for that session only (<code>--model</code>). It does not change your default model.</li>
+          <li><strong>permissions</strong>: asks every time, accepts edits, auto or plan (<code>--permission-mode</code>).</li>
+          <li><strong>new worktree</strong>, with an optional name: Claude Code makes a git worktree for the session alone (<code>--worktree</code>). The folder must be in a git repository that Claude Code trusts.</li>
+        </ul>
+        <p>The session starts in the tmux of Forchetta through your login shell, so it has the PATH of a new Terminal tab, and its terminal opens at once. A folder you never opened with Claude asks there whether you trust it.</p>
+      </section>
+
+      <section id="teams">
+        <h2>Teams of agents</h2>
+        <p>A team is a group of Claude Code sessions that work together. A <strong>lead</strong> gives the requests and the <strong>members</strong> carry them out. The lead is a Claude session, or you.</p>
+        <figure>
+          <img src="img/org-chart.png" width="2400" height="1597" loading="lazy" alt="The org chart: the team checkout, its lead above and its three members below, each with the request it works on.">
+          <figcaption>The team checkout at work: the lead waits for the answers it needs, each member shows the request it is working on.</figcaption>
+        </figure>
+
+        <h3>Create a team</h3>
+        <figure>
+          <img src="img/new-team.png" width="2400" height="984" loading="lazy" alt="The new team panel, filled from the feature squad template: a Claude lead and three members, the tester set to execute only.">
+          <figcaption>The panel of a new team, from the <em>feature squad</em> template.</figcaption>
+        </figure>
+        <ol class="steps">
+          <li>Click <span class="ui">new team</span> at the top.</li>
+          <li>Optionally, <span class="ui">Start from</span> a template: <em>developer + reviewer</em>, <em>feature squad</em> (frontend, backend, tester), <em>research + writing</em>, or one you saved.</li>
+          <li>Give the team a <strong>name</strong> (it becomes its group in the org chart) and a <strong>folder</strong>.</li>
+          <li>Choose the <strong>lead</strong>: <span class="ui">Claude</span>, with a name, a role, a model and a permission mode, or <span class="ui">you</span>.</li>
+          <li>Add the <strong>members</strong>, up to 6: a name and, in one sentence, what each one does. <span class="ui">more</span> holds the model, the permissions and the worktree of a member.</li>
+          <li>For each member, choose how it talks with the lead (below), and whether the members work in their own worktree.</li>
+          <li><span class="ui">Create team</span>, or <kbd>⌘</kbd><kbd>↩</kbd>.</li>
+        </ol>
+        <p>Every session starts in the tmux of Forchetta, the lead first. From its system prompt each one knows who it is, its role, its lead and the other members. Its name shows in its box, in its pane and in Claude Code. <span class="ui">Save as template</span> keeps the team without its folder, to start it again elsewhere.</p>
+
+        <h3>⇄ answers, or → executes</h3>
+        <div class="table"><table>
+          <thead><tr><th>Member</th><th>What happens when it finishes a request</th></tr></thead>
+          <tbody>
+            <tr><td><strong>⇄ answers</strong></td><td>Its final message goes back to whoever asked: to a Claude lead as a new prompt, “Answer from developer to request #2:”, or to you, in the team panel. If it cannot go on, it can ask the lead a question.</td></tr>
+            <tr><td><strong>→ executes</strong></td><td>It does the work and sends nothing back. Good for steps whose result you see in the files: formatting, running the tests, writing a text.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>How the work goes</h3>
+        <p>Give the goal to the lead: from the <a href="#team-panel">team panel</a>, or by writing in its terminal. A Claude lead works with the tools of the team, an MCP server called <code>forchetta</code> that only the sessions of the team get, and that needs no permission:</p>
+        <div class="table"><table>
+          <thead><tr><th>Tool</th><th>Who has it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>send_request</code></td><td>lead</td><td>Gives work to one member, to some or to all. The request gets a number and reaches each member as a new prompt, “Request #3 from lead:”, as soon as its session is free; until then it waits in its queue.</td></tr>
+            <tr><td><code>wait_for_answers</code></td><td>lead</td><td>Waits for the answers of its requests, up to 10 minutes, and returns them all at once, in the same turn. Answers that come later arrive as prompts.</td></tr>
+            <tr><td><code>team</code></td><td>lead, ⇄ members</td><td>Shows the members, what each one does, what it is working on, and the folder and branch of each.</td></tr>
+            <tr><td><code>ask_lead</code></td><td>⇄ members</td><td>Asks the lead about the current request, as “Question from reviewer about request #3:”. The answer comes back as a new request.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Requests are delivered like the <a href="#commands">commands of the box</a>: with the same queue and the same checks. A long one shows in the terminal of the member as <code>[Pasted text #1 +N lines]</code>, as when you paste it yourself. When you are the lead, the answers and the questions come to you.</p>
+
+        <h3 id="team-panel">The team panel</h3>
+        <figure>
+          <img src="img/team.png" width="2400" height="1418" loading="lazy" alt="The panel of the team checkout: the thread of requests, answers and a question, then the field to write a new request.">
+          <figcaption>The thread of the team, and the field to write to it.</figcaption>
+        </figure>
+        <p><span class="ui">team</span>, at the top, appears when there is at least one team. It shows the thread of the team, oldest first:</p>
+        <ul>
+          <li>each request, with who sent it, to whom, and how it goes for each one: in the queue, working, done;</li>
+          <li>the answers, and where they went: <span class="ui">delivered to lead</span>, <span class="ui">collected by lead (waiting for it)</span>, <span class="ui">for you</span>, or <span class="ui">not sent back</span> (a member that executes only, or one that asked a question instead);</li>
+          <li>the questions of the members.</li>
+        </ul>
+        <p>Below the thread, write a request yourself, to the lead, to one member or to all; it arrives as “Request #n from the user:”. In the grid and in the org chart, the box of each session says what it works on (<span class="ui">#4 from lead: Write the tests…</span>), and the box of a Claude lead says which requests it still waits for.</p>
+
+        <h3>Change a team while it works</h3>
+        <p><span class="ui">edit team</span>, in the team panel:</p>
+        <ul>
+          <li><strong>→ / ⇄</strong> of a member: it applies from its next request, which tells the member.</li>
+          <li><strong>remove</strong> takes a member out: its requests still in the queue are cancelled and its box leaves the group. Its session goes on; <code>/exit</code> ends it.</li>
+          <li><strong>+ member</strong> adds one, started like the others.</li>
+          <li><strong>Save as template</strong> keeps the team as it is now.</li>
+        </ul>
+        <p>A Claude lead learns of every change with its next prompt.</p>
+
+        <h3>Worktrees and merging</h3>
+        <p>With <span class="ui">members in own worktree</span>, on by default, Claude Code makes a git worktree for each member, in <code>.claude/worktrees/</code> of the repository, on a branch of its own. The members never touch each other's files. Each member commits its work at the end of each request; the lead stays in the folder of the team and merges the branches with git when the work is good, or tells you it is ready.</p>
+        <ul>
+          <li>The folder must be in a git repository. Otherwise the members share the folder.</li>
+          <li>Claude Code makes a worktree only in a folder it trusts. If you never opened the folder with <code>claude</code>, only the first session of the team starts: answer the trust dialog in its terminal, and the others start, each in its worktree.</li>
+        </ul>
+
+        <h3>Limits</h3>
+        <ul>
+          <li>6 members per team, and team names are unique.</li>
+          <li>20 requests open at once in a team: a lead cannot hand out more work than you can follow.</li>
+          <li>20,000 characters per request.</li>
+        </ul>
+        <div class="note"><strong>A first run.</strong> Start from <em>developer + reviewer</em> in a small repository you already opened with Claude Code, and write to the lead: “Add a --verbose flag to the CLI, have it reviewed, then tell me what changed.” Follow it in the org chart and in the team panel.</div>
+      </section>
+
+      <section id="changes">
+        <h2>Changes and conflicts</h2>
+        <h3>The changes of a session</h3>
+        <p>When a session has written files, its box shows a button like <span class="ui">3 files</span> (also in the header of its pane). It opens two views:</p>
+        <ul>
+          <li><strong>by this session</strong>: each change the session made, as Claude Code reported it (<span class="ui">edit · 3 min ago</span>, <span class="ui">file created</span>);</li>
+          <li><strong>since the last commit</strong>: the diff of its repository, the file as it is now.</li>
+        </ul>
+        <p>Only what was written with <code>Edit</code> and <code>Write</code> counts; a Bash command that changes files is not seen.</p>
+        <h3>Conflicts between sessions</h3>
+        <p>When two live sessions wrote the same file in the last hour, both boxes say so: <span class="ui">⚠ same file as beta: src/api.ts</span>. Different files in the same repository give a softer warning, <span class="ui">⚠ same repo as beta</span>. Two worktrees of a repository are two places, and never conflict.</p>
+      </section>
+
+      <section id="alerts">
+        <h2>Notifications and the menu bar</h2>
+        <ul>
+          <li><strong>A session waits for you</strong> for at least 5 seconds: a notification, and the count on the Dock icon. A click opens Forchetta on its terminal.</li>
+          <li><strong>A session seems stuck</strong>: “working”, but no event for 10 minutes. Its box says so, with the command in progress; so does a notification.</li>
+          <li><strong>A turn ends with an error</strong>, such as a rate limit: a notification that stays in Notification Center.</li>
+        </ul>
+        <p>The fork in the menu bar shows how many sessions wait for you; its menu lists every session, with what it asks or its context and cost. <kbd>⌃</kbd><kbd>⌥</kbd><kbd>F</kbd> shows or hides Forchetta from any app. Closing the window hides it: the app stays in the menu bar. <kbd>⌘</kbd><kbd>Q</kbd> quits.</p>
+      </section>
+
+      <section id="cost">
+        <h2>Context, cache and cost</h2>
+        <ul>
+          <li><strong>The cost of each session</strong>, in its box, is the one Claude Code computes for <code>/cost</code>. It reaches Forchetta through your status line, which <code>forchetta hooks install</code> wraps without changing what it shows.</li>
+          <li><strong>Context and prompt cache</strong> come from <a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a>, if you use it: the bar, the tokens, the countdown of the cache, and the <span class="ui">guard</span> badge when arricurdAI will stop the next prompt. The percentage is an estimate (<code>≈</code>).</li>
+          <li><strong>The total of today</strong>, at the top, counts every call of every session since midnight, at API prices (with arricurdAI).</li>
+        </ul>
+      </section>
+
+      <section id="search">
+        <h2>Search and summaries</h2>
+        <p><span class="ui">search</span>, at the top, finds the passages of earlier sessions of a project that talk about your words, with their date and the request they answered. It runs <code>arricurdai recall</code>, which hides secrets, and only when you ask.</p>
+        <p>The summary of a box comes from the events of the session. It can come from Haiku instead, a line written only when the state changes. It is off: this is the one call Forchetta can make outside your Mac. To turn it on, set <code>"summaries": { "haiku": true }</code>, export your key as <code>FORCHETTA_ANTHROPIC_API_KEY</code>, and restart the daemon from that terminal.</p>
+      </section>
+
+      <section id="cli">
+        <h2>Command line</h2>
+        <p><code>forchetta --help</code> lists the commands, and <code>forchetta &lt;command&gt; --help</code> explains each one.</p>
+        <div class="table"><table>
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>forchetta setup</code></td><td>Builds the app and installs the hooks. <code>--yes</code> without asking, <code>--diff</code> shows the whole diff, <code>--force</code> builds again, <code>--app-dir &lt;folder&gt;</code> puts the app elsewhere.</td></tr>
+            <tr><td><code>forchetta run claude [args]</code></td><td>Starts Claude Code in the tmux of Forchetta and attaches this terminal.</td></tr>
+            <tr><td><code>forchetta ls</code></td><td>One line per session: state, what it does, context and cache, <code>tmux</code> or read only.</td></tr>
+            <tr><td><code>forchetta ls --json</code></td><td>The same as JSON, for scripts: <code>forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'</code></td></tr>
+            <tr><td><code>forchetta daemon start|stop|status</code></td><td>Manages the local daemon. Stopping it stops no session; <code>status</code> exits with 1 when it is not running.</td></tr>
+            <tr><td><code>forchetta hooks install|uninstall</code></td><td>Adds or removes the hooks in <code>~/.claude/settings.json</code>, asking first and keeping a copy. <code>--yes</code>, <code>--diff</code>.</td></tr>
+          </tbody>
+        </table></div>
+        <p>The CLI uses the colors of the app; <code>NO_COLOR=1</code> turns them off.</p>
+      </section>
+
+      <section id="config">
+        <h2>Configuration</h2>
+        <p>The settings are in <code>config.json</code>, in the <a href="#data">data folder</a>. <code>forchetta setup</code> writes the paths; the rest is optional. Restart the daemon after a change (<code>forchetta daemon stop &amp;&amp; forchetta daemon start</code>); the shortcut is read when the app starts.</p>
+        <div class="table"><table>
+          <thead><tr><th>Key</th><th>Default</th><th>What it sets</th></tr></thead>
+          <tbody>
+            <tr><td><code>stallMin</code></td><td><code>10</code></td><td>Minutes with no event before a working session counts as stuck.</td></tr>
+            <tr><td><code>panes.replace</code></td><td><code>"lru"</code></td><td>The fifth terminal replaces the one used longest ago; <code>"chiedi"</code> asks which one.</td></tr>
+            <tr><td><code>hotkey</code></td><td><code>"ctrl+alt+f"</code></td><td>The shortcut that shows Forchetta: letters, digits or <code>space</code>, with at least one modifier; <code>""</code> turns it off.</td></tr>
+            <tr><td><code>endedRetentionMin</code></td><td><code>10</code></td><td>How long an ended session stays in the window.</td></tr>
+            <tr><td><code>contextWindows</code></td><td>1M; 200k for Haiku 4.5, Sonnet 4.6, Opus 4.6</td><td>The window of each model, for the percentage of the context. A key matches a model id or its beginning; <code>"*"</code> is the rest.</td></tr>
+            <tr><td><code>arricurdai</code></td><td>found by itself</td><td>The command of arricurdAI, as a list: <code>["/path/to/arricurdai"]</code>.</td></tr>
+            <tr><td><code>summaries.haiku</code></td><td><code>false</code></td><td>The summaries by Haiku (see <a href="#search">above</a>).</td></tr>
+            <tr><td><code>port</code></td><td><code>47821</code></td><td>The port of the daemon, on <code>127.0.0.1</code> only.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="data">
+        <h2>Your data</h2>
+        <p>Forchetta keeps what it writes in <code>~/Library/Application Support/Forchetta</code> (in a clone, <code>var/</code> inside it), readable only by you:</p>
+        <ul>
+          <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
+          <li><code>state.json</code>, the sessions; <code>teams.json</code>, names, groups and roles by folder;</li>
+          <li><code>crews/</code>, the teams of agents, one file each; <code>crew-templates.json</code>, your templates;</li>
+          <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>daemon.log</code>.</li>
+        </ul>
+        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code> and, after asking, <code>~/.claude/settings.json</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception.</p>
+      </section>
+
+      <section id="trouble">
+        <h2>Troubleshooting</h2>
+        <div class="table"><table>
+          <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td>A box says <span class="ui">read only</span></td><td>The session was started outside Forchetta. Start the next one with <code>forchetta run claude</code>, or from the app.</td></tr>
+            <tr><td>A command stays <span class="ui">blocked</span></td><td>The prompt of the session holds a draft: send or delete it. Or the terminal is scrolled back: scroll to the end, or press <kbd>q</kbd> in it.</td></tr>
+            <tr><td>A team starts only its first session</td><td>Claude Code does not trust the folder yet: answer the trust dialog in that terminal, and the rest of the team starts.</td></tr>
+            <tr><td>A worktree session ends at once</td><td>The folder is not in git, or not trusted by Claude Code: open it once with <code>claude</code> and accept the dialog.</td></tr>
+            <tr><td><span class="ui">Daemon unreachable</span></td><td><code>forchetta daemon status</code>, then <code>forchetta daemon start</code>. The sessions are not affected.</td></tr>
+            <tr><td>The app cannot find the daemon, from a clone on the Desktop</td><td>macOS asks whether Forchetta may access that folder: allow it in System Settings → Privacy &amp; Security → Files and Folders.</td></tr>
+            <tr><td>No boxes at all</td><td>The hooks are missing: <code>forchetta hooks install</code>. Sessions already open pick them up by themselves.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="uninstall">
+        <h2>Uninstall</h2>
+        <ol class="steps">
+          <li><code>forchetta hooks uninstall</code>: removes only the hooks of Forchetta, after asking, and gives you back your status line.</li>
+          <li><code>forchetta daemon stop</code>. The sessions started with <code>forchetta run</code> go on until you <code>/exit</code> them.</li>
+          <li><code>brew uninstall forchetta</code> and <code>brew untap alessiodonato/tap</code>.</li>
+          <li>Delete <code>~/Applications/Forchetta.app</code> and <code>~/Library/Application Support/Forchetta</code>.</li>
+        </ol>
+      </section>
+    </article>
+  </div>
+</main>
+
+<footer class="end">
+  <div class="wrap">
+    <span>Forchetta is Italian for fork. Apache 2.0.</span>
+    <span><a href="./">Home</a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/alessiodonato/forchetta">Source on GitHub</a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/alessiodonato/forchetta/blob/main/README.it.md">In italiano</a></span>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,10 +1,32 @@
 #!/bin/sh
 # Last step of a session started from the app, run by your login shell after it read its profile (so the
-# session has the PATH and the variables of a new terminal tab). The first prompt comes in FORCHETTA_PROMPT,
-# never through tmux or a shell: it is taken out of the environment and given to claude as its argument, after
-# "--", so that claude never reads it as an option (a prompt that starts with "-", or the name of --worktree).
+# session has the PATH and the variables of a new terminal tab). The texts come in the environment, never through
+# tmux or a shell, and are taken out of it before claude starts:
+#   FORCHETTA_SYSTEM_PROMPT  added to the system prompt of claude (--append-system-prompt): who a member of a team is;
+#   FORCHETTA_NAME           the name of the session in Claude Code (--name);
+#   FORCHETTA_MCP_CONFIG     the MCP configuration with the tools of its team (--mcp-config);
+#   FORCHETTA_ALLOWED_TOOLS  those tools, allowed without asking (--allowedTools);
+#   FORCHETTA_PROMPT         the first prompt, given as the last argument after "--", so that claude never reads it
+#                            as an option (a prompt that starts with "-", or the name of --worktree).
 prompt=${FORCHETTA_PROMPT:-}
-unset FORCHETTA_PROMPT
+system=${FORCHETTA_SYSTEM_PROMPT:-}
+name=${FORCHETTA_NAME:-}
+mcp=${FORCHETTA_MCP_CONFIG:-}
+tools=${FORCHETTA_ALLOWED_TOOLS:-}
+unset FORCHETTA_PROMPT FORCHETTA_SYSTEM_PROMPT FORCHETTA_NAME FORCHETTA_MCP_CONFIG FORCHETTA_ALLOWED_TOOLS
+if [ -n "$system" ]; then
+  set -- "$@" --append-system-prompt "$system"
+fi
+if [ -n "$name" ]; then
+  set -- "$@" --name "$name"
+fi
+# --mcp-config and --allowedTools take several values: "--" or the end of the line closes them.
+if [ -n "$mcp" ]; then
+  set -- "$@" --mcp-config "$mcp"
+fi
+if [ -n "$tools" ]; then
+  set -- "$@" --allowedTools "$tools"
+fi
 if [ -n "$prompt" ]; then
   exec "$@" -- "$prompt"
 fi
