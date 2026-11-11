@@ -1,10 +1,35 @@
+<div align="center">
+
+<img src="docs/img/logo.svg" alt="" width="96" height="96">
+
 # Forchetta
 
-A local control center for the Claude Code sessions running in parallel on your Mac. Site: <https://alessiodonato.github.io/forchetta/>
+### Every Claude Code session on your Mac, in one window.
 
-**English** · [Italiano](README.it.md)
+Forchetta finds the Claude Code sessions you have running and shows, live, what each one is doing, what it is waiting for and what it has cost. Open up to four side by side, answer permission prompts from their box, and get a notification when one needs you.
 
-**What it does** (version 0.6.0):
+[![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#install)
+[![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#install)
+[![For Claude Code](https://img.shields.io/badge/for-Claude%20Code-d97757?style=flat-square)](https://code.claude.com)
+[![Runs locally](https://img.shields.io/badge/runs-locally-46c48a?style=flat-square)](#uninstall)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-8b867d?style=flat-square)](LICENSE)
+[![Website](https://img.shields.io/badge/website-forchetta-d97757?style=flat-square)](https://alessiodonato.github.io/forchetta/)
+
+[Install](#install) ·
+[What it does](#what-it-does) ·
+[arricurdAI](#works-with-arricurdai) ·
+[Uninstall](#uninstall) ·
+[🇮🇹 Italiano](README.it.md)
+
+<br>
+
+<img src="docs/img/overview.png" alt="The Forchetta window: twelve sessions, each in a box with its state, what it is doing, a summary, its context and its cost. Two wait for you, in amber." width="100%">
+
+</div>
+
+## What it does
+
+Version 0.7.0:
 - finds the Claude Code sessions that are running and shows a box for each one, with its state, current action, summary, context, cache and cost;
 - opens up to 4 sessions side by side, in real terminals attached to tmux;
 - sends `/btw`, `/compact` and `/clear` to one session or to several, only when it is safe;
@@ -14,35 +39,56 @@ A local control center for the Claude Code sessions running in parallel on your 
 
 Everything runs on your Mac. The one outside service, optional and off by default, is the Claude API for the summaries.
 
-## Requirements
-
-- macOS 12 or later.
-- Node.js 22 or later, and pnpm.
-- tmux 3.x: `brew install tmux`.
-- Claude Code: tested with version 2.1.322.
-- For the app: the Xcode Command Line Tools (`xcode-select --install`). Xcode itself is not needed.
-- Optional: [arricurdAI](https://github.com/alessiodonato/arricurdai), for context and cache.
-
 ## Install
 
 ```sh
-cd /Users/dev/Desktop/Forchetta
-pnpm install      # also makes the spawn-helper of node-pty executable
-pnpm build        # CLI, daemon and the page of the app in dist/
-pnpm build:app    # build/Forchetta.app, about 10 seconds
+brew install alessiodonato/tap/forchetta
+forchetta setup
 ```
 
-Open the app with `open build/Forchetta.app`. You can also drag it to the Dock or copy it to Applications: it always knows where the Forchetta folder is, and it uses the data in `var/`. If the daemon is not running, the app starts it.
+Homebrew brings Node.js and tmux with it. `forchetta setup`:
+- builds the app on your Mac and puts it in `~/Applications`. It uses the Xcode Command Line Tools, which Homebrew has already installed: no Xcode, no Apple account. Built on your Mac, the app opens with no warning from macOS;
+- adds the hooks of Forchetta to Claude Code, showing you the diff of `~/.claude/settings.json` first (see [Claude Code hooks](#claude-code-hooks));
+- tells you where your data is.
 
-To have the `forchetta` command in your terminal, add to `~/.zshrc`:
+Then open Forchetta from `~/Applications`. Sessions already running appear on their own. To open the terminal of a session in the app, start it with `forchetta run claude`, or with **new session** in the app.
+
+After `brew upgrade forchetta`, run `forchetta setup` again: it builds the app again only when it changed.
+
+You need macOS 12 or later and Claude Code (tested with 2.1.322). Optional: [arricurdAI](#works-with-arricurdai).
+
+**Where your data is.** Forchetta keeps everything it writes in `~/Library/Application Support/Forchetta`, readable only by you: the token of the daemon, the socket of tmux, the state of the sessions, the logs, the backups, the settings in `config.json`. In a clone it is `var/` inside the clone. Below, `var/` stands for this folder.
+
+### From source
 
 ```sh
-alias forchetta=/Users/dev/Desktop/Forchetta/bin/forchetta
+git clone https://github.com/alessiodonato/forchetta.git
+cd forchetta
+pnpm install          # also makes the spawn-helper of node-pty executable
+pnpm build            # CLI, daemon and the page of the app in dist/
+bin/forchetta setup   # the app in ~/Applications, and the hooks
 ```
+
+You need Node.js 22 or later, pnpm and tmux (`brew install tmux`). `pnpm build:app` builds the app in `build/` instead, for development. For the `forchetta` command in your terminal, add to `~/.zshrc`:
+
+```sh
+alias forchetta=/path/to/forchetta/bin/forchetta
+```
+
+## Works with arricurdAI
+
+[arricurdAI](https://github.com/alessiodonato/arricurdai) keeps the context of Claude Code small and shows where your tokens go. Forchetta works without it; with it, Forchetta also shows:
+- the context of each session, and the countdown of its prompt cache;
+- the `guard` badge, when arricurdAI will stop the next prompt;
+- the cost and the tokens of today, for every session (see [Cost and tokens](#cost-and-tokens));
+- **search**: earlier sessions of a project, with secrets hidden (`arricurdai recall`);
+- before a `/clear` from the box, a note for the new session, so it starts where the old one left off (arricurdAI 0.5.0 or later).
+
+Its menu bar icon replaces the SwiftBar plugin of arricurdAI. Forchetta finds arricurdAI in the PATH or in its hooks.
 
 ## Claude Code hooks
 
-Forchetta knows what your sessions do through the hooks of Claude Code. To install them:
+Forchetta knows what your sessions do through the hooks of Claude Code. `forchetta setup` installs them; on their own:
 
 ```sh
 forchetta hooks install
@@ -72,11 +118,11 @@ forchetta ls                              # the sessions and their state
 forchetta daemon start|stop|status
 ```
 
-`forchetta run claude` starts Claude Code in a private tmux server of Forchetta (`var/tmux.sock`, configured in `config/tmux.conf`) and attaches the current terminal. You use it like `claude`, with a few differences:
+`forchetta run claude` starts Claude Code in a private tmux server of Forchetta (`var/tmux.sock`, configured in `config/tmux.conf` of Forchetta) and attaches the current terminal. You use it like `claude`, with a few differences:
 
 - **Closing the Terminal window does not end the session:** it only detaches it. Claude goes on working and Forchetta goes on showing it. To end the session, use `/exit`.
 - To detach without closing the window: `Ctrl-b d`.
-- To attach again from a terminal: `tmux -S /Users/dev/Desktop/Forchetta/var/tmux.sock attach -t fk-xxxxxxxx`. You find the name of the session with `tmux -S /Users/dev/Desktop/Forchetta/var/tmux.sock ls`.
+- To attach again from a terminal: `tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" attach -t fk-xxxxxxxx` (in a clone, `var/tmux.sock`). You find the name of the session with `tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" ls`.
 
 Sessions started with plain `claude` show up in `forchetta ls` too, but **read only**: Forchetta cannot send them commands.
 
@@ -86,7 +132,7 @@ The daemon starts by itself with `forchetta run`. Stopping it stops no session.
 
 ### Optional alias: `claude` → `forchetta run claude`
 
-To go through Forchetta every time you type `claude`, add to `~/.zshrc`, after the `forchetta` alias:
+To go through Forchetta every time you type `claude`, add to `~/.zshrc` (after the `forchetta` alias, in a clone):
 
 ```sh
 alias claude='forchetta run claude'
@@ -120,6 +166,8 @@ On an Intel Mac every animation at 60 fps costs WindowServer about a quarter of 
 **Context and cache come from `arricurdai status`**: Forchetta shows the same numbers and does not compute them again. arricurdAI is found in the PATH or in its hooks, or you set it in `var/config.json` (`"arricurdai": ["/path/to/arricurdai"]`). The percentage is an estimate (`≈`): arricurdAI gives the tokens, not the window of the model. The windows are in `var/config.json`, under `contextWindows`: 1M by default, 200k for Haiku 4.5, Sonnet 4.6 and Opus 4.6.
 
 ### Names, groups and roles
+
+<img src="docs/img/org-chart.png" alt="The org chart: two groups, checkout and platform, each with its lead above and its members below; the sessions with no group at the end." width="560">
 
 When you hover a box, **✎** appears. It lets you give the session:
 - a **name**, shown in place of the folder (the folder stays next to it, smaller);
@@ -185,7 +233,7 @@ It replaces the SwiftBar plugin of arricurdAI (`arricurdai.1m.sh` in the plugin 
 
 **⌃⌥F**, from any app, shows Forchetta, or hides it if it is already in front. It uses the system hot keys, so it does not ask for the Accessibility permission. Change it in `var/config.json`, with `"hotkey": "ctrl+alt+space"` or `"cmd+shift+f"` for example (letters, digits or `space`, with at least one modifier); `""` turns it off. If another app already uses the same combination, the menu does not show it. The shortcut is read when the app starts.
 
-**The Desktop permission.** If the Forchetta folder is on the Desktop (or in Documents), the first time you open the app from the Finder or the Dock, macOS asks whether Forchetta may access the files in that folder: allow it, or the app cannot find the daemon. You manage it in System Settings → Privacy & Security → Files and Folders.
+**The Desktop permission.** In a clone on the Desktop (or in Documents), the first time you open the app from the Finder or the Dock, macOS asks whether Forchetta may access the files in that folder: allow it, or the app cannot find the daemon. You manage it in System Settings → Privacy & Security → Files and Folders.
 
 macOS remembers the permission by the signature of the app. With an ad-hoc signature the fingerprint changes with every `pnpm build:app`, and you have to allow it again. To avoid that, once:
 
@@ -216,6 +264,8 @@ More details:
 - no notification comes for sessions that were already waiting when the daemon started.
 
 ### The terminals
+
+<img src="docs/img/workspace.png" alt="Three terminals open side by side, the other sessions in a column on the left; the large one waits for a permission." width="100%">
 
 A click on a box opens the terminal of the session in the work area. It works only for sessions started with `forchetta run`; the others are read only, and hovering them tells you why. The boxes become a column on the left.
 
@@ -263,6 +313,8 @@ Hovering a box shows **btw…**, **compact** and **clear**; in the header of an 
 
 ### Permissions from the box
 
+<img src="docs/img/permission.png" alt="A box waiting for a permission: the command in full, Allow, Deny, and the lasting choice Always allow Bash(npm run build:*), in this project, only for you." width="480">
+
 When a session asks for a permission (a command, a change to a file, an address), its box shows what it asks, in full, with **Allow** and **Deny**. In the column on the left, with panes open, only the buttons show; hover the line to read the whole request. It works for every interactive session, those started outside Forchetta too.
 
 - **Allow** works once, like "Yes" in the Terminal.
@@ -285,6 +337,8 @@ When a session asks for a permission (a command, a change to a file, an address)
 
 ### New session from the app
 
+<img src="docs/img/new-session.png" alt="The new session panel: a folder, the model, the permission mode, a new worktree and the first prompt." width="480">
+
 **new session**, at the top, opens a panel. Type the folder (`~/` works), pick it among those of recent sessions, or use **Choose…**, which opens the macOS panel. The first prompt is optional: ⌘↩ starts.
 
 **Options** (for that session only, they are options of `claude`):
@@ -297,6 +351,8 @@ The session starts in the tmux of Forchetta, as with `forchetta run claude`, and
 The prompt goes through neither tmux nor a shell: it goes into the private environment file of the pane, deleted at start, and reaches Claude as a single argument after `--`, whatever characters it holds (a leading `-` too). If Claude exits right after it starts, the panel says so instead of opening an empty pane.
 
 ### One command to several sessions
+
+<img src="docs/img/several-sessions.png" alt="The panel of a command to several sessions: /compact, chosen for three sessions, with their context." width="480">
 
 With at least two sessions you can send commands to, **command to several** appears at the top. The panel lets you:
 - choose `/compact`, `/clear` or `/btw` (with its question);
@@ -321,11 +377,11 @@ In place of the summary taken from the events, the box can show a line written b
 
 1. Remove the hooks: `forchetta hooks uninstall`. It shows the diff, asks, keeps a copy, and removes **only** the hooks of Forchetta.
 2. Stop the daemon: `forchetta daemon stop`.
-3. Sessions started with `forchetta run` go on running until you end them with `/exit`. To see them: `tmux -S /Users/dev/Desktop/Forchetta/var/tmux.sock ls`.
-4. If you added them, remove the `forchetta` and `claude` aliases from `~/.zshrc`.
-5. Delete the `Forchetta` folder, with the app in `build/` inside it, and any copy in Applications.
+3. Sessions started with `forchetta run` go on running until you end them with `/exit`. To see them: `tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" ls`.
+4. Remove Forchetta: `brew uninstall forchetta` and `brew untap alessiodonato/tap`. From a clone: delete its folder, and the `forchetta` and `claude` aliases from `~/.zshrc` if you added them.
+5. Delete the app, `~/Applications/Forchetta.app`, and the data folder, `~/Library/Application Support/Forchetta`.
 
-Forchetta writes a single file outside its folder: `~/.claude/settings.json`, only with `hooks install` and `hooks uninstall`, and only after you confirm. The app keeps no web cache and no window state. Everything else is in `var/`, which only your user can read:
+Besides the app and its data folder, Forchetta writes a single file: `~/.claude/settings.json`, only with `hooks install` and `hooks uninstall`, and only after you confirm. The app keeps no web cache and no window state. Everything else is in its data folder, which only your user can read:
 - the token of the daemon;
 - the socket of tmux;
 - the state of the sessions;
@@ -349,7 +405,7 @@ FORCHETTA_VAR="$PWD/var/sim" build/Forchetta.app/Contents/MacOS/Forchetta
 FORCHETTA_VAR="$PWD/var/sim" node dist/cli.js daemon stop  # when done
 ```
 
-`scripts/dev/cpu.mjs` measures the average CPU of some processes over an interval.
+`scripts/dev/cpu.mjs` measures the average CPU of some processes over an interval. `scripts/package-release.sh` builds the archive of a release, the one the Homebrew formula installs, and prints its sha256.
 
 ## License
 

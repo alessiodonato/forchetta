@@ -1,10 +1,35 @@
+<div align="center">
+
+<img src="docs/img/logo.svg" alt="" width="96" height="96">
+
 # Forchetta
 
-Centro di controllo locale per le sessioni Claude Code che girano in parallelo su macOS. Sito: <https://alessiodonato.github.io/forchetta/>
+### Tutte le sessioni di Claude Code del tuo Mac, in una finestra.
 
-[English](README.md) · **Italiano**
+Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo reale cosa sta facendo ognuna, cosa aspetta e quanto è costata. Ne apri fino a quattro affiancate, rispondi ai permessi dal loro box e ricevi una notifica quando una ha bisogno di te.
 
-**Cosa fa** (versione 0.6.0):
+[![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#installazione)
+[![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#installazione)
+[![Per Claude Code](https://img.shields.io/badge/per-Claude%20Code-d97757?style=flat-square)](https://code.claude.com)
+[![Gira in locale](https://img.shields.io/badge/gira-in%20locale-46c48a?style=flat-square)](#disinstallazione)
+[![Licenza: Apache 2.0](https://img.shields.io/badge/licenza-Apache%202.0-8b867d?style=flat-square)](LICENSE)
+[![Sito](https://img.shields.io/badge/sito-forchetta-d97757?style=flat-square)](https://alessiodonato.github.io/forchetta/)
+
+[Installazione](#installazione) ·
+[Cosa fa](#cosa-fa) ·
+[arricurdAI](#funziona-con-arricurdai) ·
+[Disinstallazione](#disinstallazione) ·
+[🇬🇧 English](README.md)
+
+<br>
+
+<img src="docs/img/overview.png" alt="La finestra di Forchetta: dodici sessioni, ognuna in un box con stato, cosa sta facendo, riassunto, contesto e costo. Due ti aspettano, in ambra." width="100%">
+
+</div>
+
+## Cosa fa
+
+Versione 0.7.0:
 - trova da sola le sessioni Claude Code attive e mostra per ognuna un box con stato, azione in corso, riassunto, contesto, cache e costo;
 - apre fino a 4 sessioni affiancate in terminali veri, agganciati a tmux;
 - manda `/btw`, `/compact` e `/clear` a una o più sessioni, solo quando è sicuro;
@@ -16,35 +41,56 @@ Tutto gira in locale. L'unico servizio esterno, facoltativo e spento di default,
 
 L'interfaccia dell'app è in inglese: in questo README i pulsanti e i messaggi sono citati come compaiono.
 
-## Requisiti
-
-- macOS 12 o successivo.
-- Node.js 22 o successivo e pnpm.
-- tmux 3.x: `brew install tmux`.
-- Claude Code: versione verificata 2.1.322.
-- Per l'app: i Command Line Tools di Xcode (`xcode-select --install`). Xcode non serve.
-- Facoltativo: [arricurdAI](https://github.com/alessiodonato/arricurdai) per contesto e cache.
-
 ## Installazione
 
 ```sh
-cd /Users/dev/Desktop/Forchetta
-pnpm install      # anche: rende eseguibile lo spawn-helper di node-pty
-pnpm build        # CLI, daemon e pagina dell'app in dist/
-pnpm build:app    # build/Forchetta.app, circa 10 secondi
+brew install alessiodonato/tap/forchetta
+forchetta setup
 ```
 
-L'app si apre con `open build/Forchetta.app`. Puoi anche trascinarla nel Dock o copiarla in Applicazioni: sa sempre dove si trova la cartella di Forchetta e usa i dati in `var/`. Se il daemon non è attivo, lo avvia lei.
+Homebrew installa con lei anche Node.js e tmux. `forchetta setup`:
+- compila l'app sul tuo Mac e la mette in `~/Applications`. Usa i Command Line Tools di Xcode, che Homebrew ha già installato: niente Xcode, niente account Apple. Compilata sul tuo Mac, l'app si apre senza avvisi di macOS;
+- aggiunge gli hook di Forchetta a Claude Code, mostrandoti prima il diff di `~/.claude/settings.json` (vedi [Hook di Claude Code](#hook-di-claude-code));
+- ti dice dove stanno i dati.
 
-Per avere il comando `forchetta` nel terminale, aggiungi a `~/.zshrc`:
+Poi apri Forchetta da `~/Applications`. Le sessioni già aperte compaiono da sole. Per aprire nell'app il terminale di una sessione, avviala con `forchetta run claude` o con **new session** nell'app.
+
+Dopo `brew upgrade forchetta` riesegui `forchetta setup`: ricompila l'app solo se è cambiata.
+
+Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322). Facoltativo: [arricurdAI](#funziona-con-arricurdai).
+
+**Dove stanno i dati.** Forchetta tiene tutto quello che scrive in `~/Library/Application Support/Forchetta`, leggibile solo da te: il token del daemon, il socket di tmux, lo stato delle sessioni, i log, i backup, le impostazioni in `config.json`. In un clone è `var/` dentro il clone. Più sotto, `var/` indica questa cartella.
+
+### Dal codice
 
 ```sh
-alias forchetta=/Users/dev/Desktop/Forchetta/bin/forchetta
+git clone https://github.com/alessiodonato/forchetta.git
+cd forchetta
+pnpm install          # anche: rende eseguibile lo spawn-helper di node-pty
+pnpm build            # CLI, daemon e pagina dell'app in dist/
+bin/forchetta setup   # l'app in ~/Applications, e gli hook
 ```
+
+Servono Node.js 22 o successivo, pnpm e tmux (`brew install tmux`). `pnpm build:app` compila invece l'app in `build/`, per lo sviluppo. Per avere il comando `forchetta` nel terminale, aggiungi a `~/.zshrc`:
+
+```sh
+alias forchetta=/percorso/di/forchetta/bin/forchetta
+```
+
+## Funziona con arricurdAI
+
+[arricurdAI](https://github.com/alessiodonato/arricurdai) tiene piccolo il contesto di Claude Code e mostra dove vanno i token. Forchetta funziona anche senza; con arricurdAI mostra in più:
+- il contesto di ogni sessione e il countdown della sua cache del prompt;
+- il badge `guard`, quando arricurdAI fermerà il prossimo prompt;
+- il costo e i token di oggi, di tutte le sessioni (vedi [Costo e token](#costo-e-token));
+- **search**: le sessioni passate di un progetto, con i segreti nascosti (`arricurdai recall`);
+- prima di un `/clear` dal box, una nota per la nuova sessione, così riparte da dove era rimasta la vecchia (arricurdAI 0.5.0 o successivo).
+
+L'icona nella barra dei menu sostituisce il plugin di arricurdAI per SwiftBar. Forchetta trova arricurdAI nel PATH o nei suoi hook.
 
 ## Hook di Claude Code
 
-Forchetta sa cosa fanno le sessioni grazie agli hook di Claude Code. Per installarli:
+Forchetta sa cosa fanno le sessioni grazie agli hook di Claude Code. Li installa `forchetta setup`; da soli:
 
 ```sh
 forchetta hooks install
@@ -74,11 +120,11 @@ forchetta ls                                 # le sessioni e il loro stato
 forchetta daemon start|stop|status
 ```
 
-`forchetta run claude` avvia Claude Code in un server tmux privato di Forchetta (`var/tmux.sock`, configurazione in `config/tmux.conf`) e aggancia il terminale corrente. Si usa come `claude`, con qualche differenza:
+`forchetta run claude` avvia Claude Code in un server tmux privato di Forchetta (`var/tmux.sock`, configurazione in `config/tmux.conf` di Forchetta) e aggancia il terminale corrente. Si usa come `claude`, con qualche differenza:
 
 - **Chiudere la finestra del Terminale non termina la sessione:** la scollega soltanto. Claude continua a lavorare e Forchetta continua a mostrarla. Per chiudere la sessione usa `/exit`.
 - Per scollegarti senza chiudere la finestra: `Ctrl-b d`.
-- Per riagganciarti da un terminale: `tmux -S /Users/dev/Desktop/Forchetta/var/tmux.sock attach -t fk-xxxxxxxx`. Il nome della sessione lo trovi con `tmux -S /Users/dev/Desktop/Forchetta/var/tmux.sock ls`.
+- Per riagganciarti da un terminale: `tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" attach -t fk-xxxxxxxx` (in un clone, `var/tmux.sock`). Il nome della sessione lo trovi con `tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" ls`.
 
 Le sessioni avviate con `claude` normale compaiono lo stesso in `forchetta ls`, ma **in sola lettura**: Forchetta non può mandare loro comandi.
 
@@ -86,7 +132,7 @@ Il daemon parte da solo con `forchetta run`. Fermarlo non ferma nessuna sessione
 
 ### Alias opzionale: `claude` → `forchetta run claude`
 
-Per passare da Forchetta ogni volta che scrivi `claude`, aggiungi a `~/.zshrc`, dopo l'alias di `forchetta`:
+Per passare da Forchetta ogni volta che scrivi `claude`, aggiungi a `~/.zshrc` (dopo l'alias di `forchetta`, in un clone):
 
 ```sh
 alias claude='forchetta run claude'
@@ -120,6 +166,8 @@ Su un Mac Intel ogni animazione a 60 fps costa a WindowServer circa un quarto di
 **Contesto e cache vengono da `arricurdai status`**: Forchetta mostra gli stessi numeri e non li ricalcola. arricurdAI viene trovato nel PATH o nei suoi hook, oppure si imposta in `var/config.json` (`"arricurdai": ["/percorso/arricurdai"]`). La percentuale è una stima (`≈`): arricurdAI dà i token, non la finestra del modello. Le finestre stanno in `var/config.json`, alla voce `contextWindows`: 1M di default, 200k per Haiku 4.5, Sonnet 4.6 e Opus 4.6.
 
 ### Nomi, gruppi e ruoli
+
+<img src="docs/img/org-chart.png" alt="L'organigramma: due gruppi, checkout e platform, ognuno con il capo in alto e gli altri sotto; in fondo le sessioni senza gruppo." width="560">
 
 Passando sopra un box compare **✎**, che permette di dare alla sessione:
 - un **nome**, mostrato al posto della cartella (la cartella resta accanto, più piccola);
@@ -185,7 +233,7 @@ Sostituisce il plugin di arricurdAI per SwiftBar (`arricurdai.1m.sh` nella carte
 
 **⌃⌥F**, da qualsiasi app, mostra Forchetta o la nasconde se è già davanti. Usa le hot key di sistema, quindi non chiede il permesso di Accessibilità. Si cambia in `var/config.json`, per esempio con `"hotkey": "ctrl+alt+space"` o `"cmd+shift+f"` (lettere, cifre o `space`, con almeno un modificatore); `""` la toglie. Se un'altra app usa già la stessa combinazione, il menu non la mostra. La scorciatoia si legge all'avvio dell'app.
 
-**Il permesso della Scrivania.** Se la cartella di Forchetta sta sulla Scrivania (o in Documenti), la prima volta che apri l'app dal Finder o dal Dock macOS chiede se Forchetta può accedere ai file di quella cartella: va consentito, altrimenti l'app non trova il daemon. Si gestisce in Impostazioni di Sistema → Privacy e sicurezza → File e cartelle.
+**Il permesso della Scrivania.** Con un clone sulla Scrivania (o in Documenti), la prima volta che apri l'app dal Finder o dal Dock macOS chiede se Forchetta può accedere ai file di quella cartella: va consentito, altrimenti l'app non trova il daemon. Si gestisce in Impostazioni di Sistema → Privacy e sicurezza → File e cartelle.
 
 macOS ricorda il permesso in base alla firma dell'app. Con una firma ad-hoc l'impronta cambia a ogni `pnpm build:app` e il permesso va dato di nuovo. Per evitarlo, una volta sola:
 
@@ -216,6 +264,8 @@ Altri dettagli:
 - non arrivano notifiche per le sessioni che erano già in attesa all'avvio del daemon.
 
 ### I terminali
+
+<img src="docs/img/workspace.png" alt="Tre terminali affiancati, le altre sessioni nella colonna a sinistra; quello grande aspetta un permesso." width="100%">
 
 Un clic su un box apre il terminale della sessione nell'area di lavoro. Funziona solo per le sessioni avviate con `forchetta run`; le altre sono in sola lettura, e passandoci sopra col mouse compare il motivo. I box diventano una colonna a sinistra.
 
@@ -263,6 +313,8 @@ Passando sopra un box compaiono **btw…**, **compact** e **clear**; nell'intest
 
 ### I permessi dal box
 
+<img src="docs/img/permission.png" alt="Un box che aspetta un permesso: il comando per intero, Allow, Deny e la scelta che resta Always allow Bash(npm run build:*), in this project, only for you." width="480">
+
 Quando una sessione chiede un permesso (un comando, una modifica a un file, un indirizzo), il box mostra cosa chiede, per intero, con **Allow** e **Deny**. Nella colonna a sinistra, con i riquadri aperti, compaiono solo i pulsanti; passando sopra la riga si legge la richiesta completa. Vale per tutte le sessioni interattive, anche quelle avviate fuori da Forchetta.
 
 - **Allow** vale una volta sola, come «Yes» nel Terminale.
@@ -285,6 +337,8 @@ Quando una sessione chiede un permesso (un comando, una modifica a un file, un i
 
 ### Nuova sessione dall'app
 
+<img src="docs/img/new-session.png" alt="Il pannello new session: cartella, modello, modalità dei permessi, worktree nuovo e primo prompt." width="480">
+
 **new session**, in alto, apre un pannello. La cartella si scrive (anche con `~/`), si sceglie tra quelle delle sessioni recenti o con **Choose…**, che apre il pannello di macOS. Il primo prompt è facoltativo: ⌘↩ avvia.
 
 **Options** (valgono solo per quella sessione, sono opzioni di `claude`):
@@ -297,6 +351,8 @@ La sessione parte nel tmux di Forchetta, come con `forchetta run claude`, e il s
 Il prompt non passa né da tmux né da una shell: va nel file d'ambiente privato del pane, che viene cancellato all'avvio, e arriva a Claude come un solo argomento dopo `--`, qualunque carattere contenga (anche un `-` iniziale). Se Claude esce subito dopo l'avvio, il pannello lo segnala invece di aprire un riquadro vuoto.
 
 ### Un comando a più sessioni
+
+<img src="docs/img/several-sessions.png" alt="Il pannello di un comando a più sessioni: /compact, scelto per tre sessioni, con il loro contesto." width="480">
 
 Con almeno due sessioni comandabili, in alto compare **command to several**. Il pannello permette di:
 - scegliere `/compact`, `/clear` o `/btw` (con la domanda);
@@ -321,11 +377,11 @@ Al posto del riassunto ricavato dagli eventi, il box può mostrare una riga, in 
 
 1. Togli gli hook: `forchetta hooks uninstall`. Mostra il diff, chiede conferma, salva una copia e toglie **solo** gli hook di Forchetta.
 2. Ferma il daemon: `forchetta daemon stop`.
-3. Le sessioni avviate con `forchetta run` continuano a girare finché non le chiudi con `/exit`. Per vederle: `tmux -S /Users/dev/Desktop/Forchetta/var/tmux.sock ls`.
-4. Se li hai aggiunti, togli da `~/.zshrc` gli alias `forchetta` e `claude`.
-5. Cancella la cartella `Forchetta`, con dentro anche l'app in `build/`, e l'eventuale copia in Applicazioni.
+3. Le sessioni avviate con `forchetta run` continuano a girare finché non le chiudi con `/exit`. Per vederle: `tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" ls`.
+4. Togli Forchetta: `brew uninstall forchetta` e `brew untap alessiodonato/tap`. Da un clone: cancella la sua cartella e, se li hai aggiunti, gli alias `forchetta` e `claude` da `~/.zshrc`.
+5. Cancella l'app, `~/Applications/Forchetta.app`, e la cartella dei dati, `~/Library/Application Support/Forchetta`.
 
-Forchetta scrive in un solo file fuori dalla sua cartella: `~/.claude/settings.json`, solo con `hooks install` e `hooks uninstall`, e solo dopo la tua conferma. L'app non salva cache web né stato delle finestre. Tutto il resto è in `var/`, che può leggere solo il tuo utente:
+Oltre all'app e alla sua cartella dei dati, Forchetta scrive in un solo file: `~/.claude/settings.json`, solo con `hooks install` e `hooks uninstall`, e solo dopo la tua conferma. L'app non salva cache web né stato delle finestre. Tutto il resto è nella sua cartella dei dati, che può leggere solo il tuo utente:
 - token del daemon;
 - socket di tmux;
 - stato delle sessioni;
@@ -349,7 +405,7 @@ FORCHETTA_VAR="$PWD/var/sim" build/Forchetta.app/Contents/MacOS/Forchetta
 FORCHETTA_VAR="$PWD/var/sim" node dist/cli.js daemon stop  # alla fine
 ```
 
-`scripts/dev/cpu.mjs` misura la CPU media di alcuni processi in un intervallo.
+`scripts/dev/cpu.mjs` misura la CPU media di alcuni processi in un intervallo. `scripts/package-release.sh` prepara l'archivio di una release, quello che installa la formula di Homebrew, e ne stampa lo sha256.
 
 ## Licenza
 
