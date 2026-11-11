@@ -40,4 +40,6 @@ await build({
   logLevel: 'warning',
 });
 copyFileSync('src/ui/index.html', 'dist/ui/index.html');
+// The license of JetBrains Mono goes with its files, also in the archive of a release (which has dist/, not src/).
+copyFileSync('src/ui/fonts/OFL.txt', 'dist/ui/fonts/OFL.txt');
 console.log('dist/ pronto');

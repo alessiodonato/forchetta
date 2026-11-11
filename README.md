@@ -29,7 +29,7 @@ Forchetta finds the Claude Code sessions you have running and shows, live, what 
 
 ## What it does
 
-Version 0.7.1:
+Version 0.7.2:
 - finds the Claude Code sessions that are running and shows a box for each one, with its state, current action, summary, context, cache and cost;
 - opens up to 4 sessions side by side, in real terminals attached to tmux;
 - sends `/btw`, `/compact` and `/clear` to one session or to several, only when it is safe;
