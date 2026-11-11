@@ -48,7 +48,7 @@ forchetta setup
 
 Homebrew brings Node.js and tmux with it. `forchetta setup`:
 - builds the app on your Mac and puts it in `~/Applications`. It uses the Xcode Command Line Tools, which Homebrew has already installed: no Xcode, no Apple account. Built on your Mac, the app opens with no warning from macOS;
-- adds the hooks of Forchetta to Claude Code, showing you the diff of `~/.claude/settings.json` first (see [Claude Code hooks](#claude-code-hooks));
+- adds the hooks of Forchetta to Claude Code, showing you first every change to `~/.claude/settings.json`, and the whole diff if you want it (see [Claude Code hooks](#claude-code-hooks));
 - tells you where your data is.
 
 Then open Forchetta from `~/Applications`. Sessions already running appear on their own. To open the terminal of a session in the app, start it with `forchetta run claude`, or with **new session** in the app.
@@ -95,7 +95,7 @@ forchetta hooks install
 ```
 
 The command:
-- shows the diff of `~/.claude/settings.json` and asks before it writes;
+- lists every change to `~/.claude/settings.json` and asks before it writes: answer `d` to see the whole diff first, or pass `--diff`;
 - also puts `bin/forchetta-statusline` in front of your status line, for the cost of each session (see [Cost and tokens](#cost-and-tokens));
 - keeps a copy of the file in `var/backups/`;
 - adds its hooks **next to** the ones you have, those of arricurdAI for example, without changing them;
@@ -115,6 +115,7 @@ Every event goes through `bin/forchetta-hook`, a small `sh` + `curl` script that
 ```sh
 forchetta run claude [claude arguments]   # like `claude`, but inside tmux
 forchetta ls                              # the sessions and their state
+forchetta ls --json                       # the same, as JSON for scripts and jq
 forchetta daemon start|stop|status
 ```
 
@@ -373,7 +374,7 @@ In place of the summary taken from the events, the box can show a line written b
 
 ## Uninstall
 
-1. Remove the hooks: `forchetta hooks uninstall`. It shows the diff, asks, keeps a copy, and removes **only** the hooks of Forchetta.
+1. Remove the hooks: `forchetta hooks uninstall`. It shows what it changes, asks, keeps a copy, and removes **only** the hooks of Forchetta.
 2. Stop the daemon: `forchetta daemon stop`.
 3. Sessions started with `forchetta run` go on running until you end them with `/exit`. To see them: `tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" ls`.
 4. Remove Forchetta: `brew uninstall forchetta` and `brew untap alessiodonato/tap`. From a clone: delete its folder, and the `forchetta` and `claude` aliases from `~/.zshrc` if you added them.

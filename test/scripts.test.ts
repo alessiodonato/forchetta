@@ -4,7 +4,7 @@ import { createServer, type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { envFileText, paneEnv } from '../src/cli/pane-env.ts';
+import { daemonEnv, envFileText, paneEnv } from '../src/cli/pane-env.ts';
 import { paths } from '../src/shared/paths.ts';
 import { tempDir } from './helpers.ts';
 
@@ -156,6 +156,23 @@ describe('environment of a pane', () => {
       'id-1',
     );
     expect(env).toEqual({ PATH: '/bin', HOME: '/h', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', FORCHETTA_AGENT: 'id-1' });
+  });
+
+  it('the daemon, started from the shell of a session, keeps nothing of that session or of its tmux pane', () => {
+    const env = daemonEnv({
+      PATH: '/bin',
+      TERM: 'screen-256color',
+      TMUX: '/tmp/tmux-501/default,1,0',
+      TMUX_PANE: '%3',
+      FORCHETTA_AGENT: 'id-1',
+      CLAUDECODE: '1',
+      CLAUDE_PID: '9',
+      CLAUDE_CODE_SESSION_ID: 's',
+      CLAUDE_CODE_ENTRYPOINT: 'cli',
+      CLAUDE_CODE_USE_BEDROCK: '1',
+      FORCHETTA_ANTHROPIC_API_KEY: 'k',
+    });
+    expect(env).toEqual({ PATH: '/bin', TERM: 'screen-256color', CLAUDE_CODE_USE_BEDROCK: '1', FORCHETTA_ANTHROPIC_API_KEY: 'k' });
   });
 
   it('survives quotes, newlines and shell characters through bin/forchetta-exec', async () => {

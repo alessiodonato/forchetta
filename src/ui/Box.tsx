@@ -4,6 +4,7 @@ import { type Agent, displayName, STATE_LABEL, type ToolFamily } from '../shared
 import {
   agoShort,
   CACHE_SOON_MS,
+  cacheSoon,
   cacheText,
   COMPLETED_MS,
   conflictsTitle,
@@ -62,8 +63,6 @@ function summaryText(agent: Agent): string | undefined {
   return agent.summary?.text;
 }
 
-const LARGE_CONTEXT = 100_000;
-
 function ContextBar({ agent }: { agent: Agent }) {
   const context = agent.context;
   const share = context ? Math.min(1, Math.max(0, context.percent / 100)) : 0;
@@ -83,9 +82,9 @@ function ContextBar({ agent }: { agent: Agent }) {
 }
 
 function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }) {
-  const { context, cache } = agent;
+  const { cache } = agent;
   const left = cache ? cache.expiresAt - now : 0;
-  const soon = cache && left > 0 && left < CACHE_SOON_MS && (context?.tokens ?? 0) >= LARGE_CONTEXT;
+  const soon = cacheSoon(agent, now);
   const expiry = cache ? new Date(cache.expiresAt).toLocaleTimeString('en-US') : '';
   const cacheTitle = cache
     ? `${left > 0 ? 'The prompt cache expires' : 'The prompt cache expired'} at ${expiry} (data from arricurdAI)`

@@ -42,6 +42,21 @@ export function paneEnv(env: NodeJS.ProcessEnv, agentId: string): Record<string,
   return out;
 }
 
+/**
+ * The environment of the daemon: the one of whoever started it, without what belongs to a Claude session or to
+ * a tmux pane. Started with `forchetta daemon start` from the shell of a session, the daemon would otherwise keep
+ * CLAUDECODE, CLAUDE_PID, TMUX_PANE and the rest, and the tmux server and the sessions it starts would get them.
+ * The key of the summaries stays: it is for the daemon.
+ */
+export function daemonEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (name === 'TMUX' || name === 'TMUX_PANE' || name === 'FORCHETTA_AGENT' || SET_BY_CLAUDE.has(name)) continue;
+    out[name] = value;
+  }
+  return out;
+}
+
 /** The variables as `export NAME='value'` lines for sh, with single quotes escaped. */
 export function envFileText(env: Record<string, string>): string {
   return Object.entries(env)

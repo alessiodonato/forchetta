@@ -87,6 +87,15 @@ export function cacheText(cache: CacheInfo, now: number): string {
 /** The last minutes of a large live cache, when going on still saves the rewrite: as the menu of arricurdAI. */
 export const CACHE_SOON_MS = 10 * 60_000;
 
+/** A context large enough that a cache about to expire is worth a warning. */
+export const LARGE_CONTEXT = 100_000;
+
+/** A cache that expires within CACHE_SOON_MS on a large context: the box and `forchetta ls` paint it amber. */
+export function cacheSoon(agent: Pick<Agent, 'cache' | 'context'>, now: number): boolean {
+  const left = agent.cache ? agent.cache.expiresAt - now : 0;
+  return left > 0 && left < CACHE_SOON_MS && (agent.context?.tokens ?? 0) >= LARGE_CONTEXT;
+}
+
 /** How long the check of a finished turn stays on the box. */
 export const COMPLETED_MS = 2600;
 

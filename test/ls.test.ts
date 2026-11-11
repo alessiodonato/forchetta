@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { activity, ago, renderList } from '../src/cli/ls.ts';
+import { makeStyle, plain, visibleLength } from '../src/cli/style.ts';
 import { type Agent, newAgent } from '../src/daemon/state.ts';
 
 const NOW = 2_000_000;
@@ -33,14 +34,34 @@ describe('forchetta ls', () => {
       ],
       NOW,
       140,
-      false,
+      plain,
     );
     const lines = text.trimEnd().split('\n');
     expect(lines[0]).toMatch(/^PROJECT\s+STATE\s+ACTIVITY\s+CONTEXT\s+CACHE\s+LAST\s+CONTROL\s+PID\s+SESSION$/);
     expect(lines[1]).toMatch(/^progetto\s+working\s+.*357k ≈36%\s+42 min\s+12 s\s+read only\s+123\s+abcdef12$/);
     expect(lines[2]).toMatch(/waiting\s+.*—\s+—\s+3 min\s+tmux\s+—\s+—$/);
     expect(lines.at(-1)).toBe('2 sessions running · 1 waits for you');
-    expect(renderList([], NOW, 100, false)).toBe('No Claude Code session running.\n');
+    expect(renderList([], NOW, 100, plain)).toBe('No Claude Code session running.\n');
+  });
+
+  it('on a terminal, marks each state and keeps the columns where they were', () => {
+    const agents = [
+      agent({ state: 'working', lastEvent: { name: 'PreToolUse', at: NOW - 12_000 } }),
+      agent({ id: 'y', state: 'waiting', waiting: { kind: 'permesso', detail: 'Bash rm -rf dist', since: NOW } }),
+      agent({ id: 'z', state: 'error', error: { kind: 'rate_limit', at: NOW } }),
+    ];
+    const painted = renderList(agents, NOW, 140, makeStyle(1));
+    const lines = painted.trimEnd().split('\n');
+    expect(lines[1]).toContain('● working');
+    expect(lines[2]).toContain('\u001b[38;5;215m◆ waiting');
+    expect(lines[3]).toContain('\u001b[38;5;203m✗ error');
+    // Without the escape codes, the header is the same and every row is as wide: the columns did not move.
+    const bare = renderList(agents, NOW, 140, plain).trimEnd().split('\n');
+    const strip = (text: string) => text.replace(/\u001b\[[0-9;]*m/g, '');
+    expect(strip(lines[0]!)).toBe(bare[0]);
+    for (const index of [1, 2, 3]) expect(visibleLength(lines[index]!)).toBe(bare[index]!.length);
+    expect(lines.at(-1)).toContain('1 waits for you');
+    expect(lines.at(-1)).toContain('1 with an error');
   });
 
   it('writes durations in short English', () => {

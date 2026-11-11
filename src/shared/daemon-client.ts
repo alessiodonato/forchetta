@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { closeSync, existsSync, openSync, readFileSync, renameSync, statSync } from 'node:fs';
+import { daemonEnv } from '../cli/pane-env.ts';
 import { ensurePrivateDir, paths } from './paths.ts';
 
 // How the CLI finds and starts the daemon. The daemon writes var/daemon.json (port and token, readable by this
@@ -60,9 +61,7 @@ export async function ensureDaemon(node: string, waitMs = 5000): Promise<DaemonI
     // The log stays as it is.
   }
   const out = openSync(paths.log, 'a', 0o600);
-  const env = { ...process.env };
-  delete env.FORCHETTA_AGENT;
-  const child = spawn(node, [paths.daemonJs], { detached: true, stdio: ['ignore', out, out], env, cwd: paths.varDir });
+  const child = spawn(node, [paths.daemonJs], { detached: true, stdio: ['ignore', out, out], env: daemonEnv(process.env), cwd: paths.varDir });
   child.unref();
   closeSync(out);
   const deadline = Date.now() + waitMs;

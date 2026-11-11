@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { dirname, join } from 'node:path';
 import { type Config, detectArricurdai, loadConfig, saveConfig, which } from '../shared/config.ts';
@@ -14,7 +15,9 @@ import {
   withoutForchettaHooks,
   withoutForchettaStatusLine,
 } from '../shared/settings.ts';
+import { code } from './help.ts';
 import type { RunIO } from './run.ts';
+import { paintDiff, type Style, tildify } from './style.ts';
 
 // `forchetta hooks install|uninstall`: the only commands that change a file outside the Forchetta folder,
 // ~/.claude/settings.json. They show the diff, ask first, keep a copy of the old file in var/backups, and
@@ -22,7 +25,10 @@ import type { RunIO } from './run.ts';
 // front of your status line (see shared/settings.ts), and take it away.
 
 export interface HooksOptions {
+  /** Apply without asking. */
   yes: boolean;
+  /** Show the whole diff before asking, not only the list of the changes. */
+  diff: boolean;
 }
 
 /** A unified diff of two texts, from the diff of the system. */
@@ -41,16 +47,37 @@ export function unifiedDiff(before: string, after: string, label: string): strin
   }
 }
 
-async function confirm(question: string, io: RunIO): Promise<boolean> {
-  if (!process.stdin.isTTY) {
-    io.stdout('No change: this is not an interactive terminal. To apply the changes without a question: --yes\n');
-    return false;
-  }
+/** The answer to a question on the terminal, trimmed and in lower case. */
+async function ask(question: string, choices: string, io: RunIO): Promise<string> {
+  const s = io.style;
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    return /^(s|si|sì|y|yes)$/i.test((await rl.question(question)).trim());
+    return (await rl.question(`${s.color ? `${s.claude('?')} ` : ''}${question} ${s.dim(choices)} `)).trim().toLowerCase();
   } finally {
     rl.close();
+  }
+}
+
+/**
+ * Whether to apply the changes: y applies them, anything else leaves the file as it is, and d shows the whole
+ * diff (when it was not shown yet) and asks again.
+ */
+async function confirm(io: RunIO, showDiff: (() => void) | undefined): Promise<boolean> {
+  const s = io.style;
+  if (!process.stdin.isTTY) {
+    io.stdout(`${s.mark('○', 'gray', 'No change: this is not an interactive terminal.')} ${code('To apply the changes without a question: `--yes`', s)}\n`);
+    return false;
+  }
+  let pending = showDiff;
+  for (;;) {
+    const answer = await ask('Apply the changes?', pending ? '[y/N, d = see the whole diff]' : '[y/N]', io);
+    if (pending && (answer === 'd' || answer === 'diff')) {
+      io.stdout('\n');
+      pending();
+      pending = undefined;
+      continue;
+    }
+    return /^(s|si|sì|y|yes)$/.test(answer);
   }
 }
 
@@ -93,9 +120,9 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
   try {
     settings = before === undefined || before.trim() === '' ? {} : JSON.parse(before);
   } catch {
-    throw new UserError(`${file} is not valid JSON: left as it is. Fix it and try again.`);
+    throw new UserError(`${tildify(file)} is not valid JSON: left as it is`, 'fix it and try again');
   }
-  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) throw new UserError(`${file} is not a JSON object: left as it is.`);
+  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) throw new UserError(`${tildify(file)} is not a JSON object: left as it is`);
 
   const config = withToolPaths(loadConfig(), before);
   if (action === 'install') saveConfig(config);
@@ -118,28 +145,32 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
       if (status.changes.length > 0) saveCommand = null;
     }
   } catch (error) {
-    if (error instanceof UnexpectedSettings) throw new UserError(`${file} left as it is: ${error.message}.`);
+    if (error instanceof UnexpectedSettings) throw new UserError(`${tildify(file)} left as it is: ${error.message}`);
     throw error;
   }
 
+  const s = io.style;
+  const shown = tildify(file);
   if (plan.changes.length === 0) {
-    io.stdout(action === 'install' ? `The hooks of Forchetta are already in ${file}.\n` : `No hook of Forchetta in ${file}.\n`);
+    io.stdout(`${s.mark('✓', 'green', action === 'install' ? `The hooks of Forchetta are already in ${shown}.` : `No hook of Forchetta in ${shown}.`)}\n`);
     return 0;
   }
 
   const after = formatSettings(plan.settings);
-  io.stdout(`${action === 'install' ? 'Adding' : 'Removing'} these hooks in ${file}:\n\n${plan.changes.map((line) => `  ${line}`).join('\n')}\n\n`);
-  io.stdout(`The whole diff:\n\n${unifiedDiff(before ?? '', after, file)}\n`);
+  io.stdout(`${s.bold(`${action === 'install' ? 'Adding' : 'Removing'} these hooks in ${shown}`)}\n\n${plan.changes.map((line) => `  ${paintChange(line, s)}`).join('\n')}\n\n`);
   if (before !== undefined && formatSettings(settings as Record<string, unknown>) !== before) {
-    io.stdout('Note: the file will be written again with an indent of two spaces, as Claude Code writes it; the diff shows it.\n\n');
+    io.stdout(`${s.dim('Note: the file will be written again with an indent of two spaces, as Claude Code writes it; the diff shows it.')}\n\n`);
   }
+  // The list above says every change; the whole diff, with all the JSON, only when asked (--diff, or d).
+  const showDiff = (): void => io.stdout(`${s.bold('The whole diff')}\n\n${paintDiff(unifiedDiff(before ?? '', after, shown), s)}\n`);
+  if (options.diff) showDiff();
 
-  if (!options.yes && !(await confirm('Apply the changes? [y/N] ', io))) {
-    if (process.stdin.isTTY) io.stdout('No change.\n');
+  if (!options.yes && !(await confirm(io, options.diff ? undefined : showDiff))) {
+    if (process.stdin.isTTY) io.stdout(`${s.mark('○', 'gray', 'No change.')}\n`);
     return 0;
   }
   const now = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
-  if (now !== before) throw new UserError(`${file} changed meanwhile: left as it is. Run the command again.`);
+  if (now !== before) throw new UserError(`${shown} changed meanwhile: left as it is`, 'run the command again');
 
   // The command you had goes in place before the status line that runs it.
   if (typeof saveCommand === 'string') {
@@ -149,10 +180,23 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
   const backup = writeSettings(file, after);
   if (saveCommand === null) rmSync(paths.statusCommand, { force: true });
   io.stdout(
-    `Done.${backup ? ` Copy of the previous file: ${backup}` : ''}\n` +
+    `${s.mark('✓', 'green', `Done.${backup ? ` ${s.dim(`Copy of the previous file: ${tildify(backup)}`)}` : ''}`)}\n` +
       (action === 'install'
-        ? 'Claude Code reads the hooks again by itself: they work for the sessions already open too.\nTo remove them: forchetta hooks uninstall\n'
+        ? `${s.dim('Claude Code reads the hooks again by itself: they work for the sessions already open too.')}\n${code('To remove them: `forchetta hooks uninstall`', s)}\n`
         : ''),
   );
   return 0;
+}
+
+/**
+ * "+ PreToolUse: command ~/Forchetta/bin/forchetta-hook 47821 (async)": the sign in green (+), red (-) or amber
+ * (~), the event in bold, the rest dimmed, with ~ for the home folder.
+ */
+export function paintChange(line: string, style: Style, home = homedir()): string {
+  const text = line.replaceAll(`${home}/`, '~/');
+  const match = /^([+~-]) ([^:]+)(?:: (.*))?$/.exec(text);
+  if (!match) return text;
+  const [, sign, name, rest] = match;
+  const paint = sign === '+' ? style.green : sign === '-' ? style.red : style.amber;
+  return `${paint(sign!)} ${style.bold(name!)}${rest === undefined ? '' : `: ${style.dim(rest)}`}`;
 }

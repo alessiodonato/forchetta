@@ -524,7 +524,7 @@
     <section class="part text">
       <h2>It stays on your Mac</h2>
       <p>The hooks talk to a small daemon that listens on <code>127.0.0.1</code> only. Your sessions are not sent anywhere. The one network call Forchetta can make is an optional one-line summary from the Claude API, off unless you turn it on.</p>
-      <p>Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you the diff, asks, and keeps a backup. Your other hooks stay exactly as they are, and <code>forchetta hooks uninstall</code> takes its own away.</p>
+      <p>Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change, asks, and keeps a backup. Your other hooks stay exactly as they are, and <code>forchetta hooks uninstall</code> takes its own away.</p>
     </section>
 
     <section class="part text" id="install">
@@ -536,7 +536,7 @@
           <pre>brew install alessiodonato/tap/forchetta</pre>
         </li>
         <li>
-          <p>Build the app on your Mac and add its hooks to Claude Code. You see the diff of your settings first:</p>
+          <p>Build the app on your Mac and add its hooks to Claude Code. You see every change to your settings first:</p>
           <pre>forchetta setup</pre>
           <small>Built on your Mac, the app opens with no warning from macOS. Run it again after <code>brew upgrade forchetta</code>.</small>
         </li>

@@ -8,6 +8,7 @@ import { UserError } from '../shared/errors.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import { Tmux, tmuxSessionName } from '../shared/tmux.ts';
 import { envFileText, paneEnv } from './pane-env.ts';
+import type { Style } from './style.ts';
 
 // `forchetta run claude [args]`: starts Claude Code in a session of the private tmux server and attaches this
 // terminal to it, so it looks and works like `claude`. Detaching (Ctrl-b d) or closing the window leaves the
@@ -16,6 +17,9 @@ import { envFileText, paneEnv } from './pane-env.ts';
 export interface RunIO {
   stdout: (text: string) => void;
   stderr: (text: string) => void;
+  /** How to paint what goes to stdout, and to stderr: with colors only on a terminal. */
+  style: Style;
+  errorStyle: Style;
 }
 
 /** The environment of the tmux client: without TMUX, so that it works inside another tmux too. */
@@ -27,7 +31,12 @@ function clientEnv(): NodeJS.ProcessEnv {
 }
 
 export async function runClaude(args: string[], io: RunIO): Promise<number> {
-  if (args[0] !== 'claude') throw new UserError('usage: forchetta run claude [claude arguments]');
+  if (args[0] !== 'claude') {
+    throw new UserError(
+      args[0] ? `run starts claude, not ${args[0]}` : 'run needs the command to start: claude',
+      'for example `forchetta run claude`, or `forchetta run claude --continue`',
+    );
+  }
   const config = loadConfig();
   const claude = resolveTool('claude', config);
 
@@ -53,7 +62,10 @@ export async function runClaude(args: string[], io: RunIO): Promise<number> {
   } catch {
     // Claude starts anyway; its hooks announce it as soon as the daemon is there.
   }
-  if (!announced) io.stderr('forchetta: the daemon does not answer. The session starts anyway, and shows up once the daemon runs.\n');
+  if (!announced) {
+    const s = io.errorStyle;
+    io.stderr(`${s.color ? s.amber('▲ ') : 'forchetta: '}the daemon does not answer. The session starts anyway, and shows up once the daemon runs.\n`);
+  }
 
   const envFile = join(paths.runDir, `${id}.env`);
   writeFileSync(envFile, envFileText(paneEnv(process.env, id)), { mode: 0o600 });
@@ -71,7 +83,7 @@ export async function runClaude(args: string[], io: RunIO): Promise<number> {
   }
 
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    io.stdout(`Session started in tmux (${session}). This is not a terminal, so it is not attached here: you see it in Forchetta.\n`);
+    io.stdout(`${io.style.mark('✓', 'green', `Session started in tmux (${session}).`)} This is not a terminal, so it is not attached here: you see it in Forchetta.\n`);
     return 0;
   }
   const attached = spawnSync(tmuxBin, tmux.argv('attach-session', ['-t', session]), { stdio: 'inherit', env: clientEnv() });
