@@ -239,8 +239,8 @@ Passando sopra un box compaiono **btw…**, **compact** e **clear**; nell'intest
 - **btw…** apre un campo per la domanda; Invio la manda.
 - **compact** parte subito.
 - **clear** chiede sempre conferma. La conferma dice quanti token verranno azzerati e cosa fa arricurdAI:
-  - con una versione che offre `handoff --prepare` (vedi [la proposta](docs/proposta-arricurdai.md)), prima prepara una nota per la nuova sessione;
-  - con la 0.4.0 non può: il transcript resta su disco e `recall` lo trova.
+  - dalla 0.5.0, che offre `handoff --prepare` (vedi [la proposta](docs/proposta-arricurdai.md)), prima prepara una nota per la nuova sessione;
+  - con le versioni precedenti non può: il transcript resta su disco e `recall` lo trova.
 
 **Quando parte un comando.** Forchetta scrive il comando nella sessione come lo scriveresti tu, solo quando è sicuro:
 - **la sessione aspetta un nuovo prompt.** Se Claude lavora, o aspetta una tua risposta (un permesso, una domanda), il comando resta in coda e il box lo mostra: "in coda: /compact · aspetto la fine del turno". In un dialogo non scrive mai: un tasto potrebbe rispondere al posto tuo;

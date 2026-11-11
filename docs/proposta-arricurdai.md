@@ -1,6 +1,8 @@
 # Proposta per arricurdAI: `handoff --prepare`
 
-Stato: proposta, provata. Il repo di arricurdAI non è stato toccato. La modifica è stata applicata a una copia: i test di arricurdAI passano (138, tre nuovi), e con Forchetta collegata alla copia un `/clear` dal box ha dato alla sessione nuova la nota ("Last requests of the user…, Files changed…, Last reply of the assistant"). Forchetta è già pronta a usarla.
+Stato: **fatta**, in arricurdAI 0.5.0. Forchetta la usa da sola quando l'arricurdAI installato è almeno la 0.5.0: prima di un `/clear` dal box, la sessione nuova riceve la nota su quella vecchia. Il codice vero è `prepareHandoff` in `packages/cli/src/guard.ts` di arricurdAI. Il resto della pagina è la proposta com'era, con il codice indicativo.
+
+Prima di proporla l'avevo provata su una copia di arricurdAI: i test passavano (138, tre nuovi), e con Forchetta collegata alla copia un `/clear` dal box ha dato alla sessione nuova la nota ("Last requests of the user…, Files changed…, Last reply of the assistant").
 
 ## Il problema
 

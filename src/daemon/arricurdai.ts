@@ -177,10 +177,10 @@ export class ArricurdaiPoller {
 }
 
 /**
- * The note of a session before /clear. arricurdAI 0.4.0 gives the new session a note only after a /clear that
- * follows a prompt its guard stopped: there is no command to ask for it. The proposal in
- * docs/proposta-arricurdai.md adds `arricurdai handoff --prepare --transcript <path>`; this uses it as soon as
- * the installed arricurdAI has it, and says so in the help of `handoff`.
+ * The note of a session before /clear. Up to 0.4.0, arricurdAI gives the new session a note only after a /clear
+ * that follows a prompt its guard stopped: there is no command to ask for it. 0.5.0 adds
+ * `arricurdai handoff --prepare --transcript <path>` (docs/proposta-arricurdai.md); this uses it as soon as the
+ * installed arricurdAI has it, and says so in the help of `handoff`.
  */
 export class ArricurdaiNotes {
   private support: Promise<boolean> | undefined;
