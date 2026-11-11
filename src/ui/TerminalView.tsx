@@ -5,7 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'preact/hooks';
 import { token } from './connection.ts';
 import { GlyphFilter } from './glyphs.ts';
-import { keyInput } from './layout.ts';
+import { isFocusReport, keyInput } from './layout.ts';
 
 // The terminal of a pane: xterm.js on a WebSocket of the daemon, which runs `tmux attach` for the session. Closing
 // the pane closes the socket, and the daemon detaches that tmux client: the session goes on.
@@ -49,7 +49,7 @@ interface Props {
   /** Typing or clicking in the terminal. */
   onUse: () => void;
   onStatus: (status: TerminalStatus) => void;
-  /** Focus the terminal when the pane opens or is activated. */
+  /** Focus the terminal when the pane opens or is activated: when this changes, and is not -1 (see layout.ts). */
   focusKey: number;
 }
 
@@ -111,7 +111,7 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
 
     term.onData((data) => {
       send({ type: 'input', data });
-      callbacks.current.onUse();
+      if (!isFocusReport(data)) callbacks.current.onUse();
     });
     term.onBinary((data) => send({ type: 'input', data, binary: true }));
     term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
@@ -152,7 +152,7 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
   }, [agentId]);
 
   useEffect(() => {
-    terminal.current?.focus();
+    if (focusKey >= 0) terminal.current?.focus();
   }, [focusKey]);
 
   return <div class="terminal" ref={host} />;

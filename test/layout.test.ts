@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closePane, emptyPanes, keyInput, layoutFor, leastRecentlyUsed, openPane, type PaneState, prunePanes, replacePane, usePane } from '../src/ui/layout.ts';
+import { closePane, emptyPanes, focusKey, isFocusReport, keyInput, layoutFor, leastRecentlyUsed, openPane, type PaneState, prunePanes, replacePane, usePane } from '../src/ui/layout.ts';
 
 const openAll = (ids: string[], policy: 'lru' | 'chiedi' = 'lru'): PaneState =>
   ids.reduce((state, id, index) => openPane(state, id, 1000 + index, policy), emptyPanes());
@@ -54,6 +54,46 @@ describe('panes', () => {
   it('forgets the panes of agents that went away', () => {
     const state = prunePanes(openAll(['a', 'b']), (id) => id !== 'a');
     expect(state.open).toEqual(['b']);
+  });
+});
+
+describe('keyboard', () => {
+  const keys = (state: PaneState): Record<string, number> => Object.fromEntries(state.open.map((id) => [id, focusKey(state, id)]));
+
+  it('gives the keyboard to the activated pane only', () => {
+    const state = openAll(['a', 'b']);
+    expect(keys(state)).toEqual({ a: -1, b: 1001 });
+  });
+
+  it('does not take the keyboard back when you use another pane, or the active one loses it', () => {
+    // b is active and Claude answers in it; you click and type in a. Using a pane, even the active one (its
+    // terminal reports losing the keyboard), must not change any key, or b would take the keyboard back.
+    const before = openAll(['a', 'b']);
+    let state = usePane(before, 'a', 5000);
+    state = usePane(state, 'b', 5001);
+    state = usePane(state, 'a', 5002);
+    expect(keys(state)).toEqual(keys(before));
+  });
+
+  it('gives it again when you activate a pane, even the one already active', () => {
+    const state = openAll(['a', 'b']);
+    expect(keys(openPane(state, 'a', 6000, 'lru'))).toEqual({ a: 6000, b: -1 });
+    expect(keys(openPane(state, 'b', 6000, 'lru'))).toEqual({ a: -1, b: 6000 });
+  });
+
+  it('gives it to the pane that takes the place of the active one when it closes', () => {
+    let state = usePane(openAll(['a', 'b', 'c']), 'a', 9000);
+    state = closePane(state, 'c');
+    expect(focusKey(state, 'a')).toBeGreaterThanOrEqual(0);
+    expect(focusKey(state, 'b')).toBe(-1);
+  });
+
+  it('tells the focus reports of xterm.js from typing', () => {
+    expect(isFocusReport('\u001b[I')).toBe(true);
+    expect(isFocusReport('\u001b[O')).toBe(true);
+    expect(isFocusReport('O')).toBe(false);
+    expect(isFocusReport('\u001b')).toBe(false);
+    expect(isFocusReport('\u001b[A')).toBe(false);
   });
 });
 

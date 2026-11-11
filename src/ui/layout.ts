@@ -2,8 +2,9 @@
 // Pure functions, no DOM.
 //
 // "Activated" and "used" are two things. A pane is activated when you open it or click its box: in the layout of
-// three, the activated one is the large one. A pane is used whenever you type or click in it: that only counts for
-// choosing which pane a fifth session replaces. Typing in a small pane must not make the layout jump.
+// three, the activated one is the large one, and its terminal takes the keyboard. A pane is used whenever you type
+// or click in it: that only counts for choosing which pane a fifth session replaces. Typing in a small pane must
+// not make the layout jump, and using a pane must never move the keyboard to another one.
 
 export const MAX_PANES = 4;
 
@@ -14,6 +15,8 @@ export interface PaneState {
   open: string[];
   /** The pane activated last. */
   active?: string;
+  /** When it was activated: its terminal takes the keyboard when this changes, and only then. */
+  activatedAt?: number;
   /** When each open pane was last used or activated. */
   used: Record<string, number>;
   /** A fifth session waiting for the choice of the pane it replaces (policy "chiedi"). */
@@ -36,13 +39,13 @@ export function replacePane(state: PaneState, victim: string, id: string, now: n
   if (!state.open.includes(victim) || state.open.includes(id)) return state;
   const used = { ...state.used, [id]: now };
   delete used[victim];
-  return { open: state.open.map((open) => (open === victim ? id : open)), active: id, used };
+  return { open: state.open.map((open) => (open === victim ? id : open)), active: id, activatedAt: now, used };
 }
 
 /** A click on a box: opens its pane, or activates it when it is already open. */
 export function openPane(state: PaneState, id: string, now: number, policy: ReplacePolicy): PaneState {
-  if (state.open.includes(id)) return { ...state, active: id, used: { ...state.used, [id]: now }, asking: undefined };
-  if (state.open.length < MAX_PANES) return { open: [...state.open, id], active: id, used: { ...state.used, [id]: now } };
+  if (state.open.includes(id)) return { ...state, active: id, activatedAt: now, used: { ...state.used, [id]: now }, asking: undefined };
+  if (state.open.length < MAX_PANES) return { open: [...state.open, id], active: id, activatedAt: now, used: { ...state.used, [id]: now } };
   if (policy === 'chiedi') return { ...state, asking: id };
   const victim = leastRecentlyUsed(state);
   return victim ? replacePane(state, victim, id, now) : state;
@@ -59,8 +62,14 @@ export function closePane(state: PaneState, id: string): PaneState {
   const open = state.open.filter((open) => open !== id);
   const used = { ...state.used };
   delete used[id];
-  return { open, used, active: state.active === id ? mostRecentlyUsed(open, used) : state.active, asking: state.asking };
+  return { open, used, active: state.active === id ? mostRecentlyUsed(open, used) : state.active, activatedAt: state.activatedAt, asking: state.asking };
 }
+
+/**
+ * What makes the terminal of a pane take the keyboard: it changes only when the pane is activated (or becomes the
+ * active one because the active one closed). -1 for the others, which never take it by themselves.
+ */
+export const focusKey = (state: PaneState, id: string): number => (id === state.active ? (state.activatedAt ?? 0) : -1);
 
 export const cancelAsking = (state: PaneState): PaneState => ({ ...state, asking: undefined });
 
@@ -113,3 +122,9 @@ export function keyInput(event: { type: string; key: string; shiftKey: boolean; 
   if (event.type === 'keydown' && event.key === 'Enter' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) return '\u001b\r';
   return undefined;
 }
+
+/**
+ * What xterm.js sends by itself when its terminal gains or loses the keyboard (tmux asks for it: focus-events on).
+ * It goes on to tmux, but it is not you using the pane: a pane that loses the keyboard was not used.
+ */
+export const isFocusReport = (data: string): boolean => data === '\u001b[I' || data === '\u001b[O';

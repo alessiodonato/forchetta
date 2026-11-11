@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from 'preact/hooks';
 import { type Agent, displayName } from '../shared/agent.ts';
-import { layoutFor } from './layout.ts';
+import { focusKey, layoutFor } from './layout.ts';
 import { motionAllowed } from './motion.ts';
 import { Pane } from './Pane.tsx';
 import { Rail } from './Rail.tsx';
@@ -87,7 +87,7 @@ export function Workspace({ state, store, agents, now }: { state: UiState; store
           {panes.open.map((id) => {
             const agent = state.agents.get(id);
             if (!agent) return null;
-            return <Pane key={id} agent={agent} area={layout.place[id] ?? 'auto'} focusKey={id === panes.active ? (panes.used[id] ?? 0) : -1} now={now} store={store} onClose={close} onUse={use} />;
+            return <Pane key={id} agent={agent} area={layout.place[id] ?? 'auto'} focusKey={focusKey(panes, id)} now={now} store={store} onClose={close} onUse={use} />;
           })}
         </div>
       </div>
