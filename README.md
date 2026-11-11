@@ -1,6 +1,6 @@
 # Forchetta
 
-Centro di controllo locale per le sessioni Claude Code che girano in parallelo su macOS.
+Centro di controllo locale per le sessioni Claude Code che girano in parallelo su macOS. Sito: <https://alessiodonato.github.io/forchetta/>
 
 **Cosa fa** (versione 0.6.0):
 - trova da sola le sessioni Claude Code attive e mostra per ognuna un box con stato, azione in corso, riassunto, contesto, cache e costo;
