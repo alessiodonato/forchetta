@@ -147,10 +147,31 @@ describe('bin/forchetta-statusline', () => {
 
   it('prints the same with the daemon off, at once', async () => {
     const script = install(`echo ciao`);
-    const started = Date.now();
     expect(await run(script, 1, '{}')).toEqual({ code: 0, stdout: 'ciao\n' });
-    // curl runs in the background: the line never waits for the daemon. The bound is loose for a busy machine.
-    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
+  it('never waits for a daemon that does not answer', async () => {
+    const script = install(`echo ciao`);
+    // curl gives up after 1 s (--max-time 1). Here it waits 10 s, so that a busy Mac cannot make the script look
+    // like it waited: what is checked is that curl runs in the background, not how fast the Mac is.
+    const text = readFileSync(script, 'utf8');
+    expect(text).toContain('--max-time 1 ');
+    writeFileSync(script, text.replace('--max-time 1 ', '--max-time 10 '));
+    // macOS checks a new script the first time it runs, which on a busy Mac takes a second or more: a first run,
+    // against no daemon, gets that out of the way.
+    await run(script, 1, '{}');
+    // A daemon that takes the request and never answers: curl hangs up only when it gives up.
+    let hungUp = false;
+    const server = createServer(() => {});
+    server.on('connection', (socket) => socket.on('close', () => (hungUp = true)));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as AddressInfo).port;
+    expect(await run(script, port, '{}')).toEqual({ code: 0, stdout: 'ciao\n' });
+    // curl runs in the background: the line is out while curl still waits. Had the script waited for it, curl
+    // would have hung up already.
+    expect(hungUp).toBe(false);
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
   });
 
   it('prints nothing when there was no status line before', async () => {

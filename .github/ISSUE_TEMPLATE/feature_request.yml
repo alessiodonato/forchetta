@@ -1,0 +1,26 @@
+name: Idea
+description: Something Forchetta could do for you.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: How you work with your Claude Code sessions, and what gets in the way.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What Forchetta could do
+    validations:
+      required: false
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: Another tool, a script, or by hand.
+    validations:
+      required: false

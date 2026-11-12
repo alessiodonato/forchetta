@@ -1,0 +1,69 @@
+name: Bug report
+description: Something in Forchetta doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Before you paste anything, please remove personal paths, project names and secrets.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: |
+        1. Start a session with `forchetta run claude`
+        2. ...
+    validations:
+      required: false
+
+  - type: input
+    id: forchetta
+    attributes:
+      label: Forchetta version
+      description: "`forchetta --version`"
+    validations:
+      required: true
+
+  - type: input
+    id: claude
+    attributes:
+      label: Claude Code version
+      description: "`claude --version`"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 14.6, Apple Silicon
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed Forchetta
+      options:
+        - Homebrew
+        - From source
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: The daemon log
+      description: The last lines of `daemon.log`, in `~/Library/Application Support/Forchetta` (in a clone, `var/`).
+      render: text
+    validations:
+      required: false

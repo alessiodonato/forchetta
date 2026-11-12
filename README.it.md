@@ -12,6 +12,7 @@ Tieni in una finestra tutte le sessioni di Claude Code del tuo Mac: vedi cosa st
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#installazione)
 [![Per Claude Code](https://img.shields.io/badge/per-Claude%20Code-d97757?style=flat-square)](https://code.claude.com)
 [![Gira in locale](https://img.shields.io/badge/gira-in%20locale-46c48a?style=flat-square)](#disinstallazione)
+[![Test](https://img.shields.io/github/actions/workflow/status/alessiodonato/forchetta/ci.yml?branch=main&style=flat-square&label=test)](https://github.com/alessiodonato/forchetta/actions/workflows/ci.yml)
 [![Licenza: Apache 2.0](https://img.shields.io/badge/licenza-Apache%202.0-8b867d?style=flat-square)](LICENSE)
 [![Sito](https://img.shields.io/badge/sito-forchetta-d97757?style=flat-square)](https://alessiodonato.github.io/forchetta/)
 
@@ -534,6 +535,8 @@ FORCHETTA_VAR="$PWD/var/sim" node dist/cli.js daemon stop  # alla fine
 ```
 
 `scripts/dev/cpu.mjs` misura la CPU media di alcuni processi in un intervallo. `scripts/package-release.sh` prepara l'archivio di una release, quello che installa la formula di Homebrew, e ne stampa lo sha256.
+
+Per contribuire, leggi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese): come è organizzato il codice e cosa ogni modifica deve mantenere vero.
 
 ## Licenza
 

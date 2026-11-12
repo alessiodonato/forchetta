@@ -94,7 +94,7 @@ describe('spawnSession', () => {
     expect(result.ok).toBe(true);
     const agentId = (result as { agentId: string }).agentId;
     expect(registry.agents.get(agentId)).toMatchObject({ cwd: work, control: { kind: 'tmux' } });
-    for (let round = 0; round < 50; round++) {
+    for (let round = 0; round < 150; round++) {
       try {
         if (readFileSync(out, 'utf8').includes('agente:')) break;
       } catch {
@@ -132,7 +132,7 @@ describe('spawnSession', () => {
     expect(result.ok).toBe(true);
     // Its place in the team is there before the session says hello.
     expect(registry.agents.get((result as { agentId: string }).agentId)?.team).toEqual(team);
-    for (let round = 0; round < 50; round++) {
+    for (let round = 0; round < 150; round++) {
       try {
         if (readFileSync(out, 'utf8').includes('variabili:')) break;
       } catch {
@@ -160,8 +160,10 @@ describe('spawnSession', () => {
     writeFileSync(quick, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
     mkdirSync(join(temp.dir, 'repo', '.git'), { recursive: true });
     const registry = new Registry();
+    // The pane goes through a login shell, and macOS checks a new script the first time it runs: on a busy Mac
+    // that takes seconds. The watch ends as soon as the pane closes, so a long one costs nothing when all is well.
     const result = await spawnSession(
-      { tmux, registry, claude: quick, log, shell: '/bin/bash', env: { PATH: '/usr/bin:/bin', HOME: join(temp.dir, 'home') }, watchMs: 3000 },
+      { tmux, registry, claude: quick, log, shell: '/bin/bash', env: { PATH: '/usr/bin:/bin', HOME: join(temp.dir, 'home') }, watchMs: 15_000 },
       { cwd: join(temp.dir, 'repo'), worktree: true },
     );
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining('already trust') });
@@ -175,7 +177,7 @@ describe('spawnSession', () => {
     const registry = new Registry();
     const result = await spawnSession({ tmux, registry, claude: fake, log, shell: '/bin/bash', env: { PATH: '/usr/bin:/bin', HOME: join(temp.dir, 'home') }, watchMs: 400 }, { cwd: temp.dir, prompt: '   ' });
     expect(result.ok).toBe(true);
-    for (let round = 0; round < 50; round++) {
+    for (let round = 0; round < 150; round++) {
       try {
         if (readFileSync(out, 'utf8') !== '') break;
       } catch {
