@@ -11,6 +11,7 @@ import {
   newAgent,
   stateFromStatus,
 } from './state.ts';
+import { forgetEndedSubagents } from './subagents.ts';
 
 // The agents the daemon knows, and where each event belongs. An agent is one Claude Code process: it is found
 // by the Forchetta id that `forchetta run` gave it, by session id, or by pid, in that order.
@@ -202,6 +203,7 @@ export class Registry {
         // A /clear the hooks did not report.
         if (agent.sessionId) agent.pastSessionIds.push(agent.sessionId);
         agent.sessionId = entry.sessionId;
+        forgetEndedSubagents(agent);
         touched.add(agent);
       }
       if (!agent.name && entry.name) agent.name = entry.name;

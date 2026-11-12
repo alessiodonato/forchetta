@@ -4,6 +4,7 @@ import { activity } from '../shared/present.ts';
 import { CommandBar, CommandStatus } from './Commands.tsx';
 import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
+import { SubagentsButton } from './Subagents.tsx';
 import { SelectionMenu } from './SelectionMenu.tsx';
 import type { Store } from './store.ts';
 import { type TerminalStatus, TerminalView } from './TerminalView.tsx';
@@ -41,6 +42,7 @@ export function Pane({ agent, area, focusKey, now, store, onClose, onUse }: Prop
         <span class="pane-activity" title={activity(agent)}>
           {activity(agent)}
         </span>
+        <SubagentsButton agent={agent} store={store} className="pane-files" />
         <FilesButton agent={agent} store={store} className="pane-files" />
         <ArtifactsButton agent={agent} className="pane-files" />
         {!ended && <CommandBar agent={agent} store={store} />}

@@ -12,9 +12,11 @@ import {
   controlLabel,
   hasEvents,
   percentText,
+  shownSubagents,
   stalledFor,
   stallText,
   shortTokens,
+  subagentTime,
   usdText,
   waitingText,
 } from '../shared/present.ts';
@@ -24,6 +26,7 @@ import { CommandBar, CommandStatus, currentCommand } from './Commands.tsx';
 import { animateEnter, animateShake } from './motion.ts';
 import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
+import { SubagentRows, SubagentsButton } from './Subagents.tsx';
 import { PermissionOutcomeLine, PermissionPrompt, visibleOutcome } from './Permission.tsx';
 import { roleText, TeamEditor } from './Team.tsx';
 import { canOpen, type Store } from './store.ts';
@@ -119,6 +122,8 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
         </span>
       )}
       <span class="grow" />
+      {/* Its rows open the panel while they are in the box: the button only after. */}
+      {shownSubagents(agent, now).length === 0 && <SubagentsButton agent={agent} store={store} />}
       <FilesButton agent={agent} store={store} />
       <ArtifactsButton agent={agent} />
       {hasEvents(agent) && agent.state !== 'ended' && (
@@ -267,12 +272,14 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: B
           {crewLine}
         </p>
       )}
+      <SubagentRows agent={agent} now={now} store={store} />
       <CommandStatus agent={agent} store={store} now={now} />
       <ContextBar agent={agent} />
       <Meta agent={agent} now={now} store={store} />
       {openable && (
         <div class={`box-commands${commanding ? ' active' : ''}`}>
           {/* The bar covers the last line on hover: its two buttons come with it, or they could not be clicked. */}
+          {!commanding && shownSubagents(agent, now).length === 0 && <SubagentsButton agent={agent} store={store} />}
           {!commanding && <FilesButton agent={agent} store={store} />}
           {!commanding && <ArtifactsButton agent={agent} />}
           <CommandBar agent={agent} store={store} onModeChange={setCommanding} />
@@ -295,6 +302,9 @@ function clockKey(agent: Agent, now: number): string {
     currentCommand(agent, now)?.id ?? '',
     // The stall line counts minutes as the time since the last event above does: no key of its own.
     visibleOutcome(agent, now) !== undefined,
+    shownSubagents(agent, now)
+      .map((subagent) => subagentTime(subagent, now))
+      .join(','),
   ].join('|');
 }
 

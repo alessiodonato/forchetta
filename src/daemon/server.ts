@@ -8,6 +8,7 @@ import type { HookMeta, Registry } from './registry.ts';
 import type { Agent, HookPayload } from './state.ts';
 import { serveStatic } from './static.ts';
 import { artifactOf } from '../shared/artifacts.ts';
+import { subagentResultOf } from './subagents.ts';
 
 // The HTTP side of the daemon, on 127.0.0.1 only.
 //
@@ -138,6 +139,8 @@ export function slimPayload(raw: unknown): HookPayload | undefined {
     trigger: optionalString(input.trigger),
     agent_id: optionalString(input.agent_id),
     agent_type: optionalString(input.agent_type),
+    tool_use_id: optionalString(input.tool_use_id),
+    subagent_result: input.hook_event_name === 'PostToolUse' ? subagentResultOf(input.tool_name, input.tool_response) : undefined,
     permission_suggestions: input.hook_event_name === 'PermissionRequest' ? input.permission_suggestions : undefined,
     // The response of the other tools (outputs of commands, files read) is not kept.
     tool_response: input.hook_event_name === 'PostToolUse' && typeof input.tool_name === 'string' && WRITE_TOOLS.has(input.tool_name) ? input.tool_response : undefined,

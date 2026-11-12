@@ -39,7 +39,7 @@ Versione 0.8.4:
 - manda `/btw`, `/compact` e `/clear` a una o più sessioni, solo quando è sicuro;
 - risponde ai permessi dal box (una volta o "always"), notifica le attese, gli stalli e gli errori, avvisa dei conflitti tra sessioni sugli stessi file;
 - avvia **team di agenti**: un capo (una sessione Claude, oppure tu) e fino a 6 membri, ognuno una sessione di Claude Code, che si passano richieste, risposte e domande; ogni membro risponde al suo capo (⇄) o esegue soltanto (→), e può lavorare in un worktree git tutto suo;
-- mostra le modifiche di ogni sessione e gli artefatti che ha pubblicato su claude.ai, avvia sessioni nuove, organizza le sessioni in gruppi e ruoli, cerca nelle sessioni passate con arricurdAI;
+- mostra i subagenti che ogni sessione avvia e cosa fanno, le sue modifiche e gli artefatti che ha pubblicato su claude.ai, avvia sessioni nuove, organizza le sessioni in gruppi e ruoli, cerca nelle sessioni passate con arricurdAI;
 - sta nella barra dei menu, con la scorciatoia ⌃⌥F.
 
 Tutto gira in locale. L'unico servizio esterno, facoltativo e spento di default, è la Claude API per i riassunti.
@@ -274,6 +274,29 @@ Quando una sessione pubblica un artefatto su claude.ai, o ne apre uno, il suo bo
 - Forchetta prende link e titolo dall'hook dello strumento Artifact di Claude Code, e nient'altro del suo risultato. Per una sessione che era già aperta, li legge una volta dal suo transcript.
 - I link sono privati: si aprono nel browser predefinito, dove hai l'accesso a claude.ai, e restano nella cartella dei dati di Forchetta.
 - Un box tiene gli ultimi 20.
+
+### Subagenti
+
+<img src="docs/img/subagents.png" alt="Il pannello dei subagenti di shop: a sinistra l'elenco, un Explore al lavoro e due subagenti finiti; a destra l'Explore, su haiku 5.5 in background, con il compito ricevuto e ogni sua chiamata con l'inizio del risultato. Dietro, il box di shop elenca gli stessi tre subagenti." width="100%">
+
+Quando una sessione avvia un subagente con lo strumento Agent (Explore, general-purpose, Plan o uno tuo), il suo box lo elenca sotto il riassunto, mentre lavora e per 10 minuti dopo la fine:
+
+```
+● Explore  Find where orders are retried            40 s
+  haiku 5.5 · background · Grep "withRetry"
+✓ web-fetch  Check the fetch retry docs      done in 2 s
+```
+
+- Al lavoro: il tipo, il compito in poche parole, da quanto lavora, poi il modello (quando la chiamata ne ha scelto uno, o quando lo dice Claude Code), "background" se intanto la sessione va avanti, e la sua ultima chiamata. Finito, fallito o fermato: quanto è durato. Oltre tre, "+2 more".
+- Un clic apre un pannello con tutti i subagenti della sessione, dal più recente. Per quello scelto: con cosa è stato avviato (modello, primo piano o background, worktree suo, il subagente che l'ha avviato), poi il suo transcript man mano: il compito ricevuto, ogni chiamata con l'inizio del risultato, il suo testo, il resoconto che ha mandato indietro. Il pannello rilegge il transcript a ogni passo; Esc lo chiude.
+- Quando le righe sono uscite dal box, "3 subagents" nel piè di pagina apre lo stesso pannello; c'è anche nell'intestazione di un riquadro aperto, dove pulsa mentre uno di loro lavora. Con i riquadri aperti, la colonna a sinistra mostra "↳ 2" mentre due lavorano.
+- Un subagente che si ferma ad aspettare un lavoro suo in background (un comando avviato con `run_in_background`) mostra "◷ waiting", non "done", e torna al lavoro quando quel lavoro finisce, come dice Claude Code.
+- `/clear` e `/resume` cominciano una conversazione nuova: i subagenti finiti se ne vanno con la vecchia. Quelli ancora al lavoro restano finché finiscono.
+- In sola lettura: un subagente gira dentro il processo della sua sessione, senza un terminale suo. Per scrivergli, chiedi alla sua sessione.
+
+Come lo sa Forchetta: gli hook della sessione danno l'input di ogni chiamata Agent e il suo risultato, e ogni evento di un subagente porta il suo id. Accanto al transcript della sessione Claude Code scrive, per ogni subagente, un `meta.json` (con `"finished": true` quando finisce) e il suo transcript, in `~/.claude/projects/<progetto>/<sessione>/subagents/`. Un subagente in background non ha un hook alla fine: Forchetta legge il suo `meta.json` ogni 5 secondi, solo mentre uno lavora. Un box tiene gli ultimi 20.
+
+Non sono gli agenti di "← 1 agent" in fondo a Claude Code: quelle sono sessioni in background, che Forchetta mostra come box a sé, marcati `background`.
 
 ### Conflitti tra sessioni
 

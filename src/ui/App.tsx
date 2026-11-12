@@ -6,6 +6,7 @@ import { Box } from './Box.tsx';
 import { BroadcastButton, BroadcastPanel } from './Broadcast.tsx';
 import { ClaudeUpdateNotice } from './ClaudeUpdate.tsx';
 import { FilesPanel } from './Files.tsx';
+import { SubagentsPanel } from './Subagents.tsx';
 import { NewSessionPanel } from './NewSession.tsx';
 import { NewTeamPanel } from './NewTeam.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
@@ -236,6 +237,7 @@ export function App({ store }: { store: Store }) {
         </main>
       )}
       <FilesPanel store={store} now={now} />
+      <SubagentsPanel store={store} now={now} />
     </div>
   );
 }

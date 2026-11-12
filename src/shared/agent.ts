@@ -173,6 +173,59 @@ export interface FileChange {
   edits?: SessionEdit[];
 }
 
+/**
+ * A subagent a session started with the Agent tool (daemon/subagents.ts): what it was started with, what it does,
+ * how it ended. It runs inside the process of its session: no terminal, only its transcript.
+ */
+export interface Subagent {
+  /** The id Claude Code gives it (subagents/agent-<id>.jsonl): known from its first event or from the result of its call. */
+  id?: string;
+  /** The Agent call that started it. */
+  toolUseId?: string;
+  /** Explore, general-purpose, Plan, or an agent of yours. */
+  type: string;
+  description?: string;
+  /** The task it got, cut: the whole one is in its transcript. */
+  prompt?: string;
+  /** The model asked in the call (haiku, opus…) or the one Claude Code chose; undefined when it inherits it. */
+  model?: string;
+  /** Started in the background: the session goes on while it works. */
+  background?: boolean;
+  /** "worktree": it works in a git worktree of its own. */
+  isolation?: string;
+  /** Started by another subagent, of this type. */
+  by?: string;
+  /** waiting: it stopped to wait for work of its own in the background (a command, a subagent); it goes on after. */
+  state: 'running' | 'waiting' | 'done' | 'failed' | 'stopped';
+  /** It started work of its own in the background since it last started: when it stops, it may only be waiting. */
+  backgroundWork?: boolean;
+  /** It sent its report to the session (SubagentHandback): when it stops, it is done. */
+  reported?: boolean;
+  /** Its last tool call. */
+  action?: { label: string; family: ToolFamily; at: number };
+  /** Tool calls seen so far. */
+  tools?: number;
+  /** From the result of its call, when it ran in the foreground. */
+  tokens?: number;
+  error?: string;
+  startedAt: number;
+  endedAt?: number;
+  /** Its transcript, for the panel (daemon side). */
+  transcript?: string;
+}
+
+/** One step of the transcript of a subagent, as its panel shows it. */
+export type SubagentStep =
+  | { kind: 'prompt'; text: string; at?: number }
+  /** A message sent to it later (SendMessage), after the first task. */
+  | { kind: 'message'; text: string; at?: number }
+  | { kind: 'text'; text: string; at?: number }
+  | { kind: 'tool'; label: string; family: ToolFamily; result?: string; error?: boolean; at?: number }
+  /** Its final report to the session. */
+  | { kind: 'report'; text: string; at?: number }
+  /** A notice of Claude Code to the subagent: work of its own in the background finished. */
+  | { kind: 'notice'; text: string; at?: number };
+
 /** Where a session stands in a team: set from its box, remembered for its folder (daemon/teams.ts). */
 export interface TeamInfo {
   /** A name of your choice, shown in place of the folder. */
@@ -282,6 +335,8 @@ export interface Agent {
   filesChanged?: number;
   /** The artifacts of claude.ai it published or opened, the most recent first (shared/artifacts.ts). */
   artifacts?: ArtifactLink[];
+  /** The subagents it started, oldest first: the last ones only (daemon/subagents.ts). */
+  subagents?: Subagent[];
   /** Its pane, open in the app, is scrolled back in tmux (copy mode): the keys go to tmux (daemon/scrollback.ts). */
   scrolledBack?: boolean;
   /** Other sessions that write the same files or in the same working tree (daemon/conflicts.ts). */

@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
-import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
+import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo } from '../shared/agent.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate } from '../shared/crew.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 
@@ -46,6 +46,8 @@ export type ServerMessage =
   | { type: 'spawned'; now: number; ok: boolean; agentId?: string; error?: string }
   /** The changes of a session, for the window that asked. */
   | { type: 'files'; now: number; agentId: string; files: FileChange[] }
+  /** The transcript of a subagent, for the window that asked: its steps, or why there are none. */
+  | { type: 'subagent'; now: number; agentId: string; key: string; steps: SubagentStep[]; model?: string; skipped?: number; note?: string }
   /** A session waits for you, seems stuck or ended with an error: the app shows a notification of macOS. */
   | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error'; title: string; body: string };
 
@@ -74,6 +76,8 @@ export type ClientMessage =
   | { type: 'cancel'; agentId: string; commandId: string }
   | { type: 'permission'; agentId: string; ticket: string; behavior: 'allow' | 'deny'; always?: number }
   | { type: 'files'; agentId: string }
+  /** The transcript of a subagent of a session, by its key (shared/present.ts, subagentKey). */
+  | { type: 'subagent'; agentId: string; key: string }
   | { type: 'spawn'; cwd: string; prompt?: string; model?: string; mode?: string; worktree?: string | boolean }
   | { type: 'team'; agentId: string; team: unknown }
   /** A new team of agents, as the panel writes it (shared/crew.ts checks it). */
@@ -128,6 +132,8 @@ export interface HubOptions {
   onCrewRequest?: (crewId: string, to: string[], text: string) => { ok: true; n: number } | { ok: false; error: string };
   /** The changes of a session, read when its panel opens. */
   onFiles?: (agentId: string) => Promise<FileChange[]>;
+  /** The transcript of a subagent, read when its panel shows it and again as it works. */
+  onSubagent?: (agentId: string, key: string) => Promise<{ steps: SubagentStep[]; model?: string; skipped?: number; note?: string }>;
   /** "back to the end" in a pane scrolled back in tmux. */
   onScrollEnd?: (agentId: string) => void;
   /** The answer of a box to a permission dialog. */
@@ -296,6 +302,13 @@ export class Hub {
           void this.options.onFiles(agentId).then(
             (files) => this.send(ws, { type: 'files', now: Date.now(), agentId, files }),
             (error: unknown) => this.options.log(`modifiche di ${agentId}: ${String(error)}`),
+          );
+        } else if (message.type === 'subagent' && typeof message.agentId === 'string' && typeof message.key === 'string' && this.options.onSubagent) {
+          const agentId = message.agentId;
+          const key = message.key;
+          void this.options.onSubagent(agentId, key).then(
+            (thread) => this.send(ws, { type: 'subagent', now: Date.now(), agentId, key, ...thread }),
+            (error: unknown) => this.send(ws, { type: 'subagent', now: Date.now(), agentId, key, steps: [], note: `The transcript could not be read: ${String(error)}` }),
           );
         }
       } catch {

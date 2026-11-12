@@ -1,4 +1,5 @@
 import type { ArtifactLink } from '../shared/artifacts.ts';
+import { forgetEndedSubagents, type SubagentResult } from './subagents.ts';
 import { type Agent, type AgentState, projectOf } from '../shared/agent.ts';
 import { activeTask, clip, firstQuestion, opening, toolLabel } from './labels.ts';
 
@@ -30,6 +31,10 @@ export interface HookPayload {
   trigger?: string;
   agent_id?: string;
   agent_type?: string;
+  /** PreToolUse, PostToolUse: the id of the tool call, the same in both. */
+  tool_use_id?: string;
+  /** PostToolUse of the Agent tool: what its result says of the subagent, and nothing else (daemon/subagents.ts). */
+  subagent_result?: SubagentResult;
   /** PermissionRequest: the "always" choices of its dialog. */
   permission_suggestions?: unknown;
   /** PostToolUse of a write tool only: the patch Claude Code reports (daemon/patches.ts). */
@@ -72,6 +77,12 @@ export function markEnded(agent: Agent, reason: string, now: number): void {
   agent.waiting = undefined;
   agent.action = undefined;
   agent.pendingSwitchAt = undefined;
+  // Its subagents ran inside its process.
+  for (const subagent of agent.subagents ?? []) {
+    if (subagent.state !== 'running' && subagent.state !== 'waiting') continue;
+    subagent.state = 'stopped';
+    subagent.endedAt = now;
+  }
 }
 
 function errorText(value: unknown): string | undefined {
@@ -88,13 +99,14 @@ function errorText(value: unknown): string | undefined {
 export function applyHook(agent: Agent, payload: HookPayload, now: number): void {
   const event = payload.hook_event_name;
   agent.lastEvent = { name: event, at: now };
-  if (payload.transcript_path) agent.transcriptPath = payload.transcript_path;
+  const fromSubagent = typeof payload.agent_id === 'string' && payload.agent_id !== '';
+  // The transcript of the session: an event of a subagent may name its own.
+  if (payload.transcript_path && !fromSubagent) agent.transcriptPath = payload.transcript_path;
   if (payload.cwd && !agent.cwd) {
     agent.cwd = payload.cwd;
     agent.project = projectOf(payload.cwd);
   }
   if (agent.state === 'ended') return;
-  const fromSubagent = typeof payload.agent_id === 'string' && payload.agent_id !== '';
 
   switch (event) {
     case 'SessionStart': {
@@ -120,6 +132,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
         agent.lastPrompt = undefined;
         agent.recentActions = undefined;
         agent.lastReply = undefined;
+        forgetEndedSubagents(agent);
       } else if (agent.state !== 'working' && agent.state !== 'waiting') {
         agent.state = 'starting';
       }

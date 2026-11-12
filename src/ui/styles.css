@@ -578,6 +578,10 @@ html[data-reduced-motion] .fill i.squeeze {
   transform: scaleX(0.5) !important;
 }
 
+html[data-reduced-motion] .subagents-pulse {
+  opacity: 0.6 !important;
+}
+
 /* The window cannot be seen: nothing moves. */
 html[data-hidden] *,
 html[data-hidden] *::before,
@@ -1657,6 +1661,283 @@ html[data-hidden] *::after {
 .diff-line.meta {
   color: var(--text-3);
   opacity: 0.7;
+}
+
+/* ——— The subagents of a session ——— */
+
+/* Under the box: one row each, its type, what it was asked and its time; at work, a second line with its model and
+   what it does now. A click opens its transcript. */
+.subagents {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: -2px -8px 0;
+}
+
+.subagent {
+  -webkit-appearance: none;
+  appearance: none;
+  display: grid;
+  grid-template-columns: 10px auto minmax(0, 1fr) auto;
+  column-gap: 7px;
+  align-items: baseline;
+  width: 100%;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: 11.5px/1.4 var(--mono);
+  text-align: left;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.subagent:hover {
+  background: var(--surface-2);
+}
+
+.subagent-mark {
+  font-size: 9px;
+  text-align: center;
+  color: var(--text-3);
+}
+
+/* At work, done, failed: the colors of the states of a box. */
+[data-state='running'] > .subagent-mark,
+[data-state='running'] .sub-detail-title .subagent-mark,
+[data-state='waiting'] > .subagent-mark,
+[data-state='waiting'] .sub-detail-title .subagent-mark {
+  color: var(--text-2);
+}
+
+[data-state='done'] > .subagent-mark,
+[data-state='done'] .sub-detail-title .subagent-mark {
+  color: var(--green);
+}
+
+[data-state='failed'] > .subagent-mark,
+[data-state='failed'] .sub-detail-title .subagent-mark {
+  color: var(--red);
+}
+
+.subagent-type {
+  color: var(--text);
+}
+
+.subagent-desc {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.subagent:not([data-state='running']):not([data-state='waiting']) .subagent-desc,
+.subagent:not([data-state='running']):not([data-state='waiting']) .subagent-type {
+  color: var(--text-3);
+}
+
+.subagent-time {
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+
+.subagent-detail {
+  grid-column: 2 / -1;
+  overflow: hidden;
+  font-size: 10.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.subagents-more {
+  -webkit-appearance: none;
+  appearance: none;
+  align-self: flex-start;
+  padding: 1px 8px 1px 25px;
+  border: 0;
+  background: transparent;
+  font: 10.5px var(--mono);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.subagents-more:hover {
+  color: var(--text);
+}
+
+/* The button of the subagents while one works: the pulse of a box at work, quicker, on a layer of its own so that
+   only its opacity changes. Its first cycles run here, then ambient.ts carries it on. */
+.files-button[data-working],
+.pane-files[data-working] {
+  position: relative;
+  color: var(--text);
+}
+
+.subagents-pulse {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid rgba(232, 233, 235, 0.7);
+  border-radius: inherit;
+  background: rgba(232, 233, 235, 0.14);
+  opacity: 0.1;
+  pointer-events: none;
+  will-change: opacity;
+  animation: blink 1.6s ease-in-out 3;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The panel: the subagents of the session on the left, the newest first; the chosen one on the right. */
+.subagents-list {
+  width: 320px;
+}
+
+.subagents-list .subagent-mark {
+  flex: none;
+  width: 10px;
+}
+
+.sub-detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sub-detail-head {
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sub-detail-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.sub-detail-title strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sub-facts,
+.sub-now {
+  margin: 4px 0 0 18px;
+  overflow: hidden;
+  font: 11px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.sub-now {
+  color: var(--text-2);
+}
+
+.sub-error {
+  margin: 6px 0 0 18px;
+  font-size: 12px;
+  color: var(--red);
+}
+
+.sub-thread {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 12px 20px 28px;
+  overflow-y: auto;
+}
+
+.sub-step {
+  margin: 0;
+}
+
+.sub-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.sub-task,
+.sub-report {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.sub-report {
+  margin-top: 4px;
+  border-color: var(--line-strong);
+}
+
+.sub-step-head {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.sub-tool {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font: 11.5px/1.45 var(--mono);
+  color: var(--text-2);
+}
+
+.sub-tool .icon {
+  align-self: center;
+}
+
+.sub-tool-label {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sub-tool-result {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.sub-tool.failed .sub-tool-result {
+  color: var(--red);
+}
+
+/* A notice of Claude Code, not a step of the subagent: quieter than its text. */
+.sub-notice {
+  font: 11px var(--mono);
+  color: var(--text-3);
 }
 
 /* ——— A new session ——— */

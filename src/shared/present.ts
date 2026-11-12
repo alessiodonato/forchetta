@@ -1,4 +1,4 @@
-import type { Agent, CacheInfo, Conflict, ContextInfo } from './agent.ts';
+import type { Agent, CacheInfo, Conflict, ContextInfo, Subagent } from './agent.ts';
 
 // How an agent reads, in English, for `forchetta ls` and for the boxes of the app. No Node module here.
 
@@ -119,6 +119,16 @@ export function nextChange(agent: Agent, now: number): number | undefined {
     else if (left > 0) times.push(expires - (Math.ceil(left / 5000) - 1) * 5000);
   }
   if (agent.completedAt !== undefined && agent.completedAt + COMPLETED_MS > now) times.push(agent.completedAt + COMPLETED_MS);
+  for (const subagent of shownSubagents(agent, now)) {
+    if (subagent.state === 'running') {
+      // Its time moves as agoShort does: every 5 s in the first minute, then every minute.
+      const age = now - subagent.startedAt;
+      const step = age < 60_000 ? 5000 : age < 3_600_000 ? 60_000 : 3_600_000;
+      times.push(subagent.startedAt + (Math.floor(age / step) + 1) * step);
+    } else if (subagent.endedAt !== undefined) {
+      times.push(subagent.endedAt + SUBAGENT_SHOWN_MS);
+    }
+  }
   const future = times.filter((time) => time > now);
   return future.length > 0 ? Math.min(...future) : undefined;
 }
@@ -166,4 +176,60 @@ export function stalledFor(agent: Agent, now: number, stallMs = DEFAULT_STALL_MS
 export function stallText(agent: Agent, quietMs: number): string {
   const running = agent.state === 'working' && agent.action ? ` · ${agent.action.label} running` : '';
   return `no event for ${agoShort(quietMs)}${running}`;
+}
+
+/** How long a finished subagent stays in the box of its session; its panel keeps it longer. */
+export const SUBAGENT_SHOWN_MS = 10 * 60_000;
+
+/** A subagent, for the page and the daemon: the same however much is known of it. */
+export const subagentKey = (subagent: Pick<Subagent, 'type' | 'startedAt'>): string => `${subagent.type}@${subagent.startedAt}`;
+
+/** At work, or waiting for work of its own in the background: not ended. */
+export const subagentActive = (subagent: Pick<Subagent, 'state'>): boolean => subagent.state === 'running' || subagent.state === 'waiting';
+
+/** The subagents the box shows: those at work or waiting, oldest first, then those that ended in the last minutes, latest first. */
+export function shownSubagents(agent: Pick<Agent, 'subagents'>, now: number): Subagent[] {
+  const list = agent.subagents ?? [];
+  const running = list.filter(subagentActive);
+  const ended = list
+    .filter((subagent) => !subagentActive(subagent) && subagent.endedAt !== undefined && now - subagent.endedAt < SUBAGENT_SHOWN_MS)
+    .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
+  return [...running, ...ended];
+}
+
+/** 12 s, 3 min, 1 h 20 min: how long something took. */
+export function durationText(ms: number): string {
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+}
+
+/** At work: "starting", "40 s", "3 min" since it started. Waiting: "waiting". Then: "done in 1 min", "failed", "stopped". */
+export function subagentTime(subagent: Subagent, now: number): string {
+  if (subagent.state === 'waiting') return 'waiting';
+  if (subagent.state === 'running') {
+    const age = agoShort(now - subagent.startedAt);
+    return age === 'now' ? 'starting' : age;
+  }
+  if (subagent.state === 'done') return subagent.endedAt !== undefined ? `done in ${durationText(subagent.endedAt - subagent.startedAt)}` : 'done';
+  return subagent.state;
+}
+
+/** "haiku", "opus 5.5": the model of a subagent, short. claude-haiku-5-5 becomes haiku 5.5. */
+export function modelShort(model: string | undefined): string | undefined {
+  if (!model) return undefined;
+  const full = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-|\[|$)/.exec(model);
+  if (full) return full[3] ? `${full[1]} ${full[2]}.${full[3]}` : `${full[1]} ${full[2]}`;
+  return model.replace(/^claude-/, '');
+}
+
+/** What a subagent that stopped to wait does: shown in place of its last call. */
+export const WAITING_TEXT = 'waits for its work in the background';
+
+/** The second line of a subagent at work or waiting: its model, the background, what it does now. */
+export function subagentDetail(subagent: Subagent): string {
+  const now = subagent.state === 'waiting' ? WAITING_TEXT : (subagent.action?.label ?? 'thinking…');
+  return [modelShort(subagent.model), subagent.background ? 'background' : undefined, now].filter(Boolean).join(' · ');
 }

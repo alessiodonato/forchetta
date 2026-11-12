@@ -1,4 +1,5 @@
-import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
+import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo } from '../shared/agent.ts';
+import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Talk } from '../shared/crew.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
@@ -23,6 +24,8 @@ export interface UiState {
   claudeUpdate?: ClaudeUpdateInfo;
   /** The panel of the changes of a session: list undefined while the daemon reads them. */
   files?: { agentId: string; list?: FileChange[] };
+  /** The panel of the subagents of a session: the one chosen, and its transcript once the daemon read it. */
+  subagents?: { agentId: string; key?: string; thread?: SubagentThreadView };
   /** The search in earlier sessions: the one asked last, and its answer once it came. */
   recall?: { id: number; project: string; query: string; busy: boolean; sessions?: number; matches?: RecallMatch[]; error?: string };
   /** A panel asked from outside the page (the menu of the icon, the menu of a selection), with when: the app opens it. */
@@ -70,6 +73,22 @@ export interface SelectionMenuState extends SelectionPlace {
   /** Cleaned of what Claude Code draws around its text (shared/selection.ts). */
   text: string;
   at: number;
+}
+
+/** The transcript of a subagent as the daemon sent it. */
+export interface SubagentThreadView {
+  key: string;
+  steps: SubagentStep[];
+  model?: string;
+  skipped?: number;
+  note?: string;
+}
+
+/** The subagent a panel opens on: the last one started that is still at work or waiting, else the last one started. */
+export function defaultSubagent(agent: Agent | undefined): string | undefined {
+  const list = agent?.subagents ?? [];
+  const pick = [...list].reverse().find(subagentActive) ?? list.at(-1);
+  return pick ? subagentKey(pick) : undefined;
 }
 
 /** At most 4 panes: the lead and the first members of a new team open, the lead last, in the large pane. */
@@ -185,10 +204,26 @@ export class Store {
       if (this.state.files?.agentId === message.agentId) this.set({ files: { agentId: message.agentId, list: message.files } });
       return;
     }
+    if (message.type === 'subagent') {
+      const reading = `${message.agentId} ${message.key}`;
+      const again = this.readAgain.has(reading);
+      this.reading.delete(reading);
+      this.readAgain.delete(reading);
+      const panel = this.state.subagents;
+      if (panel?.agentId !== message.agentId || panel.key !== message.key) return;
+      const { key, steps, model, skipped, note } = message;
+      this.set({ subagents: { ...panel, thread: { key, steps, model, skipped, note } } });
+      // It moved while it was read: once more.
+      if (again) this.readSubagent(message.agentId, message.key);
+      return;
+    }
     const agents = new Map(this.state.agents);
     const extra: Partial<UiState> = {};
     switch (message.type) {
       case 'hello':
+        // A new connection: the reads asked on the old one get no answer.
+        this.reading.clear();
+        this.readAgain.clear();
         agents.clear();
         for (const agent of message.agents) agents.set(agent.id, agent);
         extra.settings = message.settings;
@@ -410,6 +445,36 @@ export class Store {
 
   closeFiles(): void {
     if (this.state.files) this.set({ files: undefined });
+  }
+
+  /** Opens the panel of the subagents of a session, on one of them or on the one at work. */
+  showSubagents(agentId: string, key?: string): void {
+    // The panel asks for the transcript of the chosen one as it shows it, and again as it works.
+    this.set({ subagents: { agentId, key: key ?? defaultSubagent(this.state.agents.get(agentId)) } });
+  }
+
+  selectSubagent(key: string): void {
+    const panel = this.state.subagents;
+    if (!panel || panel.key === key) return;
+    this.set({ subagents: { agentId: panel.agentId, key, thread: undefined } });
+  }
+
+  closeSubagents(): void {
+    if (this.state.subagents) this.set({ subagents: undefined });
+  }
+
+  private readonly reading = new Set<string>();
+  private readonly readAgain = new Set<string>();
+
+  /** Asks the daemon for the transcript of a subagent: one request at a time, and one more if it moved meanwhile. */
+  readSubagent(agentId: string, key: string): void {
+    const reading = `${agentId} ${key}`;
+    if (this.reading.has(reading)) {
+      this.readAgain.add(reading);
+      return;
+    }
+    this.reading.add(reading);
+    this.send({ type: 'subagent', agentId, key });
   }
 
   /** The answer of a box to the permission dialog with this ticket. */

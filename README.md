@@ -39,7 +39,7 @@ Version 0.8.4:
 - sends `/btw`, `/compact` and `/clear` to one session or to several, only when it is safe;
 - answers permission prompts from the box (once or "always"), notifies waits, stalls and errors, and warns when two sessions work on the same files;
 - starts **teams of agents**: a lead (a Claude session, or you) and up to 6 members, each a Claude Code session, that pass each other requests, answers and questions; each member answers its lead (⇄) or only executes (→), and can work in a git worktree of its own;
-- shows the changes of each session and the artifacts it published on claude.ai, starts new sessions, organizes sessions in groups and roles, and searches earlier sessions with arricurdAI;
+- shows the subagents each session starts and what they do, its changes and the artifacts it published on claude.ai, starts new sessions, organizes sessions in groups and roles, and searches earlier sessions with arricurdAI;
 - lives in the menu bar, with the shortcut ⌃⌥F.
 
 Everything runs on your Mac. The one outside service, optional and off by default, is the Claude API for the summaries.
@@ -272,6 +272,29 @@ When a session publishes an artifact on claude.ai, or opens one, its box shows "
 - Forchetta takes the link and the title from the hook of the Artifact tool of Claude Code, and nothing else of its result. For a session that was already running, it reads them once from its transcript.
 - The links are private: they open in your default browser, where you are signed in to claude.ai, and stay in the data folder of Forchetta.
 - A box keeps the last 20.
+
+### Subagents
+
+<img src="docs/img/subagents.png" alt="The panel of the subagents of shop: on the left the list, an Explore at work and two subagents done; on the right the Explore, on haiku 5.5 in the background, with the task it got and each of its calls with the start of the result. Behind it, the box of shop lists the same three subagents." width="100%">
+
+When a session starts a subagent with the Agent tool (Explore, general-purpose, Plan or one of yours), its box lists it under the summary, while it works and for 10 minutes after it ends:
+
+```
+● Explore  Find where orders are retried            40 s
+  haiku 5.5 · background · Grep "withRetry"
+✓ web-fetch  Check the fetch retry docs      done in 2 s
+```
+
+- At work: its type, the task in a few words, how long it has been at work, then its model (when the call chose one, or when Claude Code says it), "background" if the session goes on meanwhile, and its last tool call. Done, failed or stopped: how long it took. Past three, "+2 more".
+- A click opens a panel with every subagent of the session, newest first. For the chosen one: what it was started with (model, foreground or background, its own worktree, the subagent that started it), then its transcript as it goes: the task it got, each tool call with the start of its result, its text, the report it sent back. The panel reads the transcript again at every step; Esc closes it.
+- When the rows have left the box, "3 subagents" in the footer opens the same panel; it is also in the header of an open pane, where it pulses while one of them works. With panes open, the column on the left shows "↳ 2" while two work.
+- A subagent that stops to wait for work of its own in the background (a command it started with `run_in_background`) shows "◷ waiting", not "done", and is at work again when that work ends, as Claude Code says.
+- `/clear` and `/resume` start a new conversation: the subagents that ended go with the old one. Those still at work stay until they end.
+- Read only: a subagent runs inside the process of its session, with no terminal of its own. To write to it, ask its session.
+
+How Forchetta knows: the hooks of the session give the input of each Agent call and its result, and every event of a subagent carries its id. Next to the transcript of the session Claude Code writes, for each subagent, a `meta.json` (with `"finished": true` once it ends) and its transcript, in `~/.claude/projects/<project>/<session>/subagents/`. A subagent in the background has no hook at its end: Forchetta reads its `meta.json` every 5 seconds, only while one is at work. A box keeps the last 20.
+
+These are not the agents of "← 1 agent" at the bottom of Claude Code: those are sessions in the background, which Forchetta shows as boxes of their own, marked `background`.
 
 ### Conflicts between sessions
 

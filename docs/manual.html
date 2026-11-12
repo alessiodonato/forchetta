@@ -160,7 +160,7 @@
           <li><a href="#permissions">Permissions from the box</a></li>
           <li><a href="#new-session">New session</a></li>
           <li><a href="#teams">Teams of agents</a></li>
-          <li><a href="#changes">Changes, artifacts, conflicts</a></li>
+          <li><a href="#changes">Changes, subagents, artifacts, conflicts</a></li>
           <li><a href="#alerts">Notifications and the menu bar</a></li>
           <li><a href="#cost">Context, cache and cost</a></li>
           <li><a href="#search">Search and summaries</a></li>
@@ -395,7 +395,7 @@ forchetta setup</pre>
       </section>
 
       <section id="changes">
-        <h2>Changes, artifacts, conflicts</h2>
+        <h2>Changes, subagents, artifacts, conflicts</h2>
         <h3>The changes of a session</h3>
         <p>When a session has written files, its box shows a button like <span class="ui">3 files</span> (also in the header of its pane). It opens two views:</p>
         <ul>
@@ -408,6 +408,18 @@ forchetta setup</pre>
         <ul>
           <li>The link and the title come from the hook of the Artifact tool of Claude Code; nothing else of its result is kept. For a session already running, Forchetta reads them once from its transcript.</li>
           <li>The links are private: they open in your default browser, where you are signed in to claude.ai. A box keeps the last 20.</li>
+        </ul>
+        <h3>Subagents</h3>
+        <figure>
+          <img src="img/subagents.png" width="2800" height="1572" loading="lazy" alt="The panel of the subagents of shop: on the left the list, an Explore at work and two subagents done; on the right the Explore, on haiku 5.5 in the background, with the task it got and each of its calls with the start of the result. Behind it, the box of shop lists the same three subagents.">
+          <figcaption>The subagents of a session: an Explore at work in the background, and its transcript as it goes.</figcaption>
+        </figure>
+        <p>When a session starts a subagent with the Agent tool, its box lists it under the summary, while it works and for 10 minutes after: <span class="ui">● Explore Find where orders are retried 40 s</span>, then its model, <span class="ui">background</span> if the session goes on meanwhile, and its last tool call. When it ends: <span class="ui">✓ done in 1 min</span>, failed or stopped.</p>
+        <ul>
+          <li>A click opens a panel with every subagent of the session: what each was started with (model, foreground or background, its own worktree), then its transcript as it goes: the task, each tool call with the start of its result, its text, its report. The rows gone, <span class="ui">3 subagents</span> in the footer and in the header of a pane opens it; in the header it pulses while one of them works.</li>
+          <li>A subagent that stops to wait for work of its own in the background shows <span class="ui">◷ waiting</span>, not done. <code>/clear</code> and <code>/resume</code> forget the subagents that ended; those at work stay until they end.</li>
+          <li>Read only: a subagent runs inside its session, with no terminal of its own. A subagent in the background has no hook at its end: Forchetta reads the <code>meta.json</code> Claude Code writes next to its transcript, every 5 seconds while one works.</li>
+          <li>These are not the agents of <span class="ui">← 1 agent</span> at the bottom of Claude Code: those are sessions in the background, with boxes of their own.</li>
         </ul>
         <h3>Conflicts between sessions</h3>
         <p>When two live sessions wrote the same file in the last hour, both boxes say so: <span class="ui">⚠ same file as beta: src/api.ts</span>. Different files in the same repository give a softer warning, <span class="ui">⚠ same repo as beta</span>. Two worktrees of a repository are two places, and never conflict.</p>

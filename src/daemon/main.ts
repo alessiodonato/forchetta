@@ -29,6 +29,8 @@ import { Registry } from './registry.ts';
 import { createDaemonServer } from './server.ts';
 import { addArtifact, mergeArtifacts } from '../shared/artifacts.ts';
 import { artifactsInTranscript } from './transcript-artifacts.ts';
+import { anySubagentActive, applySubagentHook, checkSubagents, readSubagentThread } from './subagents.ts';
+import { subagentKey } from '../shared/present.ts';
 import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
 import type { Agent } from './state.ts';
 import { haikuComplete, Summarizer } from './summarizer.ts';
@@ -46,6 +48,8 @@ const QUIET_RECONCILE_MAX_MS = 5 * 60_000;
 const SWEEP_MS = 60_000;
 /** How often the panes open in the app are checked for the copy mode of tmux (daemon/scrollback.ts). */
 const SCROLL_CHECK_MS = 1_000;
+/** How often the meta.json of the subagents at work are read: the end of one in the background shows only there. */
+const SUBAGENT_CHECK_MS = 5_000;
 
 /** Events after which context and cache change: arricurdAI is read again soon. */
 const CONTEXT_EVENTS = new Set(['Stop', 'StopFailure', 'PostCompact', 'SessionStart']);
@@ -238,6 +242,19 @@ function main(): void {
       if (result && !result.ok) log(`comando rifiutato: ${result.error}`);
     },
     onFiles: (agentId) => changesOf(conflicts.filesOf(agentId), patches.byFile(agentId)),
+    onSubagent: async (agentId, key) => {
+      const agent = registry.agents.get(agentId);
+      const subagent = agent?.subagents?.find((candidate) => subagentKey(candidate) === key);
+      if (!agent || !subagent) return { steps: [], note: 'Forchetta no longer keeps this subagent.' };
+      const task = subagent.prompt ? [{ kind: 'prompt' as const, text: subagent.prompt }] : [];
+      if (!subagent.transcript) return { steps: task, note: subagent.state === 'running' ? 'Its transcript is not there yet: it shows with its first step.' : 'Claude Code wrote no transcript for it.' };
+      try {
+        return await readSubagentThread(subagent.transcript, agent.cwd);
+      } catch (error) {
+        const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+        return { steps: task, note: missing ? 'Its transcript is not there (yet, or any more).' : `The transcript could not be read: ${String(error)}` };
+      }
+    },
     onScrollEnd: (agentId) => void scrollEnd(agentId),
     onSpawn: (input) => spawnSession({ tmux, registry, claude, log }, input),
     crews: () => crews.summaries(),
@@ -437,6 +454,7 @@ function main(): void {
         registry.touch(agent);
       }
       readArtifacts(agent);
+      if (applySubagentHook(agent, payload, Date.now())) registry.touch(agent);
       const file = writtenFile(payload, agent.cwd);
       if (file) {
         conflicts.wrote(agent.id, file);
@@ -556,6 +574,11 @@ function main(): void {
       }, QUIET_CHECK_MS),
       setInterval(() => void reconcile('periodica'), config.reconcileIntervalMin * 60_000),
       setInterval(() => void checkScroll().catch((error: unknown) => log(`copy mode: ${String(error)}`)), SCROLL_CHECK_MS),
+      setInterval(() => {
+        if (!anySubagentActive(registry.agents.values())) return;
+        const now = Date.now();
+        for (const agent of registry.agents.values()) if (checkSubagents(agent, now)) registry.touch(agent);
+      }, SUBAGENT_CHECK_MS),
       setInterval(() => {
         registry.sweep(config.endedRetentionMin * 60_000);
         updateConflicts();

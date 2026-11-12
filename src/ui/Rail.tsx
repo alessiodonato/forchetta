@@ -4,6 +4,7 @@ import { type Agent, displayName, STATE_LABEL } from '../shared/agent.ts';
 import { agoShort, conflictsTitle, hasEvents, stalledFor, stallText, waitingText } from '../shared/present.ts';
 import { useMotionAnchor } from './anchor.ts';
 import { PermissionButtons } from './Permission.tsx';
+import { runningSubagentsTag } from './Subagents.tsx';
 import { canOpen, type Store } from './store.ts';
 
 // With panes open, the boxes become a column on the left: project, state, one line, time. They keep their state
@@ -29,6 +30,7 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const since = useMotionAnchor(ref, agent.state);
   const openable = canOpen(agent);
+  const subagents = runningSubagentsTag(agent);
   const title = openable ? undefined : agent.state === 'ended' ? 'Session ended' : 'Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.';
   return (
     // A div with the role of a button: a <button> does not lay out its content as a flex column in WebKit.
@@ -64,6 +66,11 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
       {agent.permission && <PermissionButtons agent={agent} store={store} />}
       <span class="compact-meta">
         <span>{hasEvents(agent) && agent.state !== 'ended' ? agoShort(now - agent.lastEvent.at) : ''}</span>
+        {subagents && (
+          <span class="tag" title={subagents.title}>
+            {subagents.text}
+          </span>
+        )}
         {stalledFor(agent, now, stallMs) !== undefined && (
           <span class="tag conflict-tag" title={stallText(agent, stalledFor(agent, now, stallMs)!)}>
             ◷ stuck?

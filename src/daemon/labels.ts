@@ -62,6 +62,8 @@ export interface ToolLabel {
 /** What a tool call does, in a few words: the tool and its main argument. */
 export function toolLabel(tool: string, input: unknown, cwd?: string): ToolLabel {
   const fields = (input !== null && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  // The call a subagent ends with: its report goes back to its session.
+  if (tool === 'SubagentHandback') return { label: 'sending its report', family: 'agent' };
   if (tool.startsWith('mcp__')) {
     const [, server, name] = tool.split('__');
     return { label: clip(`${server ?? 'mcp'} · ${name ?? tool}`, 80), family: 'other' };

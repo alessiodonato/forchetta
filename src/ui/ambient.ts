@@ -1,7 +1,7 @@
 import { motionAllowed, reducedMotion } from './motion.ts';
 
 // The endless state animations: the pulse of a box at work, the breath of a box waiting for you, the squeeze of
-// the context bar while compacting.
+// the context bar while compacting, the pulse of the button of the subagents while one works.
 //
 // On this hardware (Intel Mac, macOS 12) the window server spends about a quarter of a core on any animation at
 // 60 fps, and independent animations add up. So each one runs smoothly in CSS for its first seconds after a
@@ -40,6 +40,14 @@ const AMBIENTS: Ambient[] = [
     },
   },
   {
+    selector: '[data-working] > .subagents-pulse',
+    period: 1600,
+    smoothCycles: 3,
+    apply: (element, elapsed) => {
+      element.style.opacity = (0.1 + 0.9 * wave(elapsed, 1600)).toFixed(3);
+    },
+  },
+  {
     selector: '.box[data-state="compacting"] .fill i',
     // The CSS runs 1.4 s one way and 1.4 s back (alternate): a cycle is 2.8 s.
     period: 2800,
@@ -62,7 +70,8 @@ function tick(): void {
   for (const ambient of AMBIENTS) {
     for (const element of Array.from(document.querySelectorAll<HTMLElement>(ambient.selector))) {
       any = true;
-      const since = Number((element.closest('.box') as HTMLElement | null)?.dataset.since);
+      // The phase comes from the nearest element that says when its state began: its box, or the button.
+      const since = Number((element.closest('[data-since]') as HTMLElement | null)?.dataset.since);
       if (!Number.isFinite(since)) continue;
       const elapsed = now - since;
       // Still in its smooth CSS cycles: the CSS animation wins over this style anyway.
@@ -85,7 +94,7 @@ export function stopAmbient(clear: boolean): void {
   if (timer !== undefined) clearInterval(timer);
   timer = undefined;
   if (!clear) return;
-  for (const element of Array.from(document.querySelectorAll<HTMLElement>('.aura[style], .fill i[style]'))) {
+  for (const element of Array.from(document.querySelectorAll<HTMLElement>('.aura[style], .fill i[style], .subagents-pulse[style]'))) {
     element.style.removeProperty('opacity');
     element.style.removeProperty('transform');
   }
