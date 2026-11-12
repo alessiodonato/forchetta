@@ -8,6 +8,7 @@ import { openLink } from './Artifacts.tsx';
 import { token } from './connection.ts';
 import { GlyphFilter } from './glyphs.ts';
 import { isFocusReport, keyInput } from './layout.ts';
+import type { SelectionPlace } from './store.ts';
 import { TERMINAL_THEME } from './terminal-theme.ts';
 
 // The terminal of a pane: xterm.js on a WebSocket of the daemon, which runs `tmux attach` for the session. Closing
@@ -68,6 +69,9 @@ const fontLoaded: Promise<void> =
         },
       );
 
+/** How far the mouse moves with the button down before it is a drag, not a click: a click selects nothing. */
+const DRAG_PX = 5;
+
 /** Ended: tmux closed the client because the session is over. Lost: the daemon cannot be reached. */
 export type TerminalStatus = 'connecting' | 'open' | 'ended' | 'lost';
 
@@ -85,13 +89,20 @@ interface Props {
   onStatus: (status: TerminalStatus) => void;
   /** Focus the terminal when the pane opens or is activated: when this changes, and is not -1 (see layout.ts). */
   focusKey: number;
+  /**
+   * A drag in the terminal: tmux selects (its mouse is on) and copies when it ends, so the press and the end of the
+   * drag are told, and the daemon reads the copy. An Option-drag is selected by xterm.js here: its text comes at once.
+   */
+  onDragStart?: () => void;
+  onDragEnd?: (place: SelectionPlace) => void;
+  onSelectText?: (text: string, place: SelectionPlace) => void;
 }
 
-export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
+export function TerminalView({ agentId, onUse, onStatus, focusKey, onDragStart, onDragEnd, onSelectText }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
-  const callbacks = useRef({ onUse, onStatus });
-  callbacks.current = { onUse, onStatus };
+  const callbacks = useRef({ onUse, onStatus, onDragStart, onDragEnd, onSelectText });
+  callbacks.current = { onUse, onStatus, onDragStart, onDragEnd, onSelectText };
 
   useEffect(() => {
     const element = host.current;
@@ -182,8 +193,44 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
       callbacks.current.onUse();
       return false;
     });
-    const onPointer = (): void => callbacks.current.onUse();
-    element.addEventListener('mousedown', onPointer);
+    // A press, then a move beyond a few pixels, is a drag: the release may come outside the pane, so it is heard on
+    // the window, in the capture phase (xterm.js handles the mouse of the terminal on its own).
+    let press: { x: number; y: number; option: boolean; dragging: boolean } | undefined;
+    const placeOf = (event: MouseEvent): SelectionPlace => {
+      const rect = element.getBoundingClientRect();
+      return {
+        x: Math.round(Math.min(Math.max(event.clientX - rect.left, 0), rect.width)),
+        y: Math.round(Math.min(Math.max(event.clientY - rect.top, 0), rect.height)),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const onMove = (event: MouseEvent): void => {
+      if (!press || press.dragging) return;
+      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_PX) return;
+      press.dragging = true;
+    };
+    const onRelease = (event: MouseEvent): void => {
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('mouseup', onRelease, true);
+      const ended = press;
+      press = undefined;
+      if (!ended?.dragging) return;
+      if (!ended.option) return callbacks.current.onDragEnd?.(placeOf(event));
+      const text = term.getSelection();
+      if (text.trim()) callbacks.current.onSelectText?.(text, placeOf(event));
+    };
+    const onPointer = (event: MouseEvent): void => {
+      callbacks.current.onUse();
+      if (event.button !== 0) return;
+      press = { x: event.clientX, y: event.clientY, option: event.altKey, dragging: false };
+      // Told at the press, before tmux can copy anything: the daemon notes where its buffers stand (daemon/selection.ts).
+      if (!press.option) callbacks.current.onDragStart?.();
+      window.addEventListener('mousemove', onMove, true);
+      window.addEventListener('mouseup', onRelease, true);
+    };
+    // In the capture phase, before xterm.js: for an Option-drag it selects, and the press goes no further.
+    element.addEventListener('mousedown', onPointer, true);
 
     // The pane changes size with the layout and the window: the terminal follows, once per frame.
     let frame = 0;
@@ -203,7 +250,9 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
       disposed = true;
       observer.disconnect();
       cancelAnimationFrame(frame);
-      element.removeEventListener('mousedown', onPointer);
+      element.removeEventListener('mousedown', onPointer, true);
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('mouseup', onRelease, true);
       socket.onclose = null;
       socket.close();
       window.forchettaDebug?.terminals.delete(agentId);

@@ -35,7 +35,7 @@ Forchetta finds the Claude Code sessions you have running and shows, live, what 
 
 Version 0.8.2:
 - finds the Claude Code sessions that are running and shows a box for each one, with its state, current action, summary, context, cache and cost;
-- opens up to 4 sessions side by side, in real terminals attached to tmux;
+- opens up to 4 sessions side by side, in real terminals attached to tmux; select text in one and a menu asks Claude about it, or sends it to another session;
 - sends `/btw`, `/compact` and `/clear` to one session or to several, only when it is safe;
 - answers permission prompts from the box (once or "always"), notifies waits, stalls and errors, and warns when two sessions work on the same files;
 - starts **teams of agents**: a lead (a Claude session, or you) and up to 6 members, each a Claude Code session, that pass each other requests, answers and questions; each member answers its lead (⇄) or only executes (→), and can work in a git worktree of its own;
@@ -351,9 +351,22 @@ Panes open, close and move with spring transitions.
 - you type as in the Terminal, with the same keys as Claude Code: Esc interrupts, Shift+Return starts a new line in the prompt;
 - Option stays Option: on an Italian keyboard it types @, # and the square brackets;
 - the wheel scrolls the history of tmux, which puts the pane in tmux copy mode: from then on the keys go to tmux, not to Claude. The pane says so under its header, with **back to the end**; pressing q, or scrolling to the end, works too;
-- to select text: Option + drag, in the Terminal too, because the tmux of Forchetta has the mouse on;
+- dragging selects text: when you let go, tmux copies it to the clipboard and the menu of the selection opens there (below). Option + drag selects with the terminal of the page instead, as in the Terminal;
 - ⌘-click on a link opens it in your browser: https anywhere, http only on this Mac;
 - macOS 12 has the ⏺ symbol of Claude Code only as a color emoji, two cells wide: in the panes it shows as ●. Only the drawing changes, not what Claude receives.
+
+### Ask about a selection
+
+Select text in a pane with the mouse. When you let go it is copied to the clipboard, as before, and a small menu opens there. The menu does not take the keyboard: typing in the terminal, or clicking anywhere else, closes it.
+
+- **Ask…**: your question to this session, with the selection quoted under it. It goes as your prompt, when the session is ready, with the same checks as the commands below.
+- **btw…**: the question as `/btw`, kept out of the conversation: on one line, with the selection in quotes.
+- **Put in prompt**: the selection, quoted, into the prompt of the session, not sent. You write the question around it and press Return; a long one shows as `[Pasted text #1 +N lines]`.
+- **Send to…**: your question to another session, with the selection and the name of the session it comes from.
+
+Under them are the **quick prompts**: questions you write once and send with one click, with the selection in them. Three come with Forchetta (Explain, Fix, Test); **✎ prompts** changes them. Each has a name, a text and where it goes: sent, as `/btw`, or into the prompt. In the text, `{selection}` is the selected text (quoted, when it is alone on its line; when it is missing, the selection goes after the text), `{session}` the name of the session and `{folder}` its folder. They are kept in `var/prompts.json`.
+
+Forchetta cleans the selection of what Claude Code draws around its text: ⏺ and ⎿, the sides of its boxes, the indentation. For tmux the drag counts as typing in the session; a question asked from the menu of that same session does not wait 10 seconds for it.
 
 ### The commands: `/btw`, `/compact`, `/clear`
 

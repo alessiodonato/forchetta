@@ -2310,3 +2310,167 @@ html[data-hidden] *::after {
   user-select: text;
   cursor: text;
 }
+
+/* ——— The menu of a selection in a pane ——— */
+
+/* Over the terminal, with its size: the menu opens where the mouse was let go; the rest of the layer lets the
+   mouse through to the terminal. */
+.selection-layer {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  bottom: 4px;
+  left: 10px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.selection-menu {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: max-content;
+  max-width: min(400px, calc(100% - 16px));
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  cursor: default;
+}
+
+.selection-preview {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 11.5px var(--mono);
+  color: var(--text-3);
+}
+
+.selection-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.selection-row.end {
+  justify-content: flex-end;
+}
+
+.selection-menu button {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font: 11.5px var(--mono);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.selection-menu button:hover:not(:disabled) {
+  border-color: rgba(217, 119, 87, 0.6);
+  color: var(--text);
+}
+
+.selection-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The action that matters: Claude orange, as everything you can act on. */
+.selection-menu button.primary {
+  border-color: var(--claude-strong);
+  background: var(--claude-strong);
+  font-weight: 600;
+  color: #fff;
+}
+
+.selection-menu button.primary:hover:not(:disabled) {
+  border-color: var(--claude);
+  background: var(--claude);
+  color: #fff;
+}
+
+.selection-menu button.chip {
+  border-radius: 999px;
+}
+
+.selection-menu button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.selection-menu .command-input {
+  flex: none;
+  width: 100%;
+}
+
+.selection-question {
+  min-width: 300px;
+  resize: vertical;
+  font: 12px/1.4 var(--ui);
+}
+
+.selection-note {
+  margin: 0;
+  max-width: 376px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.selection-note.error,
+.error-text {
+  color: var(--red);
+}
+
+/* ——— The panel of the quick prompts ——— */
+
+/* With panes open it must not push the terminals out of sight: it scrolls instead. */
+.prompts-panel {
+  max-height: min(560px, 55vh);
+  overflow-y: auto;
+}
+
+/* Add, Save and Close stay at the bottom while the prompts scroll. */
+.prompts-panel > .broadcast-row:last-child {
+  position: sticky;
+  bottom: -14px;
+  margin: 0 -16px -14px;
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.prompts-panel code {
+  font: 11.5px var(--mono);
+  color: var(--text-2);
+}
+
+.prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.broadcast .command-input.prompt-name {
+  flex: 0 1 180px;
+}
+
+/* In a column: the width of the panel, the height of its lines (the rule of the fields of a panel would make it tall). */
+.broadcast .command-input.prompt-text {
+  flex: none;
+  width: 100%;
+  resize: vertical;
+  line-height: 1.4;
+}

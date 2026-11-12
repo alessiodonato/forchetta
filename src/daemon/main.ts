@@ -10,6 +10,8 @@ import { VERSION } from '../shared/version.ts';
 import { ArricurdaiNotes, ArricurdaiPoller, readArricurdaiStatus } from './arricurdai.ts';
 import { isAlive, readClaudeAgents } from './claude-agents.ts';
 import { ClaudeUpdates } from './claude-update.ts';
+import { QuickPrompts } from './prompts.ts';
+import { SelectionReader } from './selection.ts';
 import { Commander } from './commands.ts';
 import { Attention } from './attention.ts';
 import { Conflicts, writtenFile } from './conflicts.ts';
@@ -218,6 +220,9 @@ function main(): void {
     log,
   });
   claudeUpdates.check();
+  // The menu of a selection in a pane: what tmux copied, and the quick prompts.
+  const selections = new SelectionReader(tmux);
+  const quickPrompts = new QuickPrompts(paths.prompts, log);
 
   hub = new Hub({
     token,
@@ -229,7 +234,7 @@ function main(): void {
         commander?.cancel(message.agentId, message.commandId);
         return;
       }
-      const result = commander?.enqueue(message.agentId, message.kind, message.arg, message.confirmed);
+      const result = commander?.enqueue(message.agentId, message.kind, message.arg, message.confirmed, message.fromSelection === true);
       if (result && !result.ok) log(`comando rifiutato: ${result.error}`);
     },
     onFiles: (agentId) => changesOf(conflicts.filesOf(agentId), patches.byFile(agentId)),
@@ -277,6 +282,20 @@ function main(): void {
       return crews.create(checked.spec);
     },
     onRecall: (project, query) => runRecall(arricurdai, project, query),
+    onSelection: async (agentId, phase) => {
+      if (phase === 'start') {
+        selections.start(agentId);
+        return undefined;
+      }
+      return selections.end(agentId);
+    },
+    onAsk: (agentId, text, fromSelection) => {
+      const result = commander?.enqueueAsk(agentId, text, fromSelection) ?? { ok: false, error: 'the daemon is starting' };
+      return result.ok ? { ok: true } : { ok: false, error: result.error };
+    },
+    onInsert: (agentId, text) => commander?.insert(agentId, text) ?? Promise.resolve({ ok: false, error: 'the daemon is starting' }),
+    prompts: () => quickPrompts.list(),
+    onSavePrompts: (prompts) => quickPrompts.save(prompts),
     claudeUpdate: () => claudeUpdates.info(),
     onClaudeUpdate: (action) => {
       if (action === 'dismiss') claudeUpdates.dismiss();

@@ -207,7 +207,8 @@ export function cleanTeam(input: unknown): TeamInfo | undefined {
 export const displayName = (agent: Pick<Agent, 'project' | 'team'>): string => agent.team?.label ?? agent.project;
 
 /** The commands of the box, and the requests of a team of agents (pasted as a prompt). */
-export type CommandKind = 'btw' | 'compact' | 'clear' | 'request';
+/** request: of a team of agents; ask: a question about a selection, from the menu of a pane. */
+export type CommandKind = 'btw' | 'compact' | 'clear' | 'request' | 'ask';
 
 export type CommandStatus =
   /** Waits for the session to be ready for input. */
@@ -229,6 +230,11 @@ export interface QueuedCommand {
   arg?: string;
   /** A request of a team of agents: its team and its number. */
   request?: { crew: string; n: number };
+  /**
+   * Asked from the menu of a selection, at this time: the drag that made the selection counts for tmux as activity
+   * in the session, and only activity after it means that you are typing there.
+   */
+  afterSelection?: number;
   status: CommandStatus;
   reason?: string;
   createdAt: number;

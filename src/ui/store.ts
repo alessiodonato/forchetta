@@ -1,6 +1,8 @@
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Talk } from '../shared/crew.ts';
+import type { QuickPrompt } from '../shared/prompts.ts';
+import { cleanSelection } from '../shared/selection.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
 
 // What the page knows: the agents sent by the daemon, the open panes, whether the connection is up, whether the
@@ -23,8 +25,18 @@ export interface UiState {
   files?: { agentId: string; list?: FileChange[] };
   /** The search in earlier sessions: the one asked last, and its answer once it came. */
   recall?: { id: number; project: string; query: string; busy: boolean; sessions?: number; matches?: RecallMatch[]; error?: string };
-  /** A panel asked from outside the page (the menu of the icon), with when: the app opens it. */
-  panelRequest?: { which: 'new'; at: number };
+  /** A panel asked from outside the page (the menu of the icon, the menu of a selection), with when: the app opens it. */
+  panelRequest?: { which: 'new' | 'prompts'; at: number };
+  /** The menu of a selection in a pane: what you selected, and where you let go of the mouse in the pane. */
+  selection?: SelectionMenuState;
+  /** The last question or text sent from the menu of a selection: while the daemon answers, then why it did not go. */
+  selectionSend?: { action: 'ask' | 'insert'; busy: boolean; error?: string };
+  /** Text just put into the prompt of a session: its pane takes the keyboard, to finish it. */
+  inserted?: { agentId: string; at: number };
+  /** The quick prompts of the menu of a selection. */
+  prompts: readonly QuickPrompt[];
+  /** Saving the quick prompts from their panel. */
+  promptsSave?: { busy: boolean; ok?: boolean; error?: string; at: number };
   /** A new session being started from the panel, or the reason it did not start. */
   spawn?: { busy: boolean; error?: string; startedId?: string };
   /** The teams of agents. */
@@ -41,6 +53,21 @@ export interface UiState {
   crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
 }
 
+/** Where the mouse was let go in a pane, and the size of the pane: the menu of the selection opens there. */
+export interface SelectionPlace {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface SelectionMenuState extends SelectionPlace {
+  agentId: string;
+  /** Cleaned of what Claude Code draws around its text (shared/selection.ts). */
+  text: string;
+  at: number;
+}
+
 /** At most 4 panes: the lead and the first members of a new team open, the lead last, in the large pane. */
 export const panesToOpen = (agentIds: readonly string[]): string[] => agentIds.slice(0, 4).reverse();
 
@@ -48,7 +75,7 @@ export const panesToOpen = (agentIds: readonly string[]): string[] => agentIds.s
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
 export class Store {
-  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [] };
+  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [], prompts: [] };
   /** Sends a message to the daemon (set by the connection). */
   send: (message: ClientMessage) => void = () => {};
   /** A notification asked by the daemon (see attention.ts). */
@@ -78,6 +105,34 @@ export class Store {
     }
     if (message.type === 'claudeUpdate') {
       this.set({ claudeUpdate: message.update });
+      return;
+    }
+    if (message.type === 'selection') {
+      // The answer to the end of a drag in a pane: only the last one, and only soon after.
+      const place = this.pendingSelection;
+      if (!place || place.agentId !== message.agentId || Date.now() - place.at > 5000) return;
+      this.pendingSelection = undefined;
+      this.showSelection(message.agentId, message.text, place);
+      return;
+    }
+    if (message.type === 'selectionSent') {
+      if (!message.ok) {
+        this.set({ selectionSend: { action: message.action, busy: false, error: message.error ?? 'not sent' } });
+        return;
+      }
+      this.set({
+        selection: undefined,
+        selectionSend: undefined,
+        ...(message.action === 'insert' ? { inserted: { agentId: message.agentId, at: Date.now() } } : {}),
+      });
+      return;
+    }
+    if (message.type === 'prompts') {
+      this.set({ prompts: message.prompts });
+      return;
+    }
+    if (message.type === 'promptsSaved') {
+      this.set({ promptsSave: { busy: false, ok: message.ok, ...(message.error ? { error: message.error } : {}), at: Date.now() } });
       return;
     }
     if (message.type === 'recalled') {
@@ -135,6 +190,7 @@ export class Store {
         extra.settings = message.settings;
         extra.today = message.today;
         extra.claudeUpdate = message.claudeUpdate;
+        extra.prompts = message.prompts ?? [];
         extra.crews = message.crews ?? [];
         extra.templates = message.templates ?? [];
         break;
@@ -184,7 +240,7 @@ export class Store {
   }
 
   close(id: string): void {
-    this.set({ panes: closePane(this.state.panes, id) });
+    this.set({ panes: closePane(this.state.panes, id), ...(this.state.selection?.agentId === id ? { selection: undefined, selectionSend: undefined } : {}) });
   }
 
   /** A command of a box. /clear goes only with confirmed: the box asked first. */
@@ -206,7 +262,7 @@ export class Store {
     }
   }
 
-  requestPanel(which: 'new'): void {
+  requestPanel(which: 'new' | 'prompts'): void {
     this.set({ panelRequest: { which, at: Date.now() } });
   }
 
@@ -274,6 +330,55 @@ export class Store {
   /** Name, group and role of a session; undefined takes them away. */
   setTeam(agentId: string, team: { label: string; group: string; role: string; lead: boolean } | undefined): void {
     this.send({ type: 'team', agentId, team: team ?? null });
+  }
+
+  private pendingSelection: (SelectionPlace & { agentId: string; at: number }) | undefined;
+
+  /** A drag started in a pane: the daemon notes where tmux stands, and an open menu of a selection goes away. */
+  selectionStart(agentId: string): void {
+    this.pendingSelection = undefined;
+    if (this.state.selection) this.closeSelection();
+    this.send({ type: 'selection', agentId, phase: 'start' });
+  }
+
+  /** The drag ended here: the daemon reads what tmux copied, and the menu opens where the mouse was let go. */
+  selectionEnd(agentId: string, place: SelectionPlace): void {
+    this.pendingSelection = { ...place, agentId, at: Date.now() };
+    this.send({ type: 'selection', agentId, phase: 'end' });
+  }
+
+  /** The menu of a selection, for text selected by tmux or by the terminal of the page (Option-drag). */
+  showSelection(agentId: string, text: string, place: SelectionPlace): void {
+    const clean = cleanSelection(text);
+    if (!clean) return;
+    this.set({ selection: { ...place, agentId, text: clean, at: Date.now() }, selectionSend: undefined });
+  }
+
+  closeSelection(): void {
+    if (this.state.selection || this.state.selectionSend) this.set({ selection: undefined, selectionSend: undefined });
+  }
+
+  /** A question from the menu of a selection: to its own session (fromSelection), or to another one. */
+  askAbout(agentId: string, text: string, fromSelection: boolean): void {
+    this.set({ selectionSend: { action: 'ask', busy: true } });
+    this.send({ type: 'ask', agentId, text, fromSelection });
+  }
+
+  /** /btw from the menu of a selection, in its own session: the box shows how it goes, the menu closes. */
+  btwAbout(agentId: string, question: string): void {
+    this.send({ type: 'command', agentId, kind: 'btw', arg: question, fromSelection: true });
+    this.closeSelection();
+  }
+
+  /** Text into the prompt of a session, not sent. */
+  insertText(agentId: string, text: string): void {
+    this.set({ selectionSend: { action: 'insert', busy: true } });
+    this.send({ type: 'insert', agentId, text });
+  }
+
+  savePrompts(prompts: readonly QuickPrompt[]): void {
+    this.set({ promptsSave: { busy: true, at: Date.now() } });
+    this.send({ type: 'savePrompts', prompts });
   }
 
   /** `claude update` from the top line: it shows as running at once, the daemon says how it went. */

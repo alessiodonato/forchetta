@@ -4,6 +4,7 @@ import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate } from '../shared/crew.ts';
+import type { QuickPrompt } from '../shared/prompts.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
 // that changed and the ids of those that went away. The page tells whether its window can be seen, so that the
@@ -12,7 +13,15 @@ import type { CrewRequest, CrewSummary, CrewTemplate } from '../shared/crew.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; claudeUpdate?: ClaudeUpdateInfo }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[] }
+  /** What you selected with the mouse in a pane, for the window where you did it. */
+  | { type: 'selection'; now: number; agentId: string; text: string }
+  /** How a question or a text from the menu of a selection went: queued, put in the prompt, or why not. */
+  | { type: 'selectionSent'; now: number; agentId: string; action: 'ask' | 'insert'; ok: boolean; error?: string }
+  /** The quick prompts of the menu of a selection, after they were saved. */
+  | { type: 'prompts'; now: number; prompts: QuickPrompt[] }
+  /** How saving the quick prompts went, for the window that asked. */
+  | { type: 'promptsSaved'; now: number; ok: boolean; error?: string }
   /** A failed automatic update of Claude Code, and the `claude update` started from the app. */
   | { type: 'claudeUpdate'; now: number; update: ClaudeUpdateInfo }
   /** The templates of teams, after one was saved or deleted. */
@@ -54,7 +63,14 @@ export interface UiSettings {
 export type ClientMessage =
   | { type: 'visibility'; visible: boolean }
   | { type: 'scrollEnd'; agentId: string }
-  | { type: 'command'; agentId: string; kind: string; arg?: string; confirmed?: boolean }
+  /** fromSelection: asked from the menu of a selection in the pane of this session (see daemon/commands.ts). */
+  | { type: 'command'; agentId: string; kind: string; arg?: string; confirmed?: boolean; fromSelection?: boolean }
+  /** A drag in a pane started or ended: at the end, the daemon reads what tmux copied. */
+  | { type: 'selection'; agentId: string; phase: 'start' | 'end' }
+  /** From the menu of a selection: a question to a session (ask), or text into its prompt, not sent (insert). */
+  | { type: 'ask'; agentId: string; text: string; fromSelection?: boolean }
+  | { type: 'insert'; agentId: string; text: string }
+  | { type: 'savePrompts'; prompts: unknown }
   | { type: 'cancel'; agentId: string; commandId: string }
   | { type: 'permission'; agentId: string; ticket: string; behavior: 'allow' | 'deny'; always?: number }
   | { type: 'files'; agentId: string }
@@ -80,6 +96,15 @@ export interface HubOptions {
   port: () => number;
   snapshot: () => Agent[];
   settings?: () => UiSettings;
+  /** A drag in a pane: its start, and at its end the text tmux copied, if any. */
+  onSelection?: (agentId: string, phase: 'start' | 'end') => Promise<string | undefined>;
+  /** A question from the menu of a selection. */
+  onAsk?: (agentId: string, text: string, fromSelection: boolean) => { ok: boolean; error?: string };
+  /** Text into the prompt of a session, not sent. */
+  onInsert?: (agentId: string, text: string) => Promise<{ ok: boolean; error?: string }>;
+  /** The quick prompts, and saving them. */
+  prompts?: () => QuickPrompt[];
+  onSavePrompts?: (prompts: unknown) => { ok: boolean; error?: string };
   /** A command from a box, or the cancel of one still waiting. */
   onCommand?: (message: Extract<ClientMessage, { type: 'command' | 'cancel' }>) => void;
   /** A search in the earlier sessions of a project. */
@@ -160,6 +185,7 @@ export class Hub {
       crews: this.options.crews?.(),
       templates: this.options.templates?.(),
       claudeUpdate: this.options.claudeUpdate?.(),
+      prompts: this.options.prompts?.(),
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -176,6 +202,7 @@ export class Hub {
             kind: message.kind,
             arg: typeof message.arg === 'string' ? message.arg : undefined,
             confirmed: message.confirmed === true,
+            fromSelection: message.fromSelection === true,
           });
         } else if (message.type === 'cancel' && typeof message.agentId === 'string' && typeof message.commandId === 'string') {
           this.options.onCommand?.({ type: 'cancel', agentId: message.agentId, commandId: message.commandId });
@@ -239,6 +266,27 @@ export class Hub {
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
           if (requests) this.send(ws, { type: 'crewThread', now: Date.now(), crewId: message.crewId, requests });
+        } else if (message.type === 'selection' && typeof message.agentId === 'string' && (message.phase === 'start' || message.phase === 'end') && this.options.onSelection) {
+          const agentId = message.agentId;
+          void this.options.onSelection(agentId, message.phase).then(
+            (text) => {
+              if (text) this.send(ws, { type: 'selection', now: Date.now(), agentId, text });
+            },
+            (error: unknown) => this.options.log(`selezione in ${agentId}: ${String(error)}`),
+          );
+        } else if (message.type === 'ask' && typeof message.agentId === 'string' && typeof message.text === 'string' && this.options.onAsk) {
+          const result = this.options.onAsk(message.agentId, message.text, message.fromSelection === true);
+          this.send(ws, { type: 'selectionSent', now: Date.now(), agentId: message.agentId, action: 'ask', ...result });
+        } else if (message.type === 'insert' && typeof message.agentId === 'string' && typeof message.text === 'string' && this.options.onInsert) {
+          const agentId = message.agentId;
+          void this.options.onInsert(agentId, message.text).then(
+            (result) => this.send(ws, { type: 'selectionSent', now: Date.now(), agentId, action: 'insert', ...result }),
+            (error: unknown) => this.send(ws, { type: 'selectionSent', now: Date.now(), agentId, action: 'insert', ok: false, error: String(error) }),
+          );
+        } else if (message.type === 'savePrompts' && this.options.onSavePrompts) {
+          const result = this.options.onSavePrompts(message.prompts);
+          this.send(ws, { type: 'promptsSaved', now: Date.now(), ...result });
+          if (result.ok) this.broadcast({ type: 'prompts', now: Date.now(), prompts: this.options.prompts?.() ?? [] });
         } else if (message.type === 'claudeUpdate' && (message.action === 'run' || message.action === 'dismiss')) {
           this.options.onClaudeUpdate?.(message.action);
         } else if (message.type === 'scrollEnd' && typeof message.agentId === 'string') {

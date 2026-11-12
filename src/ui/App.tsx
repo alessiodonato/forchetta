@@ -10,6 +10,7 @@ import { NewSessionPanel } from './NewSession.tsx';
 import { NewTeamPanel } from './NewTeam.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
 import { crewLineOf } from '../shared/crew.ts';
+import { PromptsPanel } from './PromptsPanel.tsx';
 import { RecallPanel } from './Recall.tsx';
 import { hasGroups, OrgChart } from './Team.tsx';
 import { animateMove, onReducedMotionChange } from './motion.ts';
@@ -120,7 +121,7 @@ export function App({ store }: { store: Store }) {
   const open = useCallback((id: string) => store.open(id), [store]);
   const entered = useCallback((id: string) => store.entering.delete(id), [store]);
   const working = state.panes.open.length > 0;
-  const [panel, setPanel] = useState<'broadcast' | 'new' | 'team' | 'crew' | 'recall' | undefined>(undefined);
+  const [panel, setPanel] = useState<'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | undefined>(undefined);
   const [view, setView] = useState<'grid' | 'org'>(savedView);
   const chooseView = (next: 'grid' | 'org'): void => {
     setView(next);
@@ -132,17 +133,17 @@ export function App({ store }: { store: Store }) {
   };
   const grouped = hasGroups(agents);
   const showOrg = view === 'org' && grouped;
-  const toggle = (which: 'broadcast' | 'new' | 'team' | 'crew' | 'recall'): void => {
+  const toggle = (which: 'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts'): void => {
     store.endSpawn();
     store.endCrewSpawn();
     setPanel(panel === which ? undefined : which);
   };
-  // "Nuova sessione…" from the menu of the icon.
+  // "Nuova sessione…" from the menu of the icon; the quick prompts from the menu of a selection.
   const requestedAt = state.panelRequest?.at;
   useEffect(() => {
-    if (requestedAt === undefined) return;
+    if (requestedAt === undefined || !state.panelRequest) return;
     store.endSpawn();
-    setPanel('new');
+    setPanel(state.panelRequest.which);
   }, [requestedAt]);
   // A team started with every session: the panel closes, their terminals open. With something that did not
   // start, it stays open to say what.
@@ -206,6 +207,7 @@ export function App({ store }: { store: Store }) {
       {state.ready && panel === 'team' && <NewTeamPanel agents={agents} store={store} onClose={() => toggle('team')} />}
       {state.ready && panel === 'crew' && <TeamPanel crews={state.crews} store={store} onClose={() => toggle('crew')} />}
       {state.ready && panel === 'recall' && <RecallPanel agents={agents} store={store} onClose={() => toggle('recall')} />}
+      {state.ready && panel === 'prompts' && <PromptsPanel store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && !state.connected && <p class="notice">Daemon unreachable: trying again…</p>}
       {!state.ready ? (
         <p class="empty">Connecting to the daemon…</p>

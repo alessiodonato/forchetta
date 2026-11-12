@@ -382,3 +382,74 @@ describe('requests of a team', () => {
     expect(commander.enqueue(A, 'request', 'Request #1 from the user:\nrm -rf')).toEqual({ ok: false, error: 'unknown command: request' });
   });
 });
+
+describe('the menu of a selection', () => {
+  it('asks a question as your words: its first line typed, the quote pasted, confirmed by UserPromptSubmit', async () => {
+    setup();
+    expect(commander.enqueueAsk(A, 'perché 401?\n\n> Expected 200', true).ok).toBe(true);
+    await settle();
+    expect(tmux.typed).toEqual([{ pane: '%1', text: 'perché 401?' }]);
+    expect(tmux.pasted.map((paste) => paste.text)).toEqual(['\n\n> Expected 200']);
+    expect(tmux.enters).toEqual(['%1']);
+    expect(status(A)).toBe('inviato');
+    hook(A, { hook_event_name: 'UserPromptSubmit', prompt: 'perché 401?\n\n> Expected 200' });
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ kind: 'ask', status: 'confermato', reason: 'delivered' });
+    expect(commander.enqueueAsk(A, '  \u0007 ', true)).toEqual({ ok: false, error: 'the question is empty' });
+  });
+
+  it('does not take the drag of the selection for typing, but waits for typing after it', async () => {
+    setup();
+    // The drag ended a moment ago: tmux counts it as activity of the session.
+    tmux.panes.get('%1')!.activity = Math.floor(Date.now() / 1000);
+    tmux.panes.get('%2')!.activity = Math.floor(Date.now() / 1000);
+    commander.enqueueAsk(A, 'perché?', true);
+    commander.enqueue(B, 'btw', 'perché?', false, true);
+    await settle();
+    expect(tmux.enters).toEqual(['%1', '%2']);
+
+    hook(A, { hook_event_name: 'UserPromptSubmit', prompt: 'perché?' });
+    hook(A, { hook_event_name: 'Stop' });
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'confermato' });
+
+    // Typed after the question was asked: it waits, as for any command.
+    tmux.panes.get('%1')!.activity = Math.floor(Date.now() / 1000) + 2;
+    commander.enqueueAsk(A, 'e questo?', true);
+    await settle();
+    expect(registry.agents.get(A)!.commands!.at(-1)).toMatchObject({ status: 'in-coda', reason: 'you are typing in the session: waiting' });
+  });
+
+  it('counts the activity for a question to another session', async () => {
+    setup();
+    tmux.panes.get('%2')!.activity = Math.floor(Date.now() / 1000);
+    commander.enqueueAsk(B, 'from elsewhere', false);
+    await settle();
+    expect(registry.agents.get(B)!.commands!.at(-1)).toMatchObject({ status: 'in-coda', reason: 'you are typing in the session: waiting' });
+    expect(tmux.typed).toEqual([]);
+  });
+
+  it('puts text into the prompt without sending it, after what is typed', async () => {
+    setup();
+    const pane = tmux.panes.get('%1')!;
+    pane.input = 'draft ';
+    pane.screen = box('draft ');
+    expect(await commander.insert(A, '> riga\n')).toEqual({ ok: true });
+    expect(tmux.pasted.at(-1)?.text).toBe('> riga\n');
+    expect(pane.input).toBe('draft > riga\n');
+    expect(tmux.enters).toEqual([]);
+    expect(registry.agents.get(A)!.commands).toBeUndefined();
+    // While Claude works, too: the prompt is on screen.
+    registry.agents.get(A)!.state = 'working';
+    expect(await commander.insert(A, 'altro')).toEqual({ ok: true });
+  });
+
+  it('never puts text into a dialog, a pane scrolled back, or a session it does not run', async () => {
+    setup();
+    tmux.panes.get('%1')!.screen = 'Do you want to proceed?\n❯ 1. Yes\n  2. No';
+    expect(await commander.insert(A, 'x')).toMatchObject({ ok: false, error: expect.stringContaining('dialog') as unknown });
+    tmux.panes.get('%2')!.inMode = true;
+    expect(await commander.insert(B, 'x')).toMatchObject({ ok: false, error: expect.stringContaining('scrolled back') as unknown });
+    expect(await commander.insert('nope', 'x')).toEqual({ ok: false, error: 'unknown session' });
+    expect(await commander.insert(B, '  ')).toEqual({ ok: false, error: 'nothing to put in' });
+    expect(tmux.pasted).toEqual([]);
+  });
+});

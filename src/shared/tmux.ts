@@ -15,6 +15,9 @@ export const TMUX_ALLOWED = [
   // A request of a team, pasted as one block (bracketed paste): from a private file into a buffer, then into the pane.
   'load-buffer',
   'paste-buffer',
+  // What you select with the mouse in a pane: tmux copies it into a buffer of its own, read for the menu of the selection.
+  'list-buffers',
+  'show-buffer',
 ] as const;
 
 export type TmuxCommand = (typeof TMUX_ALLOWED)[number];

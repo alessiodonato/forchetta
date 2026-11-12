@@ -18,6 +18,8 @@ let registry: Registry;
 let hub: Hub;
 const watched: boolean[] = [];
 const updateActions: string[] = [];
+const menuCalls: string[] = [];
+let savedPrompts: unknown = [{ name: 'Explain', text: 'Explain:\n{selection}', mode: 'ask' }];
 const FAILED_UPDATE = { failed: { at: 1_794_000_000_000, from: '2.1.322', status: 'install_failed' } };
 
 beforeAll(async () => {
@@ -33,6 +35,24 @@ beforeAll(async () => {
     onWatched: (value) => watched.push(value),
     claudeUpdate: () => FAILED_UPDATE,
     onClaudeUpdate: (action) => updateActions.push(action),
+    onSelection: async (agentId, phase) => {
+      menuCalls.push(`${phase} ${agentId}`);
+      return phase === 'end' ? 'Expected 200' : undefined;
+    },
+    onAsk: (agentId, text, fromSelection) => {
+      menuCalls.push(`ask ${agentId} ${fromSelection} ${text}`);
+      return agentId === 'gone' ? { ok: false, error: 'unknown session' } : { ok: true };
+    },
+    onInsert: async (agentId, text) => {
+      menuCalls.push(`insert ${agentId} ${text}`);
+      return { ok: true };
+    },
+    prompts: () => savedPrompts as never,
+    onSavePrompts: (prompts) => {
+      if (!Array.isArray(prompts)) return { ok: false, error: 'not a list of prompts' };
+      savedPrompts = prompts;
+      return { ok: true };
+    },
   });
   registry = new Registry({ onChange: (agent) => hub.agentChanged(agent), onRemove: (ids) => hub.agentsRemoved(ids) });
   server = createDaemonServer({ registry, token: TOKEN, uiDir, hub, port: () => port, log: () => {}, info: () => ({}), onShutdown: () => {} });
@@ -118,6 +138,38 @@ describe('the updates of Claude Code', () => {
     hub.setClaudeUpdate({ run: { state: 'running', at: 1 } });
     await sleep(30);
     expect(messages.at(-1)).toMatchObject({ type: 'claudeUpdate', update: { run: { state: 'running' } } });
+    socket.close();
+  });
+});
+
+describe('the menu of a selection', () => {
+  it('reads the selection of a drag, sends questions and text, and keeps the quick prompts', async () => {
+    const { socket, messages } = await connect(TOKEN, `http://127.0.0.1:${port}`);
+    await sleep(30);
+    expect(messages[0]).toMatchObject({ type: 'hello', prompts: [{ name: 'Explain' }] });
+
+    socket.send(JSON.stringify({ type: 'selection', agentId: 'a1', phase: 'start' }));
+    socket.send(JSON.stringify({ type: 'selection', agentId: 'a1', phase: 'end' }));
+    socket.send(JSON.stringify({ type: 'selection', agentId: 'a1', phase: 'middle' }));
+    await sleep(30);
+    expect(messages.filter((message) => message.type === 'selection')).toEqual([{ type: 'selection', now: expect.any(Number), agentId: 'a1', text: 'Expected 200' }]);
+
+    socket.send(JSON.stringify({ type: 'ask', agentId: 'a1', text: 'perché?', fromSelection: true }));
+    socket.send(JSON.stringify({ type: 'ask', agentId: 'gone', text: 'perché?' }));
+    socket.send(JSON.stringify({ type: 'insert', agentId: 'a1', text: '> riga' }));
+    await sleep(30);
+    expect(menuCalls).toEqual(['start a1', 'end a1', 'ask a1 true perché?', 'ask gone false perché?', 'insert a1 > riga']);
+    expect(messages.filter((message) => message.type === 'selectionSent')).toEqual([
+      { type: 'selectionSent', now: expect.any(Number), agentId: 'a1', action: 'ask', ok: true },
+      { type: 'selectionSent', now: expect.any(Number), agentId: 'gone', action: 'ask', ok: false, error: 'unknown session' },
+      { type: 'selectionSent', now: expect.any(Number), agentId: 'a1', action: 'insert', ok: true },
+    ]);
+
+    socket.send(JSON.stringify({ type: 'savePrompts', prompts: 'no' }));
+    socket.send(JSON.stringify({ type: 'savePrompts', prompts: [{ name: 'Fix', text: 'Fix it', mode: 'ask' }] }));
+    await sleep(30);
+    expect(messages.filter((message) => message.type === 'promptsSaved').map((message) => (message as { ok: boolean }).ok)).toEqual([false, true]);
+    expect(messages.at(-1)).toMatchObject({ type: 'prompts', prompts: [{ name: 'Fix' }] });
     socket.close();
   });
 });

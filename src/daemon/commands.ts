@@ -64,7 +64,7 @@ export interface CommanderOptions {
 
 export type EnqueueResult = { ok: true; command: QueuedCommand } | { ok: false; error: string };
 
-const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000 };
+const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000, ask: 15_000 };
 /** The longest request, as the first prompt of a new session. */
 export const MAX_REQUEST = 20_000;
 /** A compaction that started may take minutes on a large context. */
@@ -74,12 +74,16 @@ const KEEP_DONE = 3;
 const WAITING: CommandStatus[] = ['in-coda', 'bloccato'];
 const DONE: CommandStatus[] = ['confermato', 'non-confermato', 'fallito'];
 
+/** A request of a team, or a question from the menu of a selection: a text that goes as your words, typed and pasted. */
+const isText = (command: Pick<QueuedCommand, 'kind'>): boolean => command.kind === 'request' || command.kind === 'ask';
+
 /** What is typed: "/btw …", "/compact", or the whole text of a request. */
 export const commandText = (command: Pick<QueuedCommand, 'kind' | 'arg'>): string =>
-  command.kind === 'btw' ? `/btw ${command.arg ?? ''}` : command.kind === 'request' ? (command.arg ?? '') : `/${command.kind}`;
+  command.kind === 'btw' ? `/btw ${command.arg ?? ''}` : isText(command) ? (command.arg ?? '') : `/${command.kind}`;
 
 /** How the log calls it: a request by its number, not by its text. */
-const commandLabel = (command: Pick<QueuedCommand, 'kind' | 'arg' | 'request'>): string => (command.kind === 'request' ? `request #${command.request?.n ?? '?'}` : commandText(command));
+const commandLabel = (command: Pick<QueuedCommand, 'kind' | 'arg' | 'request'>): string =>
+  command.kind === 'request' ? `request #${command.request?.n ?? '?'}` : command.kind === 'ask' ? `question "${requestParts(command.arg ?? '').head.slice(0, 40)}"` : commandText(command);
 
 /** What the prompt shows of a paste too long to show: "[Pasted text #1 +32 lines]". */
 const PASTED = /^\[Pasted text #\d+(?: \+\d+ lines?)?\]$/;
@@ -138,7 +142,7 @@ export class Commander {
     clearInterval(this.timer);
   }
 
-  enqueue(agentId: string, kind: string, arg?: unknown, confirmed?: unknown): EnqueueResult {
+  enqueue(agentId: string, kind: string, arg?: unknown, confirmed?: unknown, fromSelection = false): EnqueueResult {
     const agent = this.options.registry.agents.get(agentId);
     if (!agent) return { ok: false, error: 'unknown session' };
     if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'the session is read only or ended' };
@@ -154,7 +158,7 @@ export class Commander {
       if (!question) return { ok: false, error: 'the question is missing' };
       if (Buffer.byteLength(question) > MAX_QUESTION_BYTES) return { ok: false, error: 'question too long' };
     }
-    const command: QueuedCommand = { id: randomUUID(), kind, arg: question, status: 'in-coda', createdAt: this.now() };
+    const command: QueuedCommand = { id: randomUUID(), kind, arg: question, status: 'in-coda', createdAt: this.now(), ...(fromSelection ? { afterSelection: this.now() } : {}) };
     agent.commands = [...(agent.commands ?? []), command];
     this.options.log(`comando in coda per ${agent.project}: ${commandText(command)}`);
     this.prune(agent);
@@ -180,6 +184,61 @@ export class Commander {
     this.changed(agent, command);
     this.kick(agent.id);
     return { ok: true, command };
+  }
+
+  /**
+   * A question about a selection, from the menu of a pane: it goes as your request, like one of a team. Asked about a
+   * selection in this same session, the drag that made it is not taken for typing (fromSelection).
+   */
+  enqueueAsk(agentId: string, text: string, fromSelection = false): EnqueueResult {
+    const agent = this.options.registry.agents.get(agentId);
+    if (!agent) return { ok: false, error: 'unknown session' };
+    if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'the session is read only or ended' };
+    const clean = text.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim();
+    if (!clean) return { ok: false, error: 'the question is empty' };
+    if (clean.length > MAX_REQUEST) return { ok: false, error: `question too long (more than ${MAX_REQUEST} characters)` };
+    const now = this.now();
+    const command: QueuedCommand = { id: randomUUID(), kind: 'ask', arg: clean, status: 'in-coda', createdAt: now, ...(fromSelection ? { afterSelection: now } : {}) };
+    agent.commands = [...(agent.commands ?? []), command];
+    this.options.log(`domanda in coda per ${agent.team?.label ?? agent.project}`);
+    this.prune(agent);
+    this.options.registry.touch(agent);
+    this.kick(agent.id);
+    return { ok: true, command };
+  }
+
+  /**
+   * Text into the prompt of a session, not sent: the menu of a selection puts it there for you to finish. At once,
+   * not queued: it goes after what is already typed, also while Claude works; never into a dialog, nor into a pane
+   * scrolled back, nor while a command of the box is being typed.
+   */
+  async insert(agentId: string, text: string): Promise<{ ok: boolean; error?: string }> {
+    const agent = this.options.registry.agents.get(agentId);
+    if (!agent) return { ok: false, error: 'unknown session' };
+    if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'the session is read only or ended' };
+    if (!agent.control.paneId || !agent.pid) return { ok: false, error: 'the pane of the session is not known yet' };
+    const clean = text.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
+    if (!clean.trim()) return { ok: false, error: 'nothing to put in' };
+    if (clean.length > MAX_REQUEST) return { ok: false, error: `too long (more than ${MAX_REQUEST} characters)` };
+    if (this.dispatching.has(agentId)) return { ok: false, error: 'a command of the box is being typed into the session: try again in a moment' };
+    const pane = agent.control.paneId;
+    const { tmux } = this.options;
+    this.dispatching.add(agentId);
+    try {
+      const identity = await tmux.run('display-message', ['-p', '-t', pane, '#{session_name}\t#{pane_pid}']);
+      const [paneSession, panePid] = identity.stdout.trim().split('\t');
+      if (identity.code !== 0 || paneSession !== agent.control.session || Number(panePid) !== agent.pid) return { ok: false, error: 'the pane no longer belongs to the session' };
+      const mode = await tmux.run('display-message', ['-p', '-t', pane, '#{pane_in_mode}']);
+      if (mode.code === 0 && mode.stdout.trim() === '1') return { ok: false, error: 'the terminal is scrolled back (tmux copy mode): scroll to the end, or press q in it' };
+      if (!readPromptBox(await this.capture(pane, true)).found) return { ok: false, error: 'a dialog or the answer of /btw is open in the terminal: close it with Esc' };
+      await this.paste(pane, clean);
+      this.options.log(`testo messo nel prompt di ${agent.team?.label ?? agent.project} (${clean.length} caratteri)`);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    } finally {
+      this.dispatching.delete(agentId);
+    }
   }
 
   /** A request whose status changed: its team is told. */
@@ -242,7 +301,7 @@ export class Commander {
       this.finish(agent, flight.command, 'confermato', 'compaction done');
     } else if (flight.command.kind === 'clear' && ((event === 'SessionEnd' && payload.reason === 'clear') || (event === 'SessionStart' && payload.source === 'clear'))) {
       this.finish(agent, flight.command, 'confermato', 'session cleared');
-    } else if (flight.command.kind === 'request' && event === 'UserPromptSubmit' && (payload.prompt ?? '').trim().startsWith(requestParts(flight.command.arg ?? '').head)) {
+    } else if (isText(flight.command) && event === 'UserPromptSubmit' && (payload.prompt ?? '').trim().startsWith(requestParts(flight.command.arg ?? '').head)) {
       this.finish(agent, flight.command, 'confermato', 'delivered');
     }
   }
@@ -366,9 +425,10 @@ export class Commander {
       if (identity.code !== 0 || paneSession !== session || Number(panePid) !== agent.pid) {
         return this.finish(agent, command, 'fallito', 'the pane no longer belongs to the session');
       }
-      // Nobody typed into it in the last seconds.
+      // Nobody typed into it in the last seconds. The drag of a selection that asked for this command does not count.
       const activity = Number((await tmux.run('display-message', ['-p', '-t', session, '#{session_activity}'])).stdout.trim()) * 1000;
-      if (Number.isFinite(activity) && this.now() - activity < (this.options.typingQuietMs ?? 10_000)) {
+      const selecting = command.afterSelection !== undefined && activity <= command.afterSelection;
+      if (Number.isFinite(activity) && !selecting && this.now() - activity < (this.options.typingQuietMs ?? 10_000)) {
         return this.note(agent, command, 'in-coda', 'you are typing in the session: waiting');
       }
       // Not scrolled back: in copy mode the keys would go to tmux, not to Claude Code.
@@ -392,13 +452,13 @@ export class Commander {
       }
 
       const text = commandText(command);
-      if (command.kind === 'request') {
+      if (isText(command)) {
         const { head, body } = requestParts(text);
         await tmux.run('send-keys', ['-t', pane, '-H', ...hexBytes(head)]);
         if (body) await this.paste(pane, `\n${body}`);
       } else await tmux.run('send-keys', ['-t', pane, '-H', ...hexBytes(text)]);
       await this.sleep(this.options.pasteSettleMs ?? 1000);
-      const shows = (box: ReturnType<typeof readPromptBox>): boolean => box.found && (command.kind === 'request' ? showsRequest(box.typed, text) : sameText(box.typed, text));
+      const shows = (box: ReturnType<typeof readPromptBox>): boolean => box.found && (isText(command) ? showsRequest(box.typed, text) : sameText(box.typed, text));
       let typed = readPromptBox(await this.capture(pane, true));
       // Claude Code may still be drawing a paste of several lines (or the pane is being resized): one more look.
       if (!shows(typed)) {

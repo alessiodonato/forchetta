@@ -35,7 +35,7 @@ Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo real
 
 Versione 0.8.2:
 - trova da sola le sessioni Claude Code attive e mostra per ognuna un box con stato, azione in corso, riassunto, contesto, cache e costo;
-- apre fino a 4 sessioni affiancate in terminali veri, agganciati a tmux;
+- apre fino a 4 sessioni affiancate in terminali veri, agganciati a tmux; selezionando testo in uno, un menu chiede a Claude di quel testo o lo manda a un'altra sessione;
 - manda `/btw`, `/compact` e `/clear` a una o più sessioni, solo quando è sicuro;
 - risponde ai permessi dal box (una volta o "always"), notifica le attese, gli stalli e gli errori, avvisa dei conflitti tra sessioni sugli stessi file;
 - avvia **team di agenti**: un capo (una sessione Claude, oppure tu) e fino a 6 membri, ognuno una sessione di Claude Code, che si passano richieste, risposte e domande; ogni membro risponde al suo capo (⇄) o esegue soltanto (→), e può lavorare in un worktree git tutto suo;
@@ -353,9 +353,22 @@ Aprire, chiudere e riordinare i riquadri avviene con transizioni a molla.
 - si scrive come nel Terminale, con gli stessi tasti di Claude Code: Esc interrompe, Shift+Invio va a capo nel prompt;
 - Option resta Option: sulla tastiera italiana serve per @, # e le parentesi quadre;
 - la rotella scorre la cronologia di tmux, e così il riquadro entra nella modalità copia di tmux: da lì i tasti vanno a tmux, non a Claude. Il riquadro lo dice sotto l'intestazione, con **back to the end**; vanno bene anche q, o scorrere fino in fondo;
-- per selezionare testo: Option + trascinamento, anche nel Terminale, perché il tmux di Forchetta ha il mouse attivo;
+- trascinando si seleziona il testo: al rilascio tmux lo copia negli appunti e lì si apre il menu della selezione (sotto). Option + trascinamento seleziona invece con il terminale della pagina, come nel Terminale;
 - ⌘+clic su un link lo apre nel browser: https ovunque, http solo verso questo Mac;
 - macOS 12 ha il simbolo ⏺ di Claude Code solo come emoji a colori, larga due celle: nei riquadri compare come ●. Cambia solo il disegno, non quello che riceve Claude.
+
+### Chiedere di una selezione
+
+Seleziona del testo in un riquadro col mouse. Al rilascio viene copiato negli appunti, come prima, e lì si apre un piccolo menu. Il menu non prende la tastiera: scrivere nel terminale, o cliccare altrove, lo chiude.
+
+- **Ask…**: la tua domanda a questa sessione, con la selezione citata sotto. Parte come tuo prompt, quando la sessione è pronta, con gli stessi controlli dei comandi qui sotto.
+- **btw…**: la domanda come `/btw`, fuori dalla conversazione: su una riga, con la selezione tra virgolette.
+- **Put in prompt**: la selezione, citata, nel prompt della sessione, senza inviarla. Scrivi la domanda attorno e premi Invio; se è lunga compare come `[Pasted text #1 +N lines]`.
+- **Send to…**: la tua domanda a un'altra sessione, con la selezione e il nome della sessione da cui viene.
+
+Sotto ci sono le **domande pronte**: le scrivi una volta e le mandi con un clic, con dentro la selezione. Forchetta ne ha tre di partenza (Explain, Fix, Test); **✎ prompts** le cambia. Ognuna ha un nome, un testo e dove va: inviata, come `/btw`, o nel prompt. Nel testo `{selection}` è il testo selezionato (citato, quando sta da solo sulla sua riga; se manca, la selezione va dopo il testo), `{session}` il nome della sessione e `{folder}` la sua cartella. Stanno in `var/prompts.json`.
+
+Forchetta pulisce la selezione da ciò che Claude Code disegna attorno al testo: ⏺ e ⎿, i bordi dei riquadri, il rientro. Per tmux il trascinamento conta come scrittura nella sessione; una domanda dal menu di quella stessa sessione non aspetta i 10 secondi per questo.
 
 ### I comandi: `/btw`, `/compact`, `/clear`
 

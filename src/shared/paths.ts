@@ -68,6 +68,8 @@ export interface Paths {
   patches: string;
   /** The failed update of Claude Code that a `claude update` from the app took care of (daemon/claude-update.ts). */
   claudeUpdate: string;
+  /** The quick prompts of the menu of a selection (daemon/prompts.ts). */
+  prompts: string;
   log: string;
   tmuxSocket: string;
   runDir: string;
@@ -97,6 +99,7 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     crewTemplates: join(varDir, 'crew-templates.json'),
     patches: join(varDir, 'patches'),
     claudeUpdate: join(varDir, 'claude-update.json'),
+    prompts: join(varDir, 'prompts.json'),
     log: join(varDir, 'daemon.log'),
     tmuxSocket: join(varDir, 'tmux.sock'),
     runDir: join(varDir, 'run'),
