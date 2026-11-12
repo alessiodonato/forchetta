@@ -1,6 +1,6 @@
 {
   "name": "forchetta",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "private": true,
   "license": "Apache-2.0",
   "description": "Centro di controllo locale per sessioni Claude Code parallele su macOS.",
