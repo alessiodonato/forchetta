@@ -57,6 +57,9 @@ if (worktree && !worktree.startsWith('-')) {
 
 const sessionId = randomUUID();
 const cwd = process.cwd();
+/** The folder as Claude Code shows it, with ~ for the home folder. */
+const home = process.env.HOME ?? '';
+const shownCwd = home && (cwd === home || cwd.startsWith(`${home}/`)) ? `~${cwd.slice(home.length)}` : cwd;
 const daemon = () => JSON.parse(readFileSync(join(varDir, 'daemon.json'), 'utf8'));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -169,7 +172,7 @@ function draw() {
   const header = [
     `${C.orange}╭${'─'.repeat(Math.min(size, 60) - 2)}╮${C.fg}`,
     `${C.orange}│${C.fg} ${C.orange}✻${C.fg} ${C.bold}Claude Code${C.reset} ${C.gray}· ${name ?? 'session'} · ${model}${C.fg}`,
-    `${C.orange}│${C.fg}   ${C.gray}${cwd}${C.fg}`,
+    `${C.orange}│${C.fg}   ${C.gray}${shownCwd}${C.fg}`,
     `${C.orange}╰${'─'.repeat(Math.min(size, 60) - 2)}╯${C.fg}`,
   ];
   const body = [...header, ...entries.flatMap((entry) => entryLines(entry, size)), ...spinner, ''];

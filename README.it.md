@@ -359,6 +359,8 @@ Aprire, chiudere e riordinare i riquadri avviene con transizioni a molla.
 
 ### Chiedere di una selezione
 
+<img src="docs/img/selection.png" alt="Il riquadro di developer: due righe della sua risposta selezionate e, sopra, il menu della selezione con Ask, btw, Put in prompt e Send to, poi le domande pronte Explain, Fix e Test." width="100%">
+
 Seleziona del testo in un riquadro col mouse. Al rilascio viene copiato negli appunti, come prima, e lì si apre un piccolo menu. Il menu non prende la tastiera: scrivere nel terminale, o cliccare altrove, lo chiude.
 
 - **Ask…**: la tua domanda a questa sessione, con la selezione citata sotto. Parte come tuo prompt, quando la sessione è pronta, con gli stessi controlli dei comandi qui sotto.

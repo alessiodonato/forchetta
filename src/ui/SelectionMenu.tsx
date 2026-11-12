@@ -19,10 +19,13 @@ type Mode = { kind: 'menu' } | { kind: 'ask' } | { kind: 'btw' } | { kind: 'pick
 
 const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
 
-/** Where the menu goes in the pane: under the point where the mouse was let go, or above it in the lower half. */
-export function menuPosition(selection: Pick<SelectionMenuState, 'x' | 'y' | 'width' | 'height'>): Record<string, string> {
+/**
+ * Where the menu goes in the pane: under the last line of the selection, or, when that is in the lower part of the
+ * pane, above its first line. Never over the selection, which stays readable.
+ */
+export function menuPosition(selection: Pick<SelectionMenuState, 'x' | 'top' | 'bottom' | 'width' | 'height'>): Record<string, string> {
   const left = Math.max(8, Math.min(selection.x - 24, selection.width - MENU_WIDTH - 8));
-  return selection.y > selection.height * 0.55 ? { left: `${left}px`, bottom: `${selection.height - selection.y + 14}px` } : { left: `${left}px`, top: `${selection.y + 14}px` };
+  return selection.bottom > selection.height * 0.55 ? { left: `${left}px`, bottom: `${selection.height - selection.top + 14}px` } : { left: `${left}px`, top: `${selection.bottom + 14}px` };
 }
 
 interface Props {

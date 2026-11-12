@@ -176,3 +176,15 @@ describe('SelectionReader', () => {
     expect(await reader.end('A', 600)).toBeUndefined();
   });
 });
+
+describe('the place of the menu', () => {
+  it('goes under the selection, or above it in the lower part of the pane, never over it', async () => {
+    const { menuPosition } = await import('../src/ui/SelectionMenu.tsx');
+    expect(menuPosition({ x: 300, top: 100, bottom: 140, width: 1000, height: 600 })).toEqual({ left: '276px', top: '154px' });
+    // Two lines in the lower part, let go on the second one: the menu ends above the first.
+    expect(menuPosition({ x: 300, top: 420, bottom: 450, width: 1000, height: 600 })).toEqual({ left: '276px', bottom: '194px' });
+    // Near the right side, and in a narrow pane: it stays inside.
+    expect(menuPosition({ x: 990, top: 10, bottom: 30, width: 1000, height: 600 }).left).toBe('592px');
+    expect(menuPosition({ x: 100, top: 10, bottom: 30, width: 300, height: 600 }).left).toBe('8px');
+  });
+});

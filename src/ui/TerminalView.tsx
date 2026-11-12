@@ -196,14 +196,12 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey, onDragStart, 
     // A press, then a move beyond a few pixels, is a drag: the release may come outside the pane, so it is heard on
     // the window, in the capture phase (xterm.js handles the mouse of the terminal on its own).
     let press: { x: number; y: number; option: boolean; dragging: boolean } | undefined;
-    const placeOf = (event: MouseEvent): SelectionPlace => {
+    const placeOf = (event: MouseEvent, start: { y: number }): SelectionPlace => {
       const rect = element.getBoundingClientRect();
-      return {
-        x: Math.round(Math.min(Math.max(event.clientX - rect.left, 0), rect.width)),
-        y: Math.round(Math.min(Math.max(event.clientY - rect.top, 0), rect.height)),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
+      const inside = (value: number, size: number): number => Math.round(Math.min(Math.max(value, 0), size));
+      const from = inside(start.y - rect.top, rect.height);
+      const to = inside(event.clientY - rect.top, rect.height);
+      return { x: inside(event.clientX - rect.left, rect.width), top: Math.min(from, to), bottom: Math.max(from, to), width: Math.round(rect.width), height: Math.round(rect.height) };
     };
     const onMove = (event: MouseEvent): void => {
       if (!press || press.dragging) return;
@@ -216,9 +214,9 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey, onDragStart, 
       const ended = press;
       press = undefined;
       if (!ended?.dragging) return;
-      if (!ended.option) return callbacks.current.onDragEnd?.(placeOf(event));
+      if (!ended.option) return callbacks.current.onDragEnd?.(placeOf(event, ended));
       const text = term.getSelection();
-      if (text.trim()) callbacks.current.onSelectText?.(text, placeOf(event));
+      if (text.trim()) callbacks.current.onSelectText?.(text, placeOf(event, ended));
     };
     const onPointer = (event: MouseEvent): void => {
       callbacks.current.onUse();

@@ -53,10 +53,14 @@ export interface UiState {
   crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
 }
 
-/** Where the mouse was let go in a pane, and the size of the pane: the menu of the selection opens there. */
+/**
+ * Where a drag ended in a pane: the point where the mouse was let go (x), the band of lines it went over (top and
+ * bottom), and the size of the pane. The menu of the selection opens there, without covering the selection.
+ */
 export interface SelectionPlace {
   x: number;
-  y: number;
+  top: number;
+  bottom: number;
   width: number;
   height: number;
 }

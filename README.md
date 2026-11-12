@@ -357,6 +357,8 @@ Panes open, close and move with spring transitions.
 
 ### Ask about a selection
 
+<img src="docs/img/selection.png" alt="The pane of developer: two lines of its answer selected, and above them the menu of the selection with Ask, btw, Put in prompt and Send to, then the quick prompts Explain, Fix and Test." width="100%">
+
 Select text in a pane with the mouse. When you let go it is copied to the clipboard, as before, and a small menu opens there. The menu does not take the keyboard: typing in the terminal, or clicking anywhere else, closes it.
 
 - **Ask…**: your question to this session, with the selection quoted under it. It goes as your prompt, when the session is ready, with the same checks as the commands below.
