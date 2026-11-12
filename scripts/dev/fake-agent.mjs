@@ -260,8 +260,8 @@ async function next() {
   running = false;
 }
 
-/** One tool: its hooks before and after, and its lines on screen. */
-async function tool(toolName, toolInput, arg, result, ms) {
+/** One tool: its hooks before and after (with `response` as its tool_response), and its lines on screen. */
+async function tool(toolName, toolInput, arg, result, ms, response = {}) {
   busyWord = toolName.startsWith('mcp__') ? 'Waiting' : toolName === 'Bash' ? 'Running' : 'Working';
   const entry = { kind: 'tool', name: toolName.startsWith('mcp__') ? `${toolName.split('__')[1]} - ${toolName.split('__')[2]} (MCP)` : toolName, arg };
   entries.push(entry);
@@ -270,7 +270,7 @@ async function tool(toolName, toolInput, arg, result, ms) {
   const value = typeof ms === 'function' ? await ms() : (await wait(ms), result);
   entry.result = typeof value === 'string' ? value : result;
   draw();
-  await hook('PostToolUse', { tool_name: toolName, tool_input: toolInput, tool_response: {} });
+  await hook('PostToolUse', { tool_name: toolName, tool_input: toolInput, tool_response: response });
   return value;
 }
 
@@ -366,10 +366,23 @@ async function turn(prompt) {
     await wait(1200);
     return 'Noted.';
   }
+  if (/\bartifact\b/i.test(prompt)) return publishArtifact(prompt);
   await wait(1200);
   await read('README.md');
   await edit('src/index.ts', 2000);
   return 'Done.';
+}
+
+/** The Artifact tool of Claude Code, as it answers a publish: the link and the title of the page. */
+async function publishArtifact(prompt) {
+  await wait(1000);
+  const file = join(cwd, 'report.html');
+  await write('report.html', 1200);
+  const id = randomUUID().replace(/-/g, '').slice(0, 22);
+  const url = `https://claude.ai/artifact/${id}`;
+  const title = /\bcalled\s+"([^"]+)"/i.exec(prompt)?.[1] ?? 'Session report';
+  await tool('Artifact', { file_path: file, icon: 'chart' }, `file_path: "${file}"`, `Published ${file} at ${url} (Version 1)`, 1500, { url, path: file, title, updated: false, owned: true, version: '1' });
+  return `Published "${title}": ${url}`;
 }
 
 // ---- Start --------------------------------------------------------------------------------------------------

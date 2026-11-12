@@ -74,11 +74,18 @@ function clientEnv(): NodeJS.ProcessEnv {
 export class Terminals {
   private readonly server = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
   private readonly open = new Map<WebSocket, Pty>();
+  /** The session of each open terminal. */
+  private readonly sessionOf = new Map<WebSocket, string>();
 
   constructor(private readonly options: TerminalsOptions) {}
 
   get size(): number {
     return this.open.size;
+  }
+
+  /** The tmux sessions with a terminal open in a window. */
+  openSessions(): Set<string> {
+    return new Set(this.sessionOf.values());
   }
 
   private refuse(socket: Duplex, status: string): void {
@@ -120,6 +127,7 @@ export class Terminals {
       return;
     }
     this.open.set(ws, pty);
+    this.sessionOf.set(ws, session);
     this.options.log(`terminale aperto: ${session} (client tmux ${pty.pid})`);
 
     // A burst of output (a long diff, a redraw) waits in the pty while the page catches up.
@@ -144,6 +152,7 @@ export class Terminals {
     });
     pty.onExit(() => {
       this.open.delete(ws);
+      this.sessionOf.delete(ws);
       // tmux ended the client: the session is over (Claude exited), or the server is gone.
       if (ws.readyState === ws.OPEN) ws.close(SESSION_ENDED, 'sessione terminata');
     });
@@ -163,6 +172,7 @@ export class Terminals {
       }
     });
     ws.on('close', () => {
+      this.sessionOf.delete(ws);
       if (!this.open.has(ws)) return;
       this.open.delete(ws);
       this.detach(pty, session);

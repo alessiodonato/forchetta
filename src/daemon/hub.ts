@@ -51,6 +51,7 @@ export interface UiSettings {
 /** What the page asks of the daemon. */
 export type ClientMessage =
   | { type: 'visibility'; visible: boolean }
+  | { type: 'scrollEnd'; agentId: string }
   | { type: 'command'; agentId: string; kind: string; arg?: string; confirmed?: boolean }
   | { type: 'cancel'; agentId: string; commandId: string }
   | { type: 'permission'; agentId: string; ticket: string; behavior: 'allow' | 'deny'; always?: number }
@@ -98,6 +99,8 @@ export interface HubOptions {
   onCrewRequest?: (crewId: string, to: string[], text: string) => { ok: true; n: number } | { ok: false; error: string };
   /** The changes of a session, read when its panel opens. */
   onFiles?: (agentId: string) => Promise<FileChange[]>;
+  /** "back to the end" in a pane scrolled back in tmux. */
+  onScrollEnd?: (agentId: string) => void;
   /** The answer of a box to a permission dialog. */
   onPermission?: (message: Extract<ClientMessage, { type: 'permission' }>) => void;
   /** Called when the number of windows that can be seen goes from 0 to more, or back. */
@@ -227,6 +230,8 @@ export class Hub {
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
           if (requests) this.send(ws, { type: 'crewThread', now: Date.now(), crewId: message.crewId, requests });
+        } else if (message.type === 'scrollEnd' && typeof message.agentId === 'string') {
+          this.options.onScrollEnd?.(message.agentId);
         } else if (message.type === 'files' && typeof message.agentId === 'string' && this.options.onFiles) {
           const agentId = message.agentId;
           void this.options.onFiles(agentId).then(

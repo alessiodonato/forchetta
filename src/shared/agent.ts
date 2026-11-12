@@ -1,5 +1,6 @@
 // The shape of an agent as the daemon keeps it and as the CLI and the page receive it. No Node module here: the
 // page imports this file too.
+import type { ArtifactLink } from './artifacts.ts';
 
 export type AgentState = 'starting' | 'working' | 'waiting' | 'idle' | 'compacting' | 'error' | 'ended';
 
@@ -265,6 +266,10 @@ export interface Agent {
   team?: TeamInfo;
   /** How many files the session wrote: the panel of its changes lists them. */
   filesChanged?: number;
+  /** The artifacts of claude.ai it published or opened, the most recent first (shared/artifacts.ts). */
+  artifacts?: ArtifactLink[];
+  /** Its pane, open in the app, is scrolled back in tmux (copy mode): the keys go to tmux (daemon/scrollback.ts). */
+  scrolledBack?: boolean;
   /** Other sessions that write the same files or in the same working tree (daemon/conflicts.ts). */
   conflicts?: Conflict[];
   /** The permission dialog that the box can answer now. */

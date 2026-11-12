@@ -39,7 +39,7 @@ Versione 0.8.0:
 - manda `/btw`, `/compact` e `/clear` a una o più sessioni, solo quando è sicuro;
 - risponde ai permessi dal box (una volta o "always"), notifica le attese, gli stalli e gli errori, avvisa dei conflitti tra sessioni sugli stessi file;
 - avvia **team di agenti**: un capo (una sessione Claude, oppure tu) e fino a 6 membri, ognuno una sessione di Claude Code, che si passano richieste, risposte e domande; ogni membro risponde al suo capo (⇄) o esegue soltanto (→), e può lavorare in un worktree git tutto suo;
-- mostra le modifiche di ogni sessione, avvia sessioni nuove, organizza le sessioni in gruppi e ruoli, cerca nelle sessioni passate con arricurdAI;
+- mostra le modifiche di ogni sessione e gli artefatti che ha pubblicato su claude.ai, avvia sessioni nuove, organizza le sessioni in gruppi e ruoli, cerca nelle sessioni passate con arricurdAI;
 - sta nella barra dei menu, con la scorciatoia ⌃⌥F.
 
 Tutto gira in locale. L'unico servizio esterno, facoltativo e spento di default, è la Claude API per i riassunti.
@@ -265,6 +265,14 @@ Altri dettagli:
 - il diff viene letto solo quando apri il pannello;
 - `git` lavora in sola lettura, senza diff esterni, textconv né fsmonitor.
 
+### Gli artefatti di claude.ai
+
+Quando una sessione pubblica un artefatto su claude.ai, o ne apre uno, il suo box mostra "1 artifact" in basso, accanto a "3 files"; lo stesso pulsante c'è nell'intestazione del riquadro aperto. Con un artefatto solo, un clic lo apre nel browser. Con più artefatti, un clic mostra l'elenco, dal più recente: per ognuno il titolo, se la sessione l'ha pubblicato o aperto, e quando, più **copy** per copiarne il link.
+
+- Forchetta prende link e titolo dall'hook dello strumento Artifact di Claude Code, e nient'altro del suo risultato. Per una sessione che era già aperta, li legge una volta dal suo transcript.
+- I link sono privati: si aprono nel browser predefinito, dove hai l'accesso a claude.ai, e restano nella cartella dei dati di Forchetta.
+- Un box tiene gli ultimi 20.
+
 ### Conflitti tra sessioni
 
 Se due sessioni attive hanno scritto lo stesso file nell'ultima ora, entrambi i box lo dicono: "⚠ same file as beta: src/api.ts". Se hanno scritto file diversi nella stessa repo, l'avviso è più leggero: "⚠ same repo as beta (app)". Nella colonna a sinistra compare un'etichetta "⚠ same file" o "⚠ same repo"; passandoci sopra si leggono tutti i file.
@@ -342,8 +350,9 @@ Aprire, chiudere e riordinare i riquadri avviene con transizioni a molla.
 **Dentro il terminale:**
 - si scrive come nel Terminale, con gli stessi tasti di Claude Code: Esc interrompe, Shift+Invio va a capo nel prompt;
 - Option resta Option: sulla tastiera italiana serve per @, # e le parentesi quadre;
-- la rotella scorre la cronologia di tmux;
+- la rotella scorre la cronologia di tmux, e così il riquadro entra nella modalità copia di tmux: da lì i tasti vanno a tmux, non a Claude. Il riquadro lo dice sotto l'intestazione, con **back to the end**; vanno bene anche q, o scorrere fino in fondo;
 - per selezionare testo: Option + trascinamento, anche nel Terminale, perché il tmux di Forchetta ha il mouse attivo;
+- ⌘+clic su un link lo apre nel browser: https ovunque, http solo verso questo Mac;
 - macOS 12 ha il simbolo ⏺ di Claude Code solo come emoji a colori, larga due celle: nei riquadri compare come ●. Cambia solo il disegno, non quello che riceve Claude.
 
 ### I comandi: `/btw`, `/compact`, `/clear`

@@ -1,3 +1,4 @@
+import type { ArtifactLink } from '../shared/artifacts.ts';
 import { type Agent, type AgentState, projectOf } from '../shared/agent.ts';
 import { activeTask, clip, firstQuestion, opening, toolLabel } from './labels.ts';
 
@@ -33,6 +34,8 @@ export interface HookPayload {
   permission_suggestions?: unknown;
   /** PostToolUse of a write tool only: the patch Claude Code reports (daemon/patches.ts). */
   tool_response?: unknown;
+  /** PostToolUse of the Artifact tool: the link and title of what it published or opened, and nothing else. */
+  artifact?: Omit<ArtifactLink, 'at'>;
 }
 
 export function newAgent(init: Partial<Agent> & Pick<Agent, 'id' | 'control'>, now: number): Agent {

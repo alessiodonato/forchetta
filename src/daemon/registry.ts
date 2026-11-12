@@ -338,6 +338,8 @@ export class Registry {
       agent.permission = undefined;
       // The writes behind them were not saved: they come back with the next ones.
       agent.conflicts = undefined;
+      // Seen again within a second, if its pane is open and still scrolled back.
+      agent.scrolledBack = undefined;
       this.agents.set(agent.id, agent);
     }
   }

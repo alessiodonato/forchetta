@@ -269,6 +269,11 @@ export class Store {
     this.send({ type: 'team', agentId, team: team ?? null });
   }
 
+  /** A pane scrolled back in tmux (copy mode) back to the end: the keys go to Claude Code again. */
+  scrollEnd(agentId: string): void {
+    this.send({ type: 'scrollEnd', agentId });
+  }
+
   /** Opens the panel of the changes of a session, or reads them again. */
   showFiles(agentId: string): void {
     this.set({ files: { agentId } });

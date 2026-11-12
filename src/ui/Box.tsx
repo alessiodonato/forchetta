@@ -22,6 +22,7 @@ import { Check, ToolIcon } from './icons.tsx';
 import { useMotionAnchor } from './anchor.ts';
 import { CommandBar, CommandStatus, currentCommand } from './Commands.tsx';
 import { animateEnter, animateShake } from './motion.ts';
+import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
 import { PermissionOutcomeLine, PermissionPrompt, visibleOutcome } from './Permission.tsx';
 import { roleText, TeamEditor } from './Team.tsx';
@@ -119,6 +120,7 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
       )}
       <span class="grow" />
       <FilesButton agent={agent} store={store} />
+      <ArtifactsButton agent={agent} />
       {hasEvents(agent) && agent.state !== 'ended' && (
         <span class="ago" title="Time since the last event">
           {agoShort(now - agent.lastEvent.at)}
@@ -270,6 +272,9 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: B
       <Meta agent={agent} now={now} store={store} />
       {openable && (
         <div class={`box-commands${commanding ? ' active' : ''}`}>
+          {/* The bar covers the last line on hover: its two buttons come with it, or they could not be clicked. */}
+          {!commanding && <FilesButton agent={agent} store={store} />}
+          {!commanding && <ArtifactsButton agent={agent} />}
           <CommandBar agent={agent} store={store} onModeChange={setCommanding} />
         </div>
       )}

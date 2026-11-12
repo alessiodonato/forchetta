@@ -192,12 +192,23 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             notify(id: id, kind: (body["kind"] as? String) ?? "waiting", title: title, body: text)
         case "chooseFolder":
             chooseFolder(startingAt: body["folder"] as? String)
+        case "openUrl":
+            if let text = body["url"] as? String { openInBrowser(text) }
         case "menu":
             menuInfo = body
             updateStatusTitle()
         default:
             break
         }
+    }
+
+    /// A link from the page (an artifact of claude.ai, a link in a terminal) in the default browser: https anywhere,
+    /// http only on this Mac, nothing else (the page checks the same before it asks).
+    private func openInBrowser(_ text: String) {
+        guard let url = URL(string: text), url.user == nil, url.password == nil, let host = url.host, !host.isEmpty else { return }
+        let local = ["localhost", "127.0.0.1", "::1"].contains(host)
+        guard url.scheme == "https" || (url.scheme == "http" && local) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Icon in the menu bar

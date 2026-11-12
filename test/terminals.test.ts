@@ -1,9 +1,11 @@
+import { execFileSync } from 'node:child_process';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { Registry } from '../src/daemon/registry.ts';
+import { PANE_MODES_FORMAT, paneModes } from '../src/daemon/scrollback.ts';
 import { createDaemonServer } from '../src/daemon/server.ts';
 import { Terminals } from '../src/daemon/terminals.ts';
 import { which } from '../src/shared/config.ts';
@@ -73,6 +75,15 @@ describe('terminals', () => {
     await sleep(600);
     expect(screen).toContain('PRONTO');
     expect(await attached()).toBe('1');
+    expect(terminals.openSessions()).toEqual(new Set([SESSION]));
+
+    // Scrolled back (the wheel puts tmux in copy mode): list-panes says so, and "back to the end" takes it out.
+    const modes = async () => paneModes((await tmux.run('list-panes', ['-a', '-F', PANE_MODES_FORMAT])).stdout).get(SESSION);
+    expect(await modes()).toBe(false);
+    execFileSync(tmuxBin!, ['-S', join(temp.dir, 'tmux.sock'), 'copy-mode', '-t', SESSION]);
+    expect(await modes()).toBe(true);
+    await tmux.run('send-keys', ['-t', SESSION, '-X', 'cancel']);
+    expect(await modes()).toBe(false);
 
     socket.send(JSON.stringify({ type: 'input', data: 'ciao forchetta\r' }));
     await sleep(500);
@@ -85,6 +96,7 @@ describe('terminals', () => {
     socket.close();
     await sleep(500);
     expect(await attached()).toBe('0');
+    expect(terminals.openSessions().size).toBe(0);
     expect((await tmux.run('has-session', ['-t', SESSION])).code).toBe(0);
   });
 

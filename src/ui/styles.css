@@ -890,6 +890,10 @@ html[data-hidden] *::after {
   right: 12px;
   bottom: 9px;
   left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
   opacity: 0;
   pointer-events: none;
   transition: opacity 150ms ease;
@@ -911,10 +915,13 @@ html[data-hidden] *::after {
 }
 
 .box-commands .command-bar {
+  flex: 1;
+  min-width: 0;
   justify-content: flex-end;
   background: var(--surface);
 }
 
+.box[data-state='waiting'] .box-commands,
 .box[data-state='waiting'] .box-commands .command-bar {
   background: var(--surface-waiting);
 }
@@ -1015,7 +1022,8 @@ html[data-hidden] *::after {
   color: var(--text-2);
 }
 
-.command-status .link {
+.command-status .link,
+.pane-scrolled .link {
   -webkit-appearance: none;
   appearance: none;
   flex: none;
@@ -1036,6 +1044,19 @@ html[data-hidden] *::after {
 .pane > .command-status {
   padding: 5px 14px;
   border-bottom: 1px solid var(--line);
+}
+
+/* The pane is scrolled back in tmux (copy mode): what to do to type again. */
+.pane-scrolled {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--line);
+  font: 11px var(--mono);
+  color: var(--text-2);
 }
 
 /* ——— A permission dialog answered from the box ——— */
@@ -1352,6 +1373,88 @@ html[data-hidden] *::after {
 .pane-files {
   padding: 1px 7px;
   font-size: 10.5px;
+}
+
+/* The artifacts of a session: a short list drawn over the page at the button (Artifacts.tsx places it). */
+.artifacts {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.artifacts-menu {
+  position: fixed;
+  z-index: 50;
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(380px, calc(100vw - 16px));
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  text-align: left;
+}
+
+.artifacts-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.artifacts-open {
+  -webkit-appearance: none;
+  appearance: none;
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.artifacts-open:hover,
+.artifacts-open:focus-visible {
+  background: var(--claude-soft);
+}
+
+.artifacts-title {
+  overflow: hidden;
+  font: 12.5px var(--ui);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.artifacts-when {
+  font: 10.5px var(--mono);
+  color: var(--text-3);
+}
+
+.artifacts-copy {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  font: 10.5px var(--mono);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.artifacts-copy:hover {
+  border-color: rgba(217, 119, 87, 0.6);
+  color: var(--text);
 }
 
 .files-backdrop {

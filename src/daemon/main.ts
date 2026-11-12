@@ -24,6 +24,9 @@ import { Permissions } from './permissions.ts';
 import { isInteractiveCommand, readCommandLine } from './process.ts';
 import { Registry } from './registry.ts';
 import { createDaemonServer } from './server.ts';
+import { addArtifact, mergeArtifacts } from '../shared/artifacts.ts';
+import { artifactsInTranscript } from './transcript-artifacts.ts';
+import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
 import type { Agent } from './state.ts';
 import { haikuComplete, Summarizer } from './summarizer.ts';
 import { Terminals } from './terminals.ts';
@@ -38,6 +41,8 @@ const QUIET_CHECK_MS = 10_000;
 const QUIET_RECONCILE_MIN_MS = 30_000;
 const QUIET_RECONCILE_MAX_MS = 5 * 60_000;
 const SWEEP_MS = 60_000;
+/** How often the panes open in the app are checked for the copy mode of tmux (daemon/scrollback.ts). */
+const SCROLL_CHECK_MS = 1_000;
 
 /** Events after which context and cache change: arricurdAI is read again soon. */
 const CONTEXT_EVENTS = new Set(['Stop', 'StopFailure', 'PostCompact', 'SessionStart']);
@@ -171,10 +176,30 @@ function main(): void {
     },
     onUnknownPid: reconcileSoon,
   });
+  // The artifacts a session showed before Forchetta saw them come: read once from its transcript, one transcript at
+  // a time (they can be tens of MB), when the daemon starts and when a session first sends an event.
+  const transcriptsRead = new Set<string>();
+  let reading = Promise.resolve();
+  const readArtifacts = (agent: Agent): void => {
+    const file = agent.transcriptPath;
+    if (!file || transcriptsRead.has(file) || agent.state === 'ended') return;
+    transcriptsRead.add(file);
+    reading = reading.then(async () => {
+      try {
+        const found = await artifactsInTranscript(file);
+        if (found.length === 0) return;
+        agent.artifacts = mergeArtifacts(agent.artifacts, found);
+        registry.touch(agent);
+      } catch {
+        // No transcript (yet), or one that cannot be read: the hooks bring the next ones.
+      }
+    });
+  };
   try {
     if (existsSync(paths.state)) {
       const saved = JSON.parse(readFileSync(paths.state, 'utf8')) as { agents?: Agent[]; writes?: unknown };
       registry.restore(saved.agents ?? []);
+      for (const agent of registry.agents.values()) readArtifacts(agent);
       conflicts.load(saved.writes);
       updateConflicts();
       attention.prime(registry.agents.values());
@@ -197,6 +222,7 @@ function main(): void {
       if (result && !result.ok) log(`comando rifiutato: ${result.error}`);
     },
     onFiles: (agentId) => changesOf(conflicts.filesOf(agentId), patches.byFile(agentId)),
+    onScrollEnd: (agentId) => void scrollEnd(agentId),
     onSpawn: (input) => spawnSession({ tmux, registry, claude, log }, input),
     crews: () => crews.summaries(),
     onCrewRequest: (crewId, to, text) => crews.request(crewId, to, text),
@@ -371,6 +397,11 @@ function main(): void {
           log(`modifica di ${agent.id} non salvata: ${String(error)}`);
         }
       }
+      if (payload.artifact) {
+        agent.artifacts = addArtifact(agent.artifacts, { ...payload.artifact, at: Date.now() });
+        registry.touch(agent);
+      }
+      readArtifacts(agent);
       const file = writtenFile(payload, agent.cwd);
       if (file) {
         conflicts.wrote(agent.id, file);
@@ -385,6 +416,49 @@ function main(): void {
     info: () => ({ pid: process.pid, port: config.port, startedAt, version: VERSION, agents: registry.agents.size, windows: hub?.size ?? 0, terminals: terminals.size }),
     onShutdown: () => shutdown('richiesta di arresto'),
   });
+
+  /** Which panes open in the app are scrolled back in tmux (daemon/scrollback.ts): one list-panes, if any is open. */
+  let checkingScroll = false;
+  async function checkScroll(): Promise<void> {
+    if (checkingScroll) return;
+    const open = terminals.openSessions();
+    // Asked to tmux only while a window shows a terminal; otherwise the marks still there go.
+    const ask = (hub?.isWatched() ?? false) && open.size > 0;
+    if (!ask && ![...registry.agents.values()].some((agent) => agent.scrolledBack)) return;
+    checkingScroll = true;
+    try {
+      let modes = new Map<string, boolean>();
+      if (ask) {
+        const listed = await tmux.run('list-panes', ['-a', '-F', PANE_MODES_FORMAT]);
+        if (listed.code !== 0) return;
+        modes = paneModes(listed.stdout);
+      }
+      for (const agent of registry.agents.values()) {
+        const scrolled = ask && scrolledBack(agent, open, modes);
+        if (Boolean(agent.scrolledBack) === scrolled) continue;
+        agent.scrolledBack = scrolled || undefined;
+        registry.touch(agent);
+      }
+    } finally {
+      checkingScroll = false;
+    }
+  }
+
+  /** "back to the end" in the pane: out of copy mode, the keys go to Claude Code again. */
+  async function scrollEnd(agentId: string): Promise<void> {
+    const agent = registry.agents.get(agentId);
+    if (!agent || agent.control.kind !== 'tmux') return;
+    const target = agent.control.paneId ?? agent.control.session;
+    const mode = await tmux.run('display-message', ['-p', '-t', target, '#{pane_in_mode}']);
+    if (mode.code === 0 && mode.stdout.trim() === '1') {
+      await tmux.run('send-keys', ['-t', target, '-X', 'cancel']);
+      log(`${agent.project}: riquadro riportato in fondo (fuori dalla copy mode di tmux)`);
+    }
+    if (agent.scrolledBack) {
+      agent.scrolledBack = undefined;
+      registry.touch(agent);
+    }
+  }
 
   const timers: NodeJS.Timeout[] = [];
   function shutdown(reason: string): void {
@@ -446,6 +520,7 @@ function main(): void {
         });
       }, QUIET_CHECK_MS),
       setInterval(() => void reconcile('periodica'), config.reconcileIntervalMin * 60_000),
+      setInterval(() => void checkScroll().catch((error: unknown) => log(`copy mode: ${String(error)}`)), SCROLL_CHECK_MS),
       setInterval(() => {
         registry.sweep(config.endedRetentionMin * 60_000);
         updateConflicts();

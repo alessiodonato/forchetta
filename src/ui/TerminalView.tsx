@@ -1,8 +1,10 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { Terminal } from '@xterm/xterm';
+import { type ILink, Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'preact/hooks';
+import { linksIn } from '../shared/artifacts.ts';
+import { openLink } from './Artifacts.tsx';
 import { token } from './connection.ts';
 import { GlyphFilter } from './glyphs.ts';
 import { isFocusReport, keyInput } from './layout.ts';
@@ -15,6 +17,39 @@ import { TERMINAL_THEME } from './terminal-theme.ts';
 // to the color emoji, two cells wide over the next letter.
 const FALLBACK_FONTS = 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", monospace';
 const FONTS = `"JetBrains Mono", ${FALLBACK_FONTS}`;
+
+/**
+ * The links on line `y` (from 1) of the screen, for xterm.js. A link can go on over the next lines when the terminal
+ * wraps a long line: the whole wrapped line is read, and each link is placed by its cells.
+ */
+function linksAt(term: Terminal, y: number, open: (url: string) => void): ILink[] | undefined {
+  const buffer = term.buffer.active;
+  let first = y - 1;
+  while (first > 0 && buffer.getLine(first)?.isWrapped) first--;
+  let last = first;
+  while (buffer.getLine(last + 1)?.isWrapped) last++;
+  let text = '';
+  for (let row = first; row <= last; row++) text += buffer.getLine(row)?.translateToString(row === last) ?? '';
+  const cols = term.cols;
+  const cell = (offset: number) => ({ x: (offset % cols) + 1, y: first + Math.floor(offset / cols) + 1 });
+  const links = linksIn(text)
+    .map(({ url, index }): ILink => ({
+      range: { start: cell(index), end: cell(index + url.length - 1) },
+      text: url,
+      decorations: { pointerCursor: true, underline: true },
+      hover: () => {
+        if (term.element) term.element.title = '⌘-click to open in the browser';
+      },
+      leave: () => {
+        if (term.element) term.element.title = '';
+      },
+      activate: (event: MouseEvent, link: string) => {
+        if (event.metaKey) open(link);
+      },
+    }))
+    .filter((link) => link.range.start.y <= y && y <= link.range.end.y);
+  return links.length > 0 ? links : undefined;
+}
 
 /**
  * JetBrains Mono, loaded once for all the panes. xterm.js measures its cells with the font it has when it opens:
@@ -77,6 +112,17 @@ export function TerminalView({ agentId, onUse, onStatus, focusKey }: Props) {
       // The history is in tmux: the wheel scrolls it (mouse on). A second one here would only show a scrollbar.
       scrollback: 0,
       theme: TERMINAL_THEME,
+      // Links that the program marks itself (OSC 8): ⌘-click opens them, as in the Terminal.
+      linkHandler: {
+        activate: (event, text) => {
+          if (event.metaKey) openLink(text);
+        },
+        allowNonHttpProtocols: false,
+      },
+    });
+    // The links written as plain text: ⌘-click opens them in the browser. A plain click stays with tmux (its mouse is on).
+    term.registerLinkProvider({
+      provideLinks: (y, callback) => callback(linksAt(term, y, (url) => openLink(url))),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);

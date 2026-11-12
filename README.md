@@ -39,7 +39,7 @@ Version 0.8.0:
 - sends `/btw`, `/compact` and `/clear` to one session or to several, only when it is safe;
 - answers permission prompts from the box (once or "always"), notifies waits, stalls and errors, and warns when two sessions work on the same files;
 - starts **teams of agents**: a lead (a Claude session, or you) and up to 6 members, each a Claude Code session, that pass each other requests, answers and questions; each member answers its lead (⇄) or only executes (→), and can work in a git worktree of its own;
-- shows the changes of each session, starts new sessions, organizes sessions in groups and roles, and searches earlier sessions with arricurdAI;
+- shows the changes of each session and the artifacts it published on claude.ai, starts new sessions, organizes sessions in groups and roles, and searches earlier sessions with arricurdAI;
 - lives in the menu bar, with the shortcut ⌃⌥F.
 
 Everything runs on your Mac. The one outside service, optional and off by default, is the Claude API for the summaries.
@@ -263,6 +263,14 @@ More details:
 - the diff is read only when you open the panel;
 - `git` works read only, with no external diff, textconv or fsmonitor.
 
+### Artifacts of claude.ai
+
+When a session publishes an artifact on claude.ai, or opens one, its box shows "1 artifact" in the footer, next to "3 files"; the same button is in the header of an open pane. With one artifact, a click opens it in your browser. With more, a click shows the list, newest first: each one with its title, whether the session published or opened it, and when, and **copy** for its link.
+
+- Forchetta takes the link and the title from the hook of the Artifact tool of Claude Code, and nothing else of its result. For a session that was already running, it reads them once from its transcript.
+- The links are private: they open in your default browser, where you are signed in to claude.ai, and stay in the data folder of Forchetta.
+- A box keeps the last 20.
+
 ### Conflicts between sessions
 
 If two live sessions wrote the same file in the last hour, both boxes say so: "⚠ same file as beta: src/api.ts". If they wrote different files in the same repository, the warning is softer: "⚠ same repo as beta (app)". In the column on the left a "⚠ same file" or "⚠ same repo" tag appears; hover it to read all the files.
@@ -340,8 +348,9 @@ Panes open, close and move with spring transitions.
 **Inside the terminal:**
 - you type as in the Terminal, with the same keys as Claude Code: Esc interrupts, Shift+Return starts a new line in the prompt;
 - Option stays Option: on an Italian keyboard it types @, # and the square brackets;
-- the wheel scrolls the history of tmux;
+- the wheel scrolls the history of tmux, which puts the pane in tmux copy mode: from then on the keys go to tmux, not to Claude. The pane says so under its header, with **back to the end**; pressing q, or scrolling to the end, works too;
 - to select text: Option + drag, in the Terminal too, because the tmux of Forchetta has the mouse on;
+- ⌘-click on a link opens it in your browser: https anywhere, http only on this Mac;
 - macOS 12 has the ⏺ symbol of Claude Code only as a color emoji, two cells wide: in the panes it shows as ●. Only the drawing changes, not what Claude receives.
 
 ### The commands: `/btw`, `/compact`, `/clear`
