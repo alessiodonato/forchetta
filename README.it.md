@@ -4,9 +4,9 @@
 
 # Forchetta
 
-### Tutte le sessioni di Claude Code del tuo Mac, in una finestra.
+### Le tue sessioni di Claude Code, che lavorano insieme.
 
-Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo reale cosa sta facendo ognuna, cosa aspetta e quanto è costata. Ne apri fino a quattro affiancate, rispondi ai permessi dal loro box, ricevi una notifica quando una ha bisogno di te e avvii team di agenti che lavorano insieme.
+Tieni in una finestra tutte le sessioni di Claude Code del tuo Mac: vedi cosa sta facendo ognuna, rispondi ai suoi permessi e ricevi una notifica quando una ha bisogno di te. Poi falle lavorare come un team. Un capo distribuisce il lavoro, ogni membro fa la sua parte nel suo worktree git, e Forchetta ti avvisa quando due sessioni scrivono lo stesso file.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#installazione)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#installazione)
@@ -17,6 +17,7 @@ Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo real
 
 [Installazione](#installazione) ·
 [Cosa fa](#cosa-fa) ·
+[Rispetto ad altri strumenti](#rispetto-ad-altri-strumenti) ·
 [Team di agenti](#team-di-agenti) ·
 [arricurdAI](#funziona-con-arricurdai) ·
 [Manuale (in inglese)](https://alessiodonato.github.io/forchetta/manual.html) ·
@@ -27,24 +28,43 @@ Forchetta trova le sessioni di Claude Code che hai aperto e mostra in tempo real
 
 <img src="docs/img/demo.gif" alt="Un team di agenti in Forchetta: il team nasce da un modello, si aprono i suoi quattro terminali, il capo riceve un obiettivo, dà lavoro a developer, poi a reviewer e tester, raccoglie le risposte e riferisce." width="100%">
 
-<sub>Un team di agenti al lavoro. Registrato nella simulazione di questo repository (<code>scripts/dev</code>): le sessioni sono controfigure di Claude Code con un copione, mentre app, daemon e coda sono quelli veri.</sub>
+<sub>Un team al lavoro: il capo riceve un obiettivo, lo passa al developer, poi al reviewer e al tester, e riferisce con le loro risposte. Registrato nella simulazione di questo repository (<code>scripts/dev</code>): app, daemon e coda sono quelli veri, le sessioni sono controfigure di Claude Code con un copione.</sub>
 
 </div>
 
 ## Cosa fa
 
-Versione 0.8.5:
-- trova da sola le sessioni Claude Code attive e mostra per ognuna un box con stato, azione in corso, riassunto, contesto, cache e costo;
-- apre fino a 4 sessioni affiancate in terminali veri, agganciati a tmux; selezionando testo in uno, un menu chiede a Claude di quel testo o lo manda a un'altra sessione;
-- manda `/btw`, `/compact` e `/clear` a una o più sessioni, solo quando è sicuro;
-- risponde ai permessi dal box (una volta o "always"), notifica le attese, gli stalli e gli errori, avvisa dei conflitti tra sessioni sugli stessi file;
-- avvia **team di agenti**: un capo (una sessione Claude, oppure tu) e fino a 6 membri, ognuno una sessione di Claude Code, che si passano richieste, risposte e domande; ogni membro risponde al suo capo (⇄) o esegue soltanto (→), e può lavorare in un worktree git tutto suo;
-- mostra i subagenti che ogni sessione avvia e cosa fanno, le sue modifiche e gli artefatti che ha pubblicato su claude.ai, avvia sessioni nuove, organizza le sessioni in gruppi e ruoli, cerca nelle sessioni passate con arricurdAI;
-- sta nella barra dei menu, con la scorciatoia ⌃⌥F.
+**Tutte le sessioni a colpo d'occhio.** Forchetta trova le sessioni di Claude Code aperte sul tuo Mac e dà a ognuna un box aggiornato in tempo reale: lo stato, cosa sta facendo in quel momento, un breve riassunto, il contesto, la cache e il costo. Una sessione che aspetta te diventa ambra, una che ha finito verde, un errore rosso.
 
-Tutto gira in locale. L'unico servizio esterno, facoltativo e spento di default, è la Claude API per i riassunti.
+**Gestiscile da un posto solo.**
+- Rispondi ai permessi dal box, una volta o "always".
+- Ricevi una notifica quando una sessione aspetta, si blocca o va in errore.
+- Apri fino a quattro sessioni affiancate, in terminali veri.
+- Manda `/btw`, `/compact` o `/clear` a una sessione o a più insieme, solo quando è sicuro.
+
+**Falle lavorare insieme.**
+- **Team di agenti.** Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree git. Il capo manda le richieste; i membri rispondono, o gli fanno una domanda quando sono bloccati. Puoi entrare nel terminale di qualsiasi membro, e salvare il team come modello per riavviarlo in un altro progetto.
+- **Avvisi di conflitto.** Quando due sessioni scrivono lo stesso file, lo dicono tutti e due i box.
+- **Passaggi di lavoro.** Seleziona del testo in un terminale per chiederne a Claude, o per mandarlo a un'altra sessione. Prima di un `/clear`, Forchetta può lasciare una nota, così la sessione nuova riparte da dove si era fermata la vecchia (con arricurdAI).
+
+**Tutto il resto, sott'occhio.** I subagenti che ogni sessione avvia e cosa fanno, i file che ha cambiato, gli artefatti che ha pubblicato su claude.ai. Nomi, gruppi e ruoli, con un organigramma. La ricerca nelle sessioni passate (con arricurdAI). Un'icona nella barra dei menu e la scorciatoia ⌃⌥F.
+
+Versione 0.8.5, per macOS 12 o successivo. Tutto gira sul tuo Mac: l'unico servizio esterno, facoltativo e spento di default, è la Claude API per i riassunti.
 
 L'app e i comandi da terminale sono in inglese: in questo README pulsanti e messaggi sono citati come compaiono.
+
+## Rispetto ad altri strumenti
+
+Claude Code ha già i suoi modi per usare più sessioni, e intorno ci sono buoni strumenti. Forchetta è fatta per un modo di lavorare preciso: più sessioni di Claude Code nei tuoi terminali, su un Mac, che vuoi seguire e coordinare.
+
+| | Cos'è | In cosa Forchetta è diversa |
+|---|---|---|
+| **Agent View** (`claude agents`) | La lista a schermo intero delle sessioni in background, di Anthropic, nel terminale | Una finestra che resta aperta accanto al tuo lavoro, con un box per sessione e fino a quattro terminali affiancati. |
+| **Claude Desktop** | L'app di Anthropic, con le sessioni in parallelo nella barra laterale | Lavora con la CLI `claude` che usi già nel terminale, con i tuoi hook e le tue impostazioni. |
+| **Agent teams** (sperimentali in Claude Code) | Una sessione capo che avvia i compagni e divide con loro una lista di compiti | I team si preparano in un pannello e si salvano come modelli: ruolo, modello, permessi e worktree per ogni membro. Il capo puoi essere tu. |
+| **cmux**, **Claude Squad** | Terminali e gestori di sessioni per molti tipi di agenti | Fatta solo per Claude Code, attraverso i suoi hook: permessi dal box, contesto e costo per sessione, subagenti, team che si parlano con un server MCP. |
+
+Non si escludono a vicenda. Le sessioni avviate in qualsiasi terminale compaiono in Forchetta, in sola lettura se non le hai avviate con `forchetta run claude`.
 
 ## Installazione
 

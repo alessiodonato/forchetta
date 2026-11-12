@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Forchetta: every Claude Code session on your Mac, in one window</title>
-<meta name="description" content="Forchetta finds the Claude Code sessions running on your Mac and shows, live, what each one is doing, what it waits for and what it costs, and runs teams of agents that work together. Free, open source, local.">
+<title>Forchetta: your Claude Code sessions, working together</title>
+<meta name="description" content="Forchetta keeps every Claude Code session on your Mac in one window, with live status, permission prompts and notifications, and puts them to work as a team: a lead hands out the work, each member does its part in its own git worktree. Free, open source, local.">
 <meta property="og:title" content="Forchetta">
-<meta property="og:description" content="Every Claude Code session on your Mac, in one window.">
+<meta property="og:description" content="Your Claude Code sessions, working together.">
 <meta property="og:image" content="https://alessiodonato.github.io/forchetta/img/social.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
@@ -386,8 +386,8 @@
 
 <main>
   <div class="wrap hero">
-    <h1>Every Claude Code session on your Mac, in one window.</h1>
-    <p class="lead">Forchetta finds the Claude Code sessions you have running and shows, live, what each one is doing, what it is waiting for and what it has cost. Open up to four side by side, answer permission prompts from their box, get a notification when one needs you, and start teams of agents that work together.</p>
+    <h1>Your Claude Code sessions, working together.</h1>
+    <p class="lead">Keep every Claude Code session on your Mac in one window: see what each one is doing, answer its permission prompts, and get a notification when one needs you. Then put them to work as a team. A lead hands out the work, each member does its part in its own git worktree, and Forchetta warns you when two sessions write the same file.</p>
     <div class="actions">
       <a class="button" href="#install">Install with Homebrew</a>
       <a class="button secondary" href="https://github.com/alessiodonato/forchetta">
@@ -531,7 +531,7 @@
       </div>
       <figure class="shot">
         <video src="img/demo.mp4" poster="img/demo-poster.jpg" width="1600" height="950" autoplay muted loop playsinline preload="metadata" aria-label="A team of agents in Forchetta: a team is created from a template, its four terminals open, the lead gets a goal, gives work to developer, then to reviewer and tester, collects their answers and reports back."></video>
-        <figcaption>A team at work, from the template to the answer for you. Recorded in the simulation of the repository: the sessions are scripted stand-ins for Claude Code, the app, the daemon and the queue are the real ones.</figcaption>
+        <figcaption>A team at work, from the template to the answer for you. Recorded in the repository's simulation: the app, the daemon and the queue are real, the sessions are scripted stand-ins for Claude Code.</figcaption>
       </figure>
       <figure class="shot">
         <img src="img/org-chart.png" width="2400" height="1597" loading="lazy" alt="The org chart: the team checkout, its lead above and its three members below, each with the request it works on; three other sessions below.">
@@ -551,6 +551,18 @@
         <li>For each session, the files it changed: its own edits one by one, and the diff since the last commit.</li>
         <li>An icon in the menu bar, and a shortcut from anywhere: <code>⌃⌥F</code>.</li>
       </ul>
+    </section>
+
+    <section class="part text" id="compare">
+      <h2>How it compares</h2>
+      <p>Claude Code has its own ways to run several sessions, and there are good tools built around it. Forchetta is made for one way of working: several Claude Code sessions in your terminals, on one Mac, that you want to watch and coordinate.</p>
+      <ul class="list">
+        <li><b>Agent View</b> (<code>claude agents</code>) is Anthropic's full-screen list of your background sessions, in the terminal. Forchetta is a window that stays open next to your work, with a live box for each session and up to four terminals side by side.</li>
+        <li><b>Claude Desktop</b> is Anthropic's app, with parallel sessions in its sidebar. Forchetta works with the <code>claude</code> CLI you already run in your terminal, with your hooks and settings.</li>
+        <li><b>Agent teams</b>, experimental in Claude Code, are a lead session that spawns teammates and shares a task list with them. In Forchetta, teams are set up in a panel and saved as templates, with a role, model, permissions and worktree for each member, and the lead can be you.</li>
+        <li><b>cmux</b> and <b>Claude Squad</b> are terminals and session managers for many kinds of coding agents. Forchetta is built for Claude Code only, through its hooks: permissions answered from the box, context and cost per session, subagents, teams that talk through an MCP server.</li>
+      </ul>
+      <p>They don't rule each other out. Sessions started in any terminal show up in Forchetta, read only unless you started them with <code>forchetta run claude</code>.</p>
     </section>
 
     <section class="part text">
