@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
-import type { Agent, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
+import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate } from '../shared/crew.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
@@ -12,7 +12,9 @@ import type { CrewRequest, CrewSummary, CrewTemplate } from '../shared/crew.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[] }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; claudeUpdate?: ClaudeUpdateInfo }
+  /** A failed automatic update of Claude Code, and the `claude update` started from the app. */
+  | { type: 'claudeUpdate'; now: number; update: ClaudeUpdateInfo }
   /** The templates of teams, after one was saved or deleted. */
   | { type: 'crewTemplates'; now: number; templates: CrewTemplate[] }
   /** How a change of a team went (a member added, taken away, → / ⇄), or a template saved: for the window that asked. */
@@ -69,7 +71,9 @@ export type ClientMessage =
   /** A template: from the panel of a new team (template), or from an existing team (crewId, with its name). */
   | { type: 'saveCrewTemplate'; template?: unknown; crewId?: string }
   | { type: 'deleteCrewTemplate'; name: string }
-  | { type: 'recall'; id: number; project: string; query: string };
+  | { type: 'recall'; id: number; project: string; query: string }
+  /** Run `claude update`, or hide the line of the last one. */
+  | { type: 'claudeUpdate'; action: 'run' | 'dismiss' };
 
 export interface HubOptions {
   token: string;
@@ -103,6 +107,10 @@ export interface HubOptions {
   onScrollEnd?: (agentId: string) => void;
   /** The answer of a box to a permission dialog. */
   onPermission?: (message: Extract<ClientMessage, { type: 'permission' }>) => void;
+  /** The updates of Claude Code, for the top line. */
+  claudeUpdate?: () => ClaudeUpdateInfo;
+  /** `claude update` from the top line, or its line hidden. */
+  onClaudeUpdate?: (action: 'run' | 'dismiss') => void;
   /** Called when the number of windows that can be seen goes from 0 to more, or back. */
   onWatched?: (watched: boolean) => void;
   log: (message: string) => void;
@@ -151,6 +159,7 @@ export class Hub {
       today: this.today,
       crews: this.options.crews?.(),
       templates: this.options.templates?.(),
+      claudeUpdate: this.options.claudeUpdate?.(),
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -230,6 +239,8 @@ export class Hub {
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
           if (requests) this.send(ws, { type: 'crewThread', now: Date.now(), crewId: message.crewId, requests });
+        } else if (message.type === 'claudeUpdate' && (message.action === 'run' || message.action === 'dismiss')) {
+          this.options.onClaudeUpdate?.(message.action);
         } else if (message.type === 'scrollEnd' && typeof message.agentId === 'string') {
           this.options.onScrollEnd?.(message.agentId);
         } else if (message.type === 'files' && typeof message.agentId === 'string' && this.options.onFiles) {
@@ -310,6 +321,10 @@ export class Hub {
     if (JSON.stringify(today) === JSON.stringify(this.today)) return;
     this.today = today;
     this.broadcast({ type: 'today', now: Date.now(), today });
+  }
+
+  setClaudeUpdate(update: ClaudeUpdateInfo): void {
+    this.broadcast({ type: 'claudeUpdate', now: Date.now(), update });
   }
 
   notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error'; title: string; body: string }): void {

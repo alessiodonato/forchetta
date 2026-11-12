@@ -9,6 +9,7 @@ import { listPanes, Tmux } from '../shared/tmux.ts';
 import { VERSION } from '../shared/version.ts';
 import { ArricurdaiNotes, ArricurdaiPoller, readArricurdaiStatus } from './arricurdai.ts';
 import { isAlive, readClaudeAgents } from './claude-agents.ts';
+import { ClaudeUpdates } from './claude-update.ts';
 import { Commander } from './commands.ts';
 import { Attention } from './attention.ts';
 import { Conflicts, writtenFile } from './conflicts.ts';
@@ -208,6 +209,16 @@ function main(): void {
     log(`stato salvato illeggibile, ignorato: ${String(error)}`);
   }
 
+  // A failed automatic update of Claude Code: read from its file at start and every minute, said in the top line.
+  const claudeUpdates = new ClaudeUpdates({
+    resultFile: join(claudeConfigDir(), '.last-update-result.json'),
+    handledFile: paths.claudeUpdate,
+    claude: () => claude,
+    onChange: (info) => hub?.setClaudeUpdate(info),
+    log,
+  });
+  claudeUpdates.check();
+
   hub = new Hub({
     token,
     port: () => config.port,
@@ -266,6 +277,11 @@ function main(): void {
       return crews.create(checked.spec);
     },
     onRecall: (project, query) => runRecall(arricurdai, project, query),
+    claudeUpdate: () => claudeUpdates.info(),
+    onClaudeUpdate: (action) => {
+      if (action === 'dismiss') claudeUpdates.dismiss();
+      else void claudeUpdates.update().catch((error: unknown) => log(`claude update: ${String(error)}`));
+    },
     onTeam: (agentId, team) => {
       const agent = registry.agents.get(agentId);
       if (!agent) return;
@@ -524,6 +540,7 @@ function main(): void {
       setInterval(() => {
         registry.sweep(config.endedRetentionMin * 60_000);
         updateConflicts();
+        claudeUpdates.check();
       }, SWEEP_MS),
     );
     void reconcile('avvio');

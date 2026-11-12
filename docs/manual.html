@@ -465,7 +465,7 @@ forchetta setup</pre>
           <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
           <li><code>state.json</code>, the sessions; <code>teams.json</code>, names, groups and roles by folder;</li>
           <li><code>crews/</code>, the teams of agents, one file each; <code>crew-templates.json</code>, your templates;</li>
-          <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>daemon.log</code>.</li>
+          <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>daemon.log</code>.</li>
         </ul>
         <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code> and, after asking, <code>~/.claude/settings.json</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception.</p>
       </section>
@@ -480,6 +480,7 @@ forchetta setup</pre>
             <tr><td>A command stays <span class="ui">blocked</span></td><td>The prompt of the session holds a draft: send or delete it. Or the terminal is scrolled back: scroll to the end, or press <kbd>q</kbd> in it.</td></tr>
             <tr><td>A team starts only its first session</td><td>Claude Code does not trust the folder yet: answer the trust dialog in that terminal, and the rest of the team starts.</td></tr>
             <tr><td>A worktree session ends at once</td><td>The folder is not in git, or not trusted by Claude Code: open it once with <code>claude</code> and accept the dialog.</td></tr>
+            <tr><td><span class="ui">Claude Code auto-update failed</span> at the top</td><td>The last automatic update of Claude Code failed (hover it for when). Click <span class="ui">update</span>: it runs <code>claude update</code> and says what it did. New sessions use the new version; the open ones keep theirs until they restart.</td></tr>
             <tr><td><span class="ui">Daemon unreachable</span></td><td><code>forchetta daemon status</code>, then <code>forchetta daemon start</code>. The sessions are not affected.</td></tr>
             <tr><td>The app cannot find the daemon, from a clone on the Desktop</td><td>macOS asks whether Forchetta may access that folder: allow it in System Settings → Privacy &amp; Security → Files and Folders.</td></tr>
             <tr><td>No boxes at all</td><td>The hooks are missing: <code>forchetta hooks install</code>. Sessions already open pick them up by themselves.</td></tr>

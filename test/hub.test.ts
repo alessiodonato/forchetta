@@ -17,13 +17,23 @@ let port = 0;
 let registry: Registry;
 let hub: Hub;
 const watched: boolean[] = [];
+const updateActions: string[] = [];
+const FAILED_UPDATE = { failed: { at: 1_794_000_000_000, from: '2.1.322', status: 'install_failed' } };
 
 beforeAll(async () => {
   mkdirSync(uiDir);
   writeFileSync(join(uiDir, 'index.html'), '<!doctype html><title>Forchetta</title>');
   writeFileSync(join(uiDir, 'app.js'), 'console.log(1)');
   writeFileSync(join(temp.dir, 'secret.txt'), 'no');
-  hub = new Hub({ token: TOKEN, port: () => port, snapshot: () => registry.list(), log: () => {}, onWatched: (value) => watched.push(value) });
+  hub = new Hub({
+    token: TOKEN,
+    port: () => port,
+    snapshot: () => registry.list(),
+    log: () => {},
+    onWatched: (value) => watched.push(value),
+    claudeUpdate: () => FAILED_UPDATE,
+    onClaudeUpdate: (action) => updateActions.push(action),
+  });
   registry = new Registry({ onChange: (agent) => hub.agentChanged(agent), onRemove: (ids) => hub.agentsRemoved(ids) });
   server = createDaemonServer({ registry, token: TOKEN, uiDir, hub, port: () => port, log: () => {}, info: () => ({}), onShutdown: () => {} });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -89,6 +99,25 @@ describe('websocket', () => {
     registry.sweep(1);
     await sleep(30);
     expect(messages.at(-1)).toMatchObject({ type: 'removed' });
+    socket.close();
+  });
+});
+
+describe('the updates of Claude Code', () => {
+  it('are in the first message, and the page can run claude update or hide its line', async () => {
+    const { socket, messages } = await connect(TOKEN, `http://127.0.0.1:${port}`);
+    await sleep(30);
+    expect(messages[0]).toMatchObject({ type: 'hello', claudeUpdate: FAILED_UPDATE });
+
+    socket.send(JSON.stringify({ type: 'claudeUpdate', action: 'run' }));
+    socket.send(JSON.stringify({ type: 'claudeUpdate', action: 'rm -rf' }));
+    socket.send(JSON.stringify({ type: 'claudeUpdate', action: 'dismiss' }));
+    await sleep(30);
+    expect(updateActions).toEqual(['run', 'dismiss']);
+
+    hub.setClaudeUpdate({ run: { state: 'running', at: 1 } });
+    await sleep(30);
+    expect(messages.at(-1)).toMatchObject({ type: 'claudeUpdate', update: { run: { state: 'running' } } });
     socket.close();
   });
 });

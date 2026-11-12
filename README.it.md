@@ -173,6 +173,8 @@ Su un Mac Intel ogni animazione a 60 fps costa a WindowServer circa un quarto di
 
 **Contesto e cache vengono da `arricurdai status`**: Forchetta mostra gli stessi numeri e non li ricalcola. arricurdAI viene trovato nel PATH o nei suoi hook, oppure si imposta in `var/config.json` (`"arricurdai": ["/percorso/arricurdai"]`). La percentuale è una stima (`≈`): arricurdAI dà i token, non la finestra del modello. Le finestre stanno in `var/config.json`, alla voce `contextWindows`: 1M di default, 200k per Haiku 4.5, Sonnet 4.6 e Opus 4.6.
 
+**Quando Claude Code non riesce ad aggiornarsi.** Se il suo aggiornamento automatico fallisce, le sessioni scrivono "Auto-update failed · Run claude doctor" sotto il prompt. La riga in alto dell'app lo dice una volta sola per tutte, "● Claude Code auto-update failed", con **update**: esegue `claude update` e dice cosa ha fatto. Le sessioni nuove usano la versione nuova; quelle aperte tengono la loro finché non ripartono. Forchetta legge com'è andato l'ultimo tentativo in `~/.claude/.last-update-result.json`, lo stesso file che legge `claude doctor`.
+
 ### Nomi, gruppi e ruoli
 
 <img src="docs/img/org-chart.png" alt="L'organigramma: il team checkout, con il capo in alto e i tre membri sotto, ognuno con la richiesta su cui lavora; in fondo le sessioni senza gruppo." width="100%">

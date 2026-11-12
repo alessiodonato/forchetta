@@ -1,4 +1,4 @@
-import type { Agent, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
+import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, TodayInfo } from '../shared/agent.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Talk } from '../shared/crew.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
@@ -17,6 +17,8 @@ export interface UiState {
   settings: UiSettings;
   /** Every call since midnight, from arricurdAI. */
   today?: TodayInfo;
+  /** A failed automatic update of Claude Code, and the `claude update` started from the top line. */
+  claudeUpdate?: ClaudeUpdateInfo;
   /** The panel of the changes of a session: list undefined while the daemon reads them. */
   files?: { agentId: string; list?: FileChange[] };
   /** The search in earlier sessions: the one asked last, and its answer once it came. */
@@ -74,6 +76,10 @@ export class Store {
       this.set({ today: message.today });
       return;
     }
+    if (message.type === 'claudeUpdate') {
+      this.set({ claudeUpdate: message.update });
+      return;
+    }
     if (message.type === 'recalled') {
       // An answer to an older search is left out: only the last one counts.
       const current = this.state.recall;
@@ -128,6 +134,7 @@ export class Store {
         for (const agent of message.agents) agents.set(agent.id, agent);
         extra.settings = message.settings;
         extra.today = message.today;
+        extra.claudeUpdate = message.claudeUpdate;
         extra.crews = message.crews ?? [];
         extra.templates = message.templates ?? [];
         break;
@@ -267,6 +274,18 @@ export class Store {
   /** Name, group and role of a session; undefined takes them away. */
   setTeam(agentId: string, team: { label: string; group: string; role: string; lead: boolean } | undefined): void {
     this.send({ type: 'team', agentId, team: team ?? null });
+  }
+
+  /** `claude update` from the top line: it shows as running at once, the daemon says how it went. */
+  updateClaude(): void {
+    if (this.state.claudeUpdate?.run?.state === 'running') return;
+    this.set({ claudeUpdate: { ...this.state.claudeUpdate, run: { state: 'running', at: Date.now() } } });
+    this.send({ type: 'claudeUpdate', action: 'run' });
+  }
+
+  /** Hides the line of the last `claude update`. */
+  dismissClaudeUpdate(): void {
+    this.send({ type: 'claudeUpdate', action: 'dismiss' });
   }
 
   /** A pane scrolled back in tmux (copy mode) back to the end: the keys go to Claude Code again. */

@@ -101,6 +101,45 @@ header.top {
   font-size: 11.5px;
 }
 
+/* A failed automatic update of Claude Code: one line for every session, with "update". The dot is red, the
+   state; the button is the action. Long answers of claude update are cut: the tooltip has them whole. */
+.claude-update {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.claude-update-text {
+  min-width: 0;
+  max-width: 52ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.claude-update-dot {
+  color: var(--red);
+}
+
+.claude-update-close {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.claude-update-close:hover {
+  color: var(--text);
+}
+
 .notice {
   margin: 8px 32px 0;
   font-size: 12px;

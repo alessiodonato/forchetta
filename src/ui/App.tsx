@@ -4,6 +4,7 @@ import { nextChange, shortTokens, usdText } from '../shared/present.ts';
 import { startAmbient, stopAmbient } from './ambient.ts';
 import { Box } from './Box.tsx';
 import { BroadcastButton, BroadcastPanel } from './Broadcast.tsx';
+import { ClaudeUpdateNotice } from './ClaudeUpdate.tsx';
 import { FilesPanel } from './Files.tsx';
 import { NewSessionPanel } from './NewSession.tsx';
 import { NewTeamPanel } from './NewTeam.tsx';
@@ -165,6 +166,7 @@ export function App({ store }: { store: Store }) {
       <header class="top">
         <h1>Forchetta</h1>
         <div class="top-right">
+          {state.ready && <ClaudeUpdateNotice info={state.claudeUpdate} store={store} />}
           {state.ready && counts(agents, state.today)}
           {state.ready && grouped && !working && (
             <span class="view-switch" role="group" aria-label="View">

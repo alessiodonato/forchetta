@@ -66,6 +66,8 @@ export interface Paths {
   /** The MCP server of the tools of a team (mcp/team.ts). */
   teamMcpJs: string;
   patches: string;
+  /** The failed update of Claude Code that a `claude update` from the app took care of (daemon/claude-update.ts). */
+  claudeUpdate: string;
   log: string;
   tmuxSocket: string;
   runDir: string;
@@ -94,6 +96,7 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     crewMcp: join(varDir, 'crews', 'mcp'),
     crewTemplates: join(varDir, 'crew-templates.json'),
     patches: join(varDir, 'patches'),
+    claudeUpdate: join(varDir, 'claude-update.json'),
     log: join(varDir, 'daemon.log'),
     tmuxSocket: join(varDir, 'tmux.sock'),
     runDir: join(varDir, 'run'),

@@ -124,6 +124,14 @@ export interface TodayInfo {
   unpricedCalls: number;
 }
 
+/** The updates of Claude Code, for the top line of the app (daemon/claude-update.ts). */
+export interface ClaudeUpdateInfo {
+  /** The last automatic update failed: when, from which version, and how Claude Code calls it (install_failed…). */
+  failed?: { at: number; from?: string; status?: string };
+  /** The `claude update` started from the app: while it runs, then what it did or why it failed. */
+  run?: { state: 'running' | 'done' | 'error'; text?: string; at: number };
+}
+
 /** Another live session wrote the same files, or in the same working tree, in the last hour. */
 export interface Conflict {
   kind: 'file' | 'repo';
