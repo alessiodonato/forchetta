@@ -11,6 +11,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:demo": "node scripts/build-demo.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsc --noEmit && vitest run",
     "build:app": "sh scripts/build-app.sh",

@@ -17,6 +17,7 @@ Quando due sessioni vogliono lo stesso file, Forchetta ne fa aspettare una, spie
 [![Sito](https://img.shields.io/badge/sito-forchetta.dev-d97757?style=flat-square)](https://forchetta.dev/)
 
 [Installazione](#installazione) ·
+[Provalo nel browser](https://forchetta.dev/demo/) ·
 [Il vigile](#il-vigile) ·
 [Rispetto ad altri strumenti](#rispetto-ad-altri-strumenti) ·
 [Manuale (in inglese)](https://forchetta.dev/manual.html) ·

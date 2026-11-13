@@ -45,6 +45,8 @@ FORCHETTA_VAR="$PWD/var/sim" build/Forchetta.app/Contents/MacOS/Forchetta
 FORCHETTA_VAR="$PWD/var/sim" node dist/cli.js daemon stop  # when done
 ```
 
+The demo of the website, [forchetta.dev/demo](https://forchetta.dev/demo/), is the page of the app with a daemon that runs in the browser: the real modules of `src/daemon` (sessions, guard, queue of commands, permissions, teams) around a fake tmux and a scripted Claude Code, in `src/demo`. `node scripts/build-demo.mjs` builds it into `docs/demo/`; build it again when you change the page or one of those modules.
+
 `scripts/dev/cpu.mjs` measures the average CPU of some processes over an interval. `scripts/package-release.sh` builds the archive of a release, the one the Homebrew formula installs, and prints its sha256.
 
 Screenshots for a pull request come from the simulation too, so they show no personal paths and no real project names.
@@ -69,6 +71,7 @@ These are promises Forchetta makes to the people who install it:
 | `src/mcp` | the MCP server that gives the tools of a team to its sessions |
 | `src/ui` | the page of the app (Preact) |
 | `src/shared` | what the others share: paths, settings, tmux |
+| `src/demo` | the demo of the website: the daemon in the browser, a fake tmux, a scripted Claude Code, the tour |
 | `native` | the macOS app (Swift, AppKit and WebKit) |
 | `bin` | the shell scripts Claude Code runs as hooks |
 | `test` | the tests (vitest) |

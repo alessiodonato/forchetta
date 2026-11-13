@@ -1,0 +1,358 @@
+/* The page of the demo around the app: the tour on the left, the window of the app on the right. The app keeps
+   its own styles (src/ui/styles.css); here only what makes it live in a part of the page. */
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.demo-shell {
+  display: flex;
+  height: 100%;
+}
+
+.demo-window {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.demo-window #app {
+  min-height: 100%;
+}
+
+.demo-window .app.with-panes {
+  height: 100vh;
+}
+
+/* ---- The tour ---- */
+
+.tour {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: none;
+  width: 340px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 18px 22px 22px;
+  border-right: 1px solid var(--line);
+  background: #232220;
+  font: 14px/1.55 var(--ui);
+  color: var(--text-2);
+}
+
+.tour-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.tour-home {
+  color: var(--claude);
+  font-weight: 650;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.tour-home:hover {
+  text-decoration: underline;
+}
+
+.tour-count {
+  font: 12px var(--mono);
+  color: var(--text-3);
+}
+
+.tour-progress {
+  display: flex;
+  gap: 4px;
+}
+
+.tour-progress i {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.tour-progress i.past {
+  background: var(--claude-strong);
+}
+
+.tour-progress i.now {
+  background: var(--claude);
+}
+
+.tour h2 {
+  margin: 6px 0 0;
+  font-size: 21px;
+  line-height: 1.2;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.tour-body p {
+  margin: 0 0 10px;
+}
+
+.tour b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tour code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface);
+  font: 12.5px var(--mono);
+  color: var(--text);
+}
+
+.tour button {
+  font: 600 13.5px var(--ui);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.tour-primary {
+  padding: 8px 16px;
+  border: 1px solid var(--claude-strong);
+  background: var(--claude-strong);
+  color: #fff;
+}
+
+.tour-primary:hover {
+  background: var(--claude);
+  border-color: var(--claude);
+}
+
+.tour-secondary {
+  padding: 7px 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.tour-secondary:hover:not(:disabled) {
+  border-color: var(--claude);
+}
+
+.tour-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tour-quiet {
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text-2);
+}
+
+.tour-quiet:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+
+.tour-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tour-field label {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--terminal);
+  font: 13px var(--mono);
+  color: var(--text-3);
+}
+
+.tour-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--text);
+}
+
+.tour-field button {
+  align-self: flex-start;
+}
+
+.tour-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.tour-after {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(70, 196, 138, 0.35);
+  border-radius: 8px;
+  background: rgba(70, 196, 138, 0.08);
+  color: #cfeedd;
+}
+
+.tour-after span {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.tour-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.tour-nav button:only-child {
+  margin-left: auto;
+}
+
+.tour-end p {
+  margin: 12px 0 0;
+}
+
+.tour-end a {
+  color: var(--text);
+}
+
+.tour-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--terminal);
+  color: var(--text);
+}
+
+.tour-copy code {
+  padding: 0;
+  background: none;
+  font-size: 12px;
+}
+
+.tour-copy span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* What the tour points at: a ring that breathes, outside the element. */
+.tour-target {
+  outline: 2px solid var(--claude) !important;
+  outline-offset: 3px;
+  animation: tour-ring 1.6s ease-in-out infinite;
+}
+
+@keyframes tour-ring {
+  0%,
+  100% {
+    outline-color: rgba(217, 119, 87, 0.95);
+  }
+  50% {
+    outline-color: rgba(217, 119, 87, 0.3);
+  }
+}
+
+/* ---- Notifications of macOS, as the app would show them ---- */
+
+.demo-notices {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+  pointer-events: none;
+}
+
+.demo-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(58, 56, 52, 0.92);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  font: 13px/1.4 var(--ui);
+  color: var(--text);
+  animation: notice-in 260ms ease-out;
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+.demo-notice.leaving {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.demo-notice-app {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.demo-notice-body {
+  color: var(--text-2);
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+/* ---- Small screens ---- */
+
+.demo-small {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .demo-shell {
+    display: none;
+  }
+  .demo-small {
+    display: block;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 48px 20px;
+    font: 16px/1.55 var(--ui);
+    color: var(--text-2);
+  }
+  .demo-small strong {
+    color: var(--text);
+  }
+  .demo-small a {
+    color: var(--claude);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-target,
+  .demo-notice {
+    animation: none;
+  }
+}

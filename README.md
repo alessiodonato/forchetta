@@ -17,6 +17,7 @@ When two sessions reach for the same file, Forchetta makes one wait, tells Claud
 [![Website](https://img.shields.io/badge/website-forchetta.dev-d97757?style=flat-square)](https://forchetta.dev/)
 
 [Install](#install) ·
+[Try it in your browser](https://forchetta.dev/demo/) ·
 [The guard](#the-guard) ·
 [How it compares](#how-it-compares) ·
 [Manual](https://forchetta.dev/manual.html) ·
