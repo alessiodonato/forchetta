@@ -50,7 +50,7 @@ Tieni in una finestra tutte le sessioni di Claude Code del tuo Mac: vedi cosa st
 
 **Tutto il resto, sott'occhio.** I subagenti che ogni sessione avvia e cosa fanno, i file che ha cambiato, gli artefatti che ha pubblicato su claude.ai. Nomi, gruppi e ruoli, con un organigramma. La ricerca nelle sessioni passate (con arricurdAI). Un'icona nella barra dei menu e la scorciatoia ⌃⌥F.
 
-Versione 0.9.0, per macOS 12 o successivo. Tutto gira sul tuo Mac: l'unico servizio esterno, facoltativo e spento di default, è la Claude API per i riassunti.
+Versione 0.9.1, per macOS 12 o successivo. Tutto gira sul tuo Mac: l'unico servizio esterno, facoltativo e spento di default, è la Claude API per i riassunti.
 
 L'app e i comandi da terminale sono in inglese: in questo README pulsanti e messaggi sono citati come compaiono.
 

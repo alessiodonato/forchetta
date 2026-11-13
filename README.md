@@ -50,7 +50,7 @@ Keep every Claude Code session on your Mac in one window: see what each one is d
 
 **Keep track of the rest.** The subagents each session starts and what they're doing, the files it changed, the artifacts it published on claude.ai. Names, groups and roles, with an org chart. Search through earlier sessions (with arricurdAI). A menu bar icon, and the shortcut ⌃⌥F.
 
-Version 0.9.0, for macOS 12 or later. Everything runs on your Mac: the only outside service, optional and off by default, is the Claude API for the summaries.
+Version 0.9.1, for macOS 12 or later. Everything runs on your Mac: the only outside service, optional and off by default, is the Claude API for the summaries.
 
 <sub>*Forchetta* is Italian for *fork*: one handle, several tines.</sub>
 
