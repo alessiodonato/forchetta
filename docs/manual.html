@@ -166,6 +166,7 @@
           <li><a href="#cost">Context, cache and cost</a></li>
           <li><a href="#search">Search and summaries</a></li>
           <li><a href="#cli">Command line</a></li>
+          <li><a href="#hooks">The hooks</a></li>
           <li><a href="#config">Configuration</a></li>
           <li><a href="#data">Your data</a></li>
           <li><a href="#trouble">Troubleshooting</a></li>
@@ -225,7 +226,7 @@ forchetta setup</pre>
             <tr><td><strong>compacting</strong></td><td>the context bar squeezes</td></tr>
           </tbody>
         </table></div>
-        <p>Amber, green and red only ever mean a state. Claude orange marks what you can act on: the buttons that start something, what you chose, the pane you are typing in. With “Reduce motion” on in macOS, the states stay recognizable but still. When the window is hidden, nothing moves.</p>
+        <p>Amber, green and red only ever mean a state. Claude orange marks what you can act on: the buttons that start something, what you chose, the pane you are typing in. With “Reduce motion” on in macOS, the states stay recognizable but still. When the window is hidden, nothing moves. At rest, the app, the page and the daemon together stay under 1% of CPU.</p>
 
         <h3>Names, groups and roles</h3>
         <p>Hover a box and click <strong>✎</strong> to give the session a <strong>name</strong> (shown in place of the folder), a <strong>group</strong>, a <strong>role</strong> in free text, and the mark <span class="ui">lead of the group</span>. The choice is kept for its folder too: a session that starts again in the same folder finds its place again. <span class="ui">Remove</span> clears it.</p>
@@ -248,6 +249,7 @@ forchetta setup</pre>
           <li>Dragging selects text: when you let go, tmux copies it to the clipboard and the <a href="#selection">menu of the selection</a> opens there. <kbd>Option</kbd> + drag selects with the terminal of the page instead.</li>
           <li><kbd>⌘</kbd> + click on a link opens it in your browser: https anywhere, http only on this Mac. A plain click stays with the terminal.</li>
           <li>Typing in a pane keeps the keyboard there, even while Claude answers in another pane.</li>
+          <li>macOS 12 has the ⏺ of Claude Code only as a color emoji, two cells wide: there the panes show it as ●. Only the drawing changes.</li>
         </ul>
 
         <h3 id="selection">Ask about a selection</h3>
@@ -297,6 +299,11 @@ forchetta setup</pre>
           <li><strong>Deny</strong> stops Claude, like “No”: it reads that you denied it from Forchetta, and waits for your next prompt.</li>
         </ul>
         <p>The dialog stays in the Terminal too, and <strong>whoever answers first wins</strong>. Before it sends your answer, Forchetta checks that the session still waits. The buttons wake up 0.7 s after the request appears, so a click meant for something else does not answer it. Questions and plan approvals have no buttons: answer them in the terminal.</p>
+        <ul>
+          <li>Before it sends your answer, Forchetta asks <code>claude agents --json</code> whether the session still waits. If you answered in the terminal meanwhile, the box says <span class="ui">Already answered in the terminal</span> and sends nothing: that is why a click takes about half a second.</li>
+          <li>The rule Claude Code offers the box can be narrower than the one in the terminal: for that exact command, for example, instead of every <code>python3 …</code>.</li>
+          <li>A request stays in the box for an hour at most, then only in the terminal. If the daemon stops, requests go on in the terminal.</li>
+        </ul>
       </section>
 
       <section id="new-session">
@@ -415,6 +422,7 @@ forchetta setup</pre>
         <h3>Limits</h3>
         <ul>
           <li>Only the files written with <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code> and <code>NotebookEdit</code> are held; what a Bash command writes is not seen. Two worktrees are two folders: a member of a team in its own worktree is never stopped.</li>
+          <li>Between turns, a file written by a subagent in the background stays held for two minutes after its last write.</li>
           <li>The git command is read as a plain shell line (<code>&amp;&amp;</code>, <code>;</code>, <code>|</code>, quotes, <code>cd</code>, <code>git -C</code>); what cannot be read goes through.</li>
           <li>Claude waits about 30 ms for the guard, only before these tools. With the daemon off, nothing is stopped and nothing waits.</li>
           <li>The guard keeps what is held in the memory of the daemon: after a restart, nothing is held until the next writes.</li>
@@ -457,10 +465,11 @@ forchetta setup</pre>
         <h2>Notifications and the menu bar</h2>
         <ul>
           <li><strong>A session waits for you</strong> for at least 5 seconds: a notification, and the count on the Dock icon. A click opens Forchetta on its terminal.</li>
-          <li><strong>A session seems stuck</strong>: “working”, but no event for 10 minutes. Its box says so, with the command in progress; so does a notification.</li>
+          <li><strong>A session seems stuck</strong>: “working”, but no event for 10 minutes. Its box says so, with the command in progress; so does a notification. Before that, Forchetta asks <code>claude agents --json</code> how the session really is, and a cost going up counts as a sign of life.</li>
           <li><strong>A turn ends with an error</strong>, such as a rate limit: a notification that stays in Notification Center.</li>
         </ul>
-        <p>The fork in the menu bar shows how many sessions wait for you; its menu lists every session, with what it asks or its context and cost. <kbd>⌃</kbd><kbd>⌥</kbd><kbd>F</kbd> shows or hides Forchetta from any app. Closing the window hides it: the app stays in the menu bar. <kbd>⌘</kbd><kbd>Q</kbd> quits.</p>
+        <p>The fork in the menu bar shows how many sessions wait for you; its menu lists every session, with what it asks or its context and cost, and has <span class="ui">Show Forchetta</span>, <span class="ui">New session…</span> and <span class="ui">Quit Forchetta</span>. It replaces the SwiftBar plugin of arricurdAI, with the same numbers; Forchetta does not touch SwiftBar, so remove the plugin yourself if you like.</p>
+        <p><kbd>⌃</kbd><kbd>⌥</kbd><kbd>F</kbd> shows or hides Forchetta from any app. It uses the system hot keys, so it asks for no Accessibility permission. Closing the window hides it: the app stays in the menu bar. <kbd>⌘</kbd><kbd>Q</kbd> quits.</p>
       </section>
 
       <section id="cost">
@@ -493,6 +502,27 @@ forchetta setup</pre>
           </tbody>
         </table></div>
         <p>The CLI uses the colors of the app; <code>NO_COLOR=1</code> turns them off.</p>
+      </section>
+
+      <section id="hooks">
+        <h2>The hooks</h2>
+        <p>Forchetta knows what your sessions do through the hooks of Claude Code. <code>forchetta setup</code> installs them, and so does <code>forchetta hooks install</code> on its own. Either way, it:</p>
+        <ul>
+          <li>lists every change to <code>~/.claude/settings.json</code> and asks before it writes: answer <code>d</code>, or pass <code>--diff</code>, to see the whole diff first;</li>
+          <li>keeps a copy of the file in <code>backups/</code>, in the <a href="#data">data folder</a>;</li>
+          <li>adds its hooks <strong>next to</strong> the ones you have, those of arricurdAI for example, without changing them;</li>
+          <li>puts <code>bin/forchetta-statusline</code> in front of your status line, for the cost of each session. Your command is saved in <code>statusline-command</code> and runs with the same input, so the line at the bottom stays the same; with the daemon off it does not change, and <code>forchetta hooks uninstall</code> puts your command back.</li>
+        </ul>
+        <p>Sessions already open pick the hooks up by themselves: Claude Code reads them again.</p>
+        <div class="table"><table>
+          <thead><tr><th>Script</th><th>When</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>bin/forchetta-hook</code></td><td>every event</td><td>Sends the event to the daemon with <code>curl</code>, and prints nothing. Frequent events run in the background, so Claude does not wait; <code>SessionStart</code> and <code>SessionEnd</code> wait for it, about 30 ms.</td></tr>
+            <tr><td><code>bin/forchetta-permission</code></td><td><code>PermissionRequest</code></td><td>Waits for your answer from the box, and prints it for Claude Code. The dialog shows in the terminal anyway, at once. With the daemon off, with <code>claude -p</code> and with the SDK, it exits at once and prints nothing.</td></tr>
+            <tr><td><code>bin/forchetta-guard</code></td><td>before <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code>, <code>NotebookEdit</code>, <code>Bash</code></td><td>Asks the daemon whether the tool may go, and prints its decision when there is one (see <a href="#guard">The guard</a>). Claude waits about 30 ms. With the daemon off, slow or with nothing to say, it prints nothing and the tool goes on as usual.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Every script always exits with 0: with the daemon off, a session behaves exactly as without Forchetta.</p>
       </section>
 
       <section id="config">

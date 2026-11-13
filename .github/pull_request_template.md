@@ -8,4 +8,4 @@
 
 - [ ] `pnpm test` passes
 - [ ] For a change you can see: a screenshot from the simulation, with no personal paths or project names
-- [ ] For a new feature: README.md and docs/manual.html say so
+- [ ] For a new feature: docs/manual.html says so (README.md only if it belongs in its short list)

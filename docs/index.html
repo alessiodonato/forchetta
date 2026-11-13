@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Forchetta: your Claude Code sessions, working together</title>
-<meta name="description" content="Forchetta keeps every Claude Code session on your Mac in one window, with live status, permission prompts and notifications, and puts them to work as a team: a lead hands out the work, and a guard keeps two sessions off the same file. Free, open source, local.">
+<title>Forchetta: Claude Code sessions that don't step on each other</title>
+<meta name="description" content="Run several Claude Code sessions in the same repo: when two reach for the same file, Forchetta makes one wait and lets it go on when the file is free. Every session on your Mac in one window, permissions and notifications from one place, and teams of agents. Free, open source, local.">
 <meta property="og:title" content="Forchetta">
-<meta property="og:description" content="Your Claude Code sessions, working together.">
+<meta property="og:description" content="Run several Claude Code sessions in the same repo. They won't step on each other.">
 <meta property="og:image" content="https://alessiodonato.github.io/forchetta/img/social.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
@@ -386,8 +386,8 @@
 
 <main>
   <div class="wrap hero">
-    <h1>Your Claude Code sessions, working together.</h1>
-    <p class="lead">Keep every Claude Code session on your Mac in one window: see what each one is doing, answer its permission prompts, and get a notification when one needs you. Then put them to work as a team. A lead hands out the work, each member does its part in its own git worktree, and when two sessions reach for the same file, Forchetta makes one wait for the other.</p>
+    <h1>Run several Claude Code sessions in the same repo. They won't step on each other.</h1>
+    <p class="lead">When two sessions reach for the same file, Forchetta makes one wait, tells Claude why, and lets it go on by itself when the file is free. Around that: every Claude Code session on your Mac in one window, permission prompts answered from there, a notification when one needs you, and teams of agents.</p>
     <div class="actions">
       <a class="button" href="#install">Install with Homebrew</a>
       <a class="button secondary" href="https://github.com/alessiodonato/forchetta">
@@ -466,6 +466,23 @@
   </div>
 
   <div class="wrap">
+    <section class="part" id="guard">
+      <div class="text">
+      <h2>Sessions that don't step on each other</h2>
+      <p>The usual way to run agents in parallel is a git worktree for each one. Then each worktree needs its own dependencies, its own <code>.env</code> and its own dev server, and you merge at the end. Forchetta lets sessions work side by side in one folder too: it sees every edit before it happens, for every session, also those started with plain <code>claude</code>.</p>
+      <ul class="list">
+        <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another session that tries to edit it is stopped, and Claude is told why: it works on something else, or ends its turn and waits.</li>
+        <li><b>It goes on by itself:</b> when the turn that held the file ends, the session that waited gets a prompt, "src/api.ts is free now", and picks up where it stopped.</li>
+        <li><b>git that asks first:</b> a <code>git checkout</code>, <code>reset --hard</code> or <code>stash</code> that would change the files under another session asks you before it runs.</li>
+        <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped and nothing waits.</li>
+      </ul>
+      </div>
+      <figure class="shot">
+        <video src="img/guard.mp4" poster="img/guard-poster.jpg" width="1600" height="950" autoplay muted loop playsinline preload="metadata" aria-label="Two sessions on the same file: retries changes src/api.ts; rate-limit tries to edit it, is stopped with the reason and waits; when retries ends its turn, rate-limit is told the file is free and makes its change."></video>
+        <figcaption>Two sessions, one file: rate-limit is stopped while retries changes src/api.ts, and goes on by itself when the file is free. Recorded in the repository's simulation: the app, the daemon and the guard are real, the sessions are scripted stand-ins for Claude Code.</figcaption>
+      </figure>
+    </section>
+
     <section class="part text">
       <h2>Read every session at a glance</h2>
       <p>Forchetta listens to the hooks of Claude Code, so it knows what each session does the moment it does it. Sessions you start anywhere show up by themselves: in the Terminal, in iTerm, in an editor.</p>
@@ -543,23 +560,6 @@
       </figure>
     </section>
 
-    <section class="part" id="guard">
-      <div class="text">
-      <h2>Sessions that don't step on each other</h2>
-      <p>Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. Forchetta sees every edit before it happens, so it can stop that, for every session, also those started with plain <code>claude</code>.</p>
-      <ul class="list">
-        <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another session that tries to edit it is stopped, and Claude is told why: it works on something else, or ends its turn and waits.</li>
-        <li><b>It goes on by itself:</b> when the turn that held the file ends, the session that waited gets a prompt, "src/api.ts is free now", and picks up where it stopped.</li>
-        <li><b>git that asks first:</b> a <code>git checkout</code>, <code>reset --hard</code> or <code>stash</code> that would change the files under another session asks you before it runs.</li>
-        <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped and nothing waits.</li>
-      </ul>
-      </div>
-      <figure class="shot">
-        <video src="img/guard.mp4" poster="img/guard-poster.jpg" width="1600" height="950" autoplay muted loop playsinline preload="metadata" aria-label="Two sessions on the same file: retries changes src/api.ts; rate-limit tries to edit it, is stopped with the reason and waits; when retries ends its turn, rate-limit is told the file is free and makes its change."></video>
-        <figcaption>Two sessions, one file: rate-limit is stopped while retries changes src/api.ts, and goes on by itself when the file is free. Recorded in the repository's simulation: the app, the daemon and the guard are real, the sessions are scripted stand-ins for Claude Code.</figcaption>
-      </figure>
-    </section>
-
     <section class="part text">
       <h2>It tells you when you're needed</h2>
       <ul class="list">
@@ -577,6 +577,7 @@
         <li><b>Agent View</b> (<code>claude agents</code>) is Anthropic's full-screen list of your background sessions, in the terminal. Forchetta is a window that stays open next to your work, with a live box for each session and up to four terminals side by side.</li>
         <li><b>Claude Desktop</b> is Anthropic's app, with parallel sessions in its sidebar. Forchetta works with the <code>claude</code> CLI you already run in your terminal, with your hooks and settings.</li>
         <li><b>Agent teams</b>, experimental in Claude Code, are a lead session that spawns teammates and shares a task list with them. In Forchetta, teams are set up in a panel and saved as templates, with a role, model, permissions and worktree for each member, and the lead can be you.</li>
+        <li><b>Conductor</b> and similar Mac apps run several coding agents, each in an isolated workspace. Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely.</li>
         <li><b>cmux</b> and <b>Claude Squad</b> are terminals and session managers for many kinds of coding agents. Forchetta is built for Claude Code only, through its hooks: a guard that keeps two sessions off the same file, permissions answered from the box, context and cost per session, subagents, teams that talk through an MCP server.</li>
       </ul>
       <p>They don't rule each other out. Sessions started in any terminal show up in Forchetta, read only unless you started them with <code>forchetta run claude</code>.</p>
@@ -616,7 +617,7 @@
           <small>To open a session's terminal from the app, start it with <code>forchetta run claude</code>, or with New session in the app.</small>
         </li>
       </ol>
-      <p>Forchetta works with <a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a> too: with it, every box shows its context and when its prompt cache expires, the top shows the cost of the day, you can search earlier sessions, and a <code>/clear</code> from the box leaves a note for the new session. The <a href="manual.html">manual</a> explains the rest; the <a href="https://github.com/alessiodonato/forchetta#readme">README</a> has it in English and in Italian, with how to build it from source.</p>
+      <p>Forchetta works with <a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a> too: with it, every box shows its context and when its prompt cache expires, the top shows the cost of the day, you can search earlier sessions, and a <code>/clear</code> from the box leaves a note for the new session. The <a href="manual.html">manual</a> explains the rest. The <a href="https://github.com/alessiodonato/forchetta#readme">README</a> is in English and in Italian, and <a href="https://github.com/alessiodonato/forchetta/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> explains how to build Forchetta from source.</p>
     </section>
   </div>
 </main>
