@@ -1089,6 +1089,14 @@ html[data-hidden] *::after {
   border-bottom: 1px solid var(--line);
 }
 
+.pane-guard {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
 /* The pane is scrolled back in tmux (copy mode): what to do to type again. */
 .pane-scrolled {
   display: flex;

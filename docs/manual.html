@@ -397,11 +397,15 @@ forchetta setup</pre>
 
       <section id="guard">
         <h2>The guard</h2>
+        <figure>
+          <img src="img/guard.png" width="2800" height="1572" loading="lazy" alt="Two panes: retries runs its tests and holds src/api.ts, rate-limit waits; in the terminal of rate-limit, the edit stopped by the guard with its reason, and the answer of Claude: it will wait for the file.">
+          <figcaption>rate-limit tried to edit src/api.ts while retries changes it: the guard stopped it, and Claude waits for the file.</figcaption>
+        </figure>
         <p>Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. The guard stops that before it happens, for every session, also those started with plain <code>claude</code>.</p>
         <h3>A file held</h3>
         <p>A session holds a file it wrote in the turn it is working on now, until the turn ends. When another session tries to edit that file, the edit does not go, and Claude is told why: another session is changing the file; work on something else, or end the turn and wait. Claude Code shows it as <span class="ui">PreToolUse:Edit hook error</span>, with the reason.</p>
         <ul>
-          <li>The session that waits shows <span class="ui">⏸ src/api.ts held by billing-api</span>, and <span class="ui">⏸ held</span> in the column on the left; the other one shows <span class="ui">⏸ holds src/api.ts · beta waits</span>.</li>
+          <li>The session that waits shows <span class="ui">‖ src/api.ts held by billing-api</span>, and <span class="ui">‖ held</span> in the column on the left; the other one shows <span class="ui">‖ holds src/api.ts · beta waits</span>.</li>
           <li><span class="ui">let it through</span>, in the box of the session that waits, lets it write the file anyway: then both may change it until the turn of the other one ends.</li>
         </ul>
         <h3>Free again</h3>

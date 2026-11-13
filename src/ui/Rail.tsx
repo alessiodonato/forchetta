@@ -79,7 +79,7 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
         )}
         {agent.heldBack && (
           <span class="tag guard-tag" title={agent.heldBack.map(heldBackText).join('\n')}>
-            ⏸ held
+            ‖ held
           </span>
         )}
         {agent.conflicts && (

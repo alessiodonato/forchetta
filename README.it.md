@@ -27,9 +27,9 @@ Tieni in una finestra tutte le sessioni di Claude Code del tuo Mac: vedi cosa st
 
 <br>
 
-<img src="docs/img/demo.gif" alt="Un team di agenti in Forchetta: il team nasce da un modello, si aprono i suoi quattro terminali, il capo riceve un obiettivo, dà lavoro a developer, poi a reviewer e tester, raccoglie le risposte e riferisce." width="100%">
+<img src="docs/img/guard.gif" alt="Due sessioni in Forchetta sullo stesso file: retries cambia src/api.ts e fa girare i test; rate-limit prova a modificare src/api.ts, viene fermata con il motivo e dice che aspetta; quando retries finisce il turno, l'avviso che il file è libero viene scritto in rate-limit, che fa la sua modifica." width="100%">
 
-<sub>Un team al lavoro: il capo riceve un obiettivo, lo passa al developer, poi al reviewer e al tester, e riferisce con le loro risposte. Registrato nella simulazione di questo repository (<code>scripts/dev</code>): app, daemon e coda sono quelli veri, le sessioni sono controfigure di Claude Code con un copione.</sub>
+<sub>Due sessioni, un file: <code>rate-limit</code> viene fermata mentre <code>retries</code> cambia <code>src/api.ts</code>, e riparte da sola quando il file è libero. Registrato nella simulazione di questo repository (<code>scripts/dev</code>): app, daemon e vigile sono quelli veri, le sessioni sono controfigure di Claude Code con un copione.</sub>
 
 </div>
 
@@ -216,6 +216,10 @@ Anche un team di agenti (sezione seguente) è un gruppo: le sue sessioni ricevon
 
 ### Team di agenti
 
+<img src="docs/img/demo.gif" alt="Un team di agenti in Forchetta: il team nasce da un modello, si aprono i suoi quattro terminali, il capo riceve un obiettivo, dà lavoro a developer, poi a reviewer e tester, raccoglie le risposte e riferisce." width="100%">
+
+<sub>Un team al lavoro: il capo riceve un obiettivo, lo passa al developer, poi al reviewer e al tester, e riferisce con le loro risposte. Registrato nella simulazione di questo repository (<code>scripts/dev</code>): app, daemon e coda sono quelli veri, le sessioni sono controfigure di Claude Code con un copione.</sub>
+
 <img src="docs/img/new-team.png" alt="Il pannello new team: il modello feature squad, un capo Claude con il suo ruolo, tre membri con il loro, due che rispondono e un tester che esegue soltanto, ognuno nel suo worktree." width="100%">
 
 Un team è un gruppo di sessioni di Claude Code che lavorano insieme: un **capo** (lead) dà le richieste, i **membri** le eseguono. Il capo è una sessione Claude, oppure tu. **new team**, in alto, apre il pannello:
@@ -332,13 +336,15 @@ Se due sessioni attive hanno scritto lo stesso file nell'ultima ora, entrambi i 
 
 ### Il vigile
 
+<img src="docs/img/guard.png" alt="Due riquadri: retries fa girare i test e tiene src/api.ts, rate-limit aspetta; nel terminale di rate-limit, la modifica fermata dal vigile con il motivo, e la risposta di Claude: aspetterà il file. Sotto le intestazioni: holds src/api.ts, rate-limit waits; src/api.ts held by retries, let it through." width="100%">
+
 Due sessioni nella stessa cartella possono cambiare lo stesso file nello stesso momento, e ognuna finisce per lavorare sulle modifiche a metà dell'altra. Il vigile lo impedisce prima che succeda.
 
 **Un file tenuto.** Una sessione tiene un file che ha scritto nel turno su cui sta lavorando, finché il turno non finisce. Se un'altra sessione prova a modificare quel file, il vigile ferma la modifica e spiega a Claude il motivo (in inglese, il messaggio è per Claude):
 
 > Forchetta: "billing-api", another Claude Code session on this Mac, is changing src/api.ts in the turn it is working on now. Don't edit this file yet and don't try again now: work on something else first, or end your turn saying that you are waiting for src/api.ts. You will be told when the file is free.
 
-Claude Code lo mostra come "PreToolUse:Edit hook error"; Claude legge il motivo, e fa altro o chiude il turno. Tutti e due i box lo dicono: "⏸ src/api.ts held by billing-api" nella sessione che aspetta, "⏸ holds src/api.ts · beta waits" nell'altra. Nella colonna a sinistra, l'etichetta "⏸ held".
+Claude Code lo mostra come "PreToolUse:Edit hook error"; Claude legge il motivo, e fa altro o chiude il turno. Tutti e due i box lo dicono: "‖ src/api.ts held by billing-api" nella sessione che aspetta, "‖ holds src/api.ts · beta waits" nell'altra. Nella colonna a sinistra, l'etichetta "‖ held".
 
 **Di nuovo libero.** Quando il turno che teneva il file finisce, la sessione che aspettava riceve un prompt nuovo, scritto solo quando è pronta, come i comandi del box: "Forchetta: src/api.ts is free now ("billing-api" ended its turn). You can go on." Se nel frattempo ha già scritto il file, il prompt non parte. In una sessione avviata con un semplice `claude` non si può scrivere: arriva una notifica.
 

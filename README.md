@@ -27,9 +27,9 @@ Keep every Claude Code session on your Mac in one window: see what each one is d
 
 <br>
 
-<img src="docs/img/demo.gif" alt="A team of agents in Forchetta: a team is created from a template, its four terminals open, the lead gets a goal, gives work to developer, then to reviewer and tester, collects their answers and reports back." width="100%">
+<img src="docs/img/guard.gif" alt="Two sessions in Forchetta on the same file: retries changes src/api.ts and runs its tests; rate-limit tries to edit src/api.ts, is stopped with the reason, and says it waits; when retries ends its turn, the notice that the file is free is typed into rate-limit, which makes its change." width="100%">
 
-<sub>A team at work: the lead gets a goal, hands it to the developer, then to the reviewer and the tester, and reports back with their answers. Recorded in this repository's simulation (<code>scripts/dev</code>): the app, the daemon and the queue are real, the sessions are scripted stand-ins for Claude Code.</sub>
+<sub>Two sessions, one file: <code>rate-limit</code> is stopped while <code>retries</code> changes <code>src/api.ts</code>, and goes on by itself when the file is free. Recorded in this repository's simulation (<code>scripts/dev</code>): the app, the daemon and the guard are real, the sessions are scripted stand-ins for Claude Code.</sub>
 
 </div>
 
@@ -216,6 +216,10 @@ A team of agents (next section) is a group too: its sessions get their name, gro
 
 ### Teams of agents
 
+<img src="docs/img/demo.gif" alt="A team of agents in Forchetta: a team is created from a template, its four terminals open, the lead gets a goal, gives work to developer, then to reviewer and tester, collects their answers and reports back." width="100%">
+
+<sub>A team at work: the lead gets a goal, hands it to the developer, then to the reviewer and the tester, and reports back with their answers. Recorded in this repository's simulation (<code>scripts/dev</code>): the app, the daemon and the queue are real, the sessions are scripted stand-ins for Claude Code.</sub>
+
 <img src="docs/img/new-team.png" alt="The new team panel: the template feature squad, a Claude lead with its role, three members with theirs, two that answer and a tester that executes only, each in its own worktree." width="100%">
 
 A team is a group of Claude Code sessions that work together: a **lead** gives the requests, the **members** carry them out. The lead is a Claude session, or you. **new team**, at the top, opens the panel:
@@ -332,13 +336,15 @@ If two live sessions wrote the same file in the last hour, both boxes say so: "�
 
 ### The guard
 
+<img src="docs/img/guard.png" alt="Two panes: retries runs its tests and holds src/api.ts, rate-limit waits; in the terminal of rate-limit, the edit stopped by the guard with its reason, and the answer of Claude: it will wait for the file. Under the headers: holds src/api.ts, rate-limit waits; src/api.ts held by retries, let it through." width="100%">
+
 Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. The guard stops that before it happens.
 
 **A file held.** A session holds a file it wrote in the turn it is working on now, until the turn ends. When another session tries to edit that file, the guard stops the edit and tells Claude why:
 
 > Forchetta: "billing-api", another Claude Code session on this Mac, is changing src/api.ts in the turn it is working on now. Don't edit this file yet and don't try again now: work on something else first, or end your turn saying that you are waiting for src/api.ts. You will be told when the file is free.
 
-Claude Code shows it as "PreToolUse:Edit hook error"; Claude reads the reason, and works on something else or ends its turn. Both boxes say it: "⏸ src/api.ts held by billing-api" in the session that waits, "⏸ holds src/api.ts · beta waits" in the other. In the column on the left, the tag "⏸ held".
+Claude Code shows it as "PreToolUse:Edit hook error"; Claude reads the reason, and works on something else or ends its turn. Both boxes say it: "‖ src/api.ts held by billing-api" in the session that waits, "‖ holds src/api.ts · beta waits" in the other. In the column on the left, the tag "‖ held".
 
 **Free again.** When the turn that held the file ends, the session that waited gets a new prompt, typed only when it is ready, like the commands of the box: "Forchetta: src/api.ts is free now ("billing-api" ended its turn). You can go on." If it wrote the file in the meantime, the prompt is not sent. A session started with plain `claude` cannot be typed into: you get a notification instead.
 

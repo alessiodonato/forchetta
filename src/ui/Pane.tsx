@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { type Agent, displayName, STATE_LABEL } from '../shared/agent.ts';
 import { activity } from '../shared/present.ts';
 import { CommandBar, CommandStatus } from './Commands.tsx';
+import { GuardLines } from './Guard.tsx';
 import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
 import { SubagentsButton } from './Subagents.tsx';
@@ -51,6 +52,11 @@ export function Pane({ agent, area, focusKey, now, store, onClose, onUse }: Prop
         </button>
       </header>
       <CommandStatus agent={agent} store={store} now={now} />
+      {(agent.heldBack || agent.holding) && !ended && (
+        <div class="pane-guard">
+          <GuardLines agent={agent} store={store} />
+        </div>
+      )}
       {agent.scrolledBack && !ended && (
         <p class="pane-scrolled" role="status">
           <span>Scrolled back in the history: the keys go to tmux, not to Claude.</span>

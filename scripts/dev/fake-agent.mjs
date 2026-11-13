@@ -81,6 +81,30 @@ async function hook(event, extra = {}) {
   }
 }
 
+/** The guard of the daemon, as bin/forchetta-guard asks it before a tool that writes: its decision, or undefined. */
+async function guard(toolName, toolInput) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${daemon().port}/forchetta/guard`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forchetta-claude-pid': String(process.pid), 'x-forchetta-pane': process.env.TMUX_PANE ?? '', 'x-forchetta-agent': agentId },
+      body: JSON.stringify({ session_id: sessionId, cwd, hook_event_name: 'PreToolUse', tool_name: toolName, tool_input: toolInput }),
+      signal: AbortSignal.timeout(1000),
+    });
+    const text = await response.text();
+    return text ? JSON.parse(text).hookSpecificOutput : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A tool the guard stopped: the turn ends, as Claude does when it reads the reason. */
+class Stopped extends Error {
+  constructor(reason) {
+    super(reason);
+    this.reason = reason;
+  }
+}
+
 /** A route of the tools of the team, as dist/team-mcp.js calls it. */
 async function crew(route, body) {
   const info = daemon();
@@ -104,6 +128,7 @@ const C = {
   light: '\x1b[38;5;246m',
   orange: '\x1b[38;5;174m',
   green: '\x1b[38;5;114m',
+  red: '\x1b[38;5;203m',
   fg: '\x1b[39m',
 };
 /** What the session showed, oldest first. */
@@ -139,7 +164,11 @@ function entryLines(entry, size) {
       return ['', ...shown.map((line, index) => `${C.gray}${index === 0 ? '> ' : '  '}${line}${C.fg}`)];
     }
     case 'tool':
-      return ['', `${C.green}⏺${C.fg} ${C.bold}${entry.name}${C.reset}(${entry.arg})`, ...(entry.result ? wrap(entry.result, size - 7).map((line, index) => `  ${C.gray}${index === 0 ? '⎿  ' : '   '}${line}${C.fg}`) : [])];
+      return [
+        '',
+        `${entry.error ? C.red : C.green}⏺${C.fg} ${C.bold}${entry.name}${C.reset}(${entry.arg})`,
+        ...(entry.result ? wrap(entry.result, size - 7).map((line, index) => `  ${entry.error ? C.red : C.gray}${index === 0 ? '⎿  ' : '   '}${line}${C.fg}`) : []),
+      ];
     case 'text':
       return ['', ...wrap(entry.text, size - 2).map((line, index) => `${index === 0 ? '⏺ ' : '  '}${line}`)];
     default:
@@ -227,6 +256,8 @@ function onData(chunk) {
 
 const queue = [];
 let running = false;
+/** The file the guard held back, and the task that wanted it: the notice that it is free resumes it. */
+let waitingFor;
 
 function submit() {
   const prompt = inputText().trim();
@@ -253,7 +284,14 @@ async function next() {
     try {
       reply = await turn(prompt);
     } catch (error) {
-      reply = `Something went wrong: ${error instanceof Error ? error.message : String(error)}`;
+      if (error instanceof Stopped) {
+        // What Claude does with the reason: it waits for the file, and says so.
+        await wait(1200);
+        const held = /is changing (\S+) in the turn/.exec(error.reason)?.[1] ?? 'the file';
+        const by = /"([^"]+)"/.exec(error.reason)?.[1] ?? 'another session';
+        reply = `${held} is being changed by ${by} right now, so I won't touch it yet. I'll add the rate limit as soon as it is free.`;
+        waitingFor = { file: held, task: prompt };
+      } else reply = `Something went wrong: ${error instanceof Error ? error.message : String(error)}`;
     }
     entries.push({ kind: 'text', text: reply });
     busySince = undefined;
@@ -269,7 +307,16 @@ async function tool(toolName, toolInput, arg, result, ms, response = {}) {
   const entry = { kind: 'tool', name: toolName.startsWith('mcp__') ? `${toolName.split('__')[1]} - ${toolName.split('__')[2]} (MCP)` : toolName, arg };
   entries.push(entry);
   draw();
+  const decision = GUARDED.has(toolName) ? await guard(toolName, toolInput) : undefined;
   await hook('PreToolUse', { tool_name: toolName, tool_input: toolInput });
+  if (decision?.permissionDecision === 'deny') {
+    // Claude Code shows the reason of the hook as an error of the tool, and Claude reads it.
+    await wait(500);
+    entry.error = true;
+    entry.result = `Error: PreToolUse:${toolName} hook error: ${decision.permissionDecisionReason}`;
+    draw();
+    throw new Stopped(decision.permissionDecisionReason);
+  }
   const value = typeof ms === 'function' ? await ms() : (await wait(ms), result);
   entry.result = typeof value === 'string' ? value : result;
   draw();
@@ -277,6 +324,7 @@ async function tool(toolName, toolInput, arg, result, ms, response = {}) {
   return value;
 }
 
+const GUARDED = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash']);
 const file = (path) => join(cwd, path);
 const read = (path, ms = 1400) => tool('Read', { file_path: file(path) }, path, `Read ${80 + path.length * 3} lines`, ms);
 const edit = (path, ms = 1800) => tool('Edit', { file_path: file(path), old_string: '…', new_string: '…' }, path, 'Updated with 2 additions and 1 removal', ms);
@@ -337,6 +385,31 @@ async function sendRequest(to, text) {
 }
 
 async function turn(prompt) {
+  // The scene of the guard: two sessions on the same file (scripts/dev, the recording of the guard).
+  if (/ is free now /.test(prompt) && waitingFor) {
+    const { file: held } = waitingFor;
+    waitingFor = undefined;
+    await wait(1200);
+    await read(held, 1000);
+    await edit(held, 1800);
+    await bash('npm test -- api', '31 tests passed', 2200);
+    return `Done: ${held} now limits each client to 100 requests a minute, and answers 429 past it. The retries of the other session are still there.`;
+  }
+  if (/\bretries\b/i.test(prompt)) {
+    await wait(1200);
+    await read('src/api.ts', 1000);
+    await edit('src/api.ts', 1600);
+    await bash('npm test -- api', '29 tests passed', 9000);
+    await edit('src/api.ts', 1800);
+    await bash('npm test -- api', '30 tests passed', 3000);
+    return 'Retries are in: src/api.ts tries a failed call 3 times, with a growing pause, and the tests pass.';
+  }
+  if (/\brate limit\b/i.test(prompt)) {
+    await wait(1200);
+    await read('src/api.ts', 1000);
+    await edit('src/api.ts', 1500);
+    return 'Done.';
+  }
   const request = /^Request #(\d+) from (.+?):\s*([\s\S]*)$/.exec(prompt);
   if (isLead && request) {
     const goal = request[3].trim() || 'the goal of the user';

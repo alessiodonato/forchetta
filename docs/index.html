@@ -543,7 +543,8 @@
       </figure>
     </section>
 
-    <section class="part text" id="guard">
+    <section class="part" id="guard">
+      <div class="text">
       <h2>Sessions that don't step on each other</h2>
       <p>Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. Forchetta sees every edit before it happens, so it can stop that, for every session, also those started with plain <code>claude</code>.</p>
       <ul class="list">
@@ -552,6 +553,11 @@
         <li><b>git that asks first:</b> a <code>git checkout</code>, <code>reset --hard</code> or <code>stash</code> that would change the files under another session asks you before it runs.</li>
         <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped and nothing waits.</li>
       </ul>
+      </div>
+      <figure class="shot">
+        <video src="img/guard.mp4" poster="img/guard-poster.jpg" width="1600" height="950" autoplay muted loop playsinline preload="metadata" aria-label="Two sessions on the same file: retries changes src/api.ts; rate-limit tries to edit it, is stopped with the reason and waits; when retries ends its turn, rate-limit is told the file is free and makes its change."></video>
+        <figcaption>Two sessions, one file: rate-limit is stopped while retries changes src/api.ts, and goes on by itself when the file is free. Recorded in the repository's simulation: the app, the daemon and the guard are real, the sessions are scripted stand-ins for Claude Code.</figcaption>
+      </figure>
     </section>
 
     <section class="part text">
@@ -627,13 +633,13 @@
   // motion" the grid stays as the page loads it.
   (function () {
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // The demo of a team: with "reduce motion" it does not play by itself, it waits for its controls.
-    var video = document.querySelector('video[src="img/demo.mp4"]');
-    if (video && reduce) {
+    // The demos, of the guard and of a team: with "reduce motion" they do not play by themselves, they wait for their controls.
+    document.querySelectorAll('video').forEach(function (video) {
+      if (!reduce) return;
       video.removeAttribute('autoplay');
       video.pause();
       video.controls = true;
-    }
+    });
     if (reduce) {
       var b1 = document.getElementById('b1');
       b1.dataset.state = 'waiting';

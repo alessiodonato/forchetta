@@ -40,7 +40,7 @@ export function GuardLines({ agent, store }: { agent: Agent; store: Store }) {
           onClick={stop}
           title={held!.map((hold) => `${hold.file}: ${hold.withName} is changing it in its turn${hold.letThrough ? ' (you let this session through)' : ''}`).join('\n')}
         >
-          <span class="guard-mark">⏸</span>
+          <span class="guard-mark">‖</span>
           <span class="guard-text">
             {heldBackText(first)}
             {more(held!)}
@@ -54,7 +54,7 @@ export function GuardLines({ agent, store }: { agent: Agent; store: Store }) {
       )}
       {holding && (
         <div class="guard-line" data-kind="holding" title={holding.map((hold) => `${hold.withName} ${hold.letThrough ? 'shares' : 'waits for'} ${hold.file}`).join('\n')}>
-          <span class="guard-mark">⏸</span>
+          <span class="guard-mark">‖</span>
           <span class="guard-text">{holdingText(holding)}</span>
         </div>
       )}
