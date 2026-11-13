@@ -13,13 +13,21 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/jetbrains-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  /* The terminal font of the app (SIL OFL, fonts/OFL.txt). */
+  @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/jetbrains-mono-latin-700-normal.woff2') format('woff2'); }
+
+  /* The colors of the app: its background, its boxes, its terminals. Orange is Forchetta and the first session;
+     blue only marks the lines of the second session in the demo. */
   :root {
     color-scheme: dark;
     --bg: #1f1e1c;
     --surface: #292825;
     --surface-2: #33312d;
     --surface-waiting: #352b1c;
+    --terminal: #262624;
     --line: #3a3834;
     --line-strong: #4c4944;
     --text: #f3f1ec;
@@ -29,15 +37,16 @@
     --claude: #d97757;
     --claude-strong: #c96442;
     --claude-soft: rgba(217, 119, 87, 0.14);
+    --blue: #6cb4d9;
+    --blue-soft: rgba(108, 180, 217, 0.13);
     --green: #46c48a;
     --red: #ef5b5b;
     --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   }
 
   * { box-sizing: border-box; }
-
-  html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 72px; }
 
   body {
     margin: 0;
@@ -49,20 +58,27 @@
 
   a { color: var(--text); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
   a:hover { text-decoration-color: var(--claude); }
-  a:focus-visible, button:focus-visible { outline: 2px solid var(--claude); outline-offset: 3px; border-radius: 4px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--claude); outline-offset: 3px; border-radius: 6px; }
+  code, pre, kbd { font-family: var(--mono); }
+  button { font: inherit; color: inherit; }
 
-  code, pre { font-family: var(--mono); }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+  .wide { max-width: 1280px; }
+  .text { max-width: 660px; }
 
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
-  .text { max-width: 640px; }
-
-  /* Top: the name, and the way to the code. */
+  /* The bar at the top stays while you scroll; its line shows once the page has moved. */
   .top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 28px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid transparent;
+    background: rgba(31, 30, 28, 0.82);
+    -webkit-backdrop-filter: saturate(140%) blur(14px);
+    backdrop-filter: saturate(140%) blur(14px);
+    transition: border-color 200ms ease;
   }
+  .top.scrolled { border-bottom-color: var(--line); }
+  .top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
 
   .brand {
     display: inline-flex;
@@ -70,220 +86,334 @@
     gap: 10px;
     font-weight: 600;
     font-size: 16px;
-    letter-spacing: 0.01em;
     text-decoration: none;
     color: var(--claude);
   }
-
   .brand svg { width: 22px; height: 22px; }
 
-  .top nav { display: flex; gap: 22px; font-size: 15px; }
+  .top nav { display: flex; align-items: center; gap: 22px; font-size: 15px; }
   .top nav a { color: var(--text-2); text-decoration: none; }
   .top nav a:hover { color: var(--text); }
+  .top nav a.nav-install { padding: 5px 12px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--text); }
+  .top nav a.nav-install:hover { border-color: var(--claude); background: var(--claude-soft); }
 
-  /* Hero: one sentence, what it does, two ways in. */
-  .hero { padding-top: 72px; padding-bottom: 40px; }
+  /* Hero: the promise, then the proof right under it. */
+  .hero { padding-top: 76px; }
 
   h1 {
     margin: 0;
-    max-width: 15em;
-    font-size: clamp(38px, 6vw, 64px);
-    line-height: 1.04;
-    font-weight: 650;
-    letter-spacing: -0.03em;
+    max-width: 14.5em;
+    font-size: clamp(40px, 6.4vw, 74px);
+    line-height: 1.02;
+    font-weight: 680;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
   }
 
   .lead {
     margin: 26px 0 0;
-    max-width: 36em;
-    font-size: 19px;
+    max-width: 35em;
+    font-size: 19.5px;
+    line-height: 1.55;
     color: var(--text-2);
   }
 
-  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; margin-top: 34px; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 16px; margin-top: 34px; }
+
+  /* The install command, copied with one click. */
+  .copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    max-width: 100%;
+    padding: 11px 14px 11px 16px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--terminal);
+    font: 14px var(--mono);
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+  }
+  .copy:hover { border-color: var(--claude); }
+  .copy .prompt { color: var(--text-3); user-select: none; }
+  .copy .cmd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy .copy-label {
+    flex: none;
+    min-width: 4.6em;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    font: 600 12px var(--ui);
+    text-align: center;
+    color: var(--text-2);
+  }
+  .copy.copied .copy-label { background: rgba(70, 196, 138, 0.18); color: var(--green); }
 
   .button {
     display: inline-flex;
     align-items: center;
     gap: 10px;
     padding: 11px 18px;
-    border: 1px solid var(--claude-strong);
+    border: 1px solid var(--line-strong);
     border-radius: 10px;
-    background: var(--claude-strong);
-    color: #fff;
+    background: transparent;
+    color: var(--text);
     font-weight: 600;
-    font-size: 16px;
+    font-size: 15.5px;
     text-decoration: none;
+    cursor: pointer;
   }
-
-  .button:hover { border-color: var(--claude); background: var(--claude); }
-  .button.secondary { border-color: var(--line-strong); background: transparent; color: var(--text); }
-  .button.secondary:hover { border-color: var(--claude); background: var(--claude-soft); }
+  .button:hover { border-color: var(--claude); background: var(--claude-soft); }
+  .button.primary { border-color: var(--claude-strong); background: var(--claude-strong); color: #fff; }
+  .button.primary:hover { border-color: var(--claude); background: var(--claude); }
   .button svg { width: 18px; height: 18px; fill: currentColor; }
 
   .fine { font-size: 14px; color: var(--text-3); }
+  .fine.after { margin: 14px 0 0; }
 
-  /* The replay: the boxes of the app, changing state as they do. */
-  .demo { padding-top: 24px; padding-bottom: 8px; }
+  /* ———— The guard, live: two sessions, one file. ———— */
+  .play { padding-top: 64px; }
 
-  .demo-bar {
+  .play-controls {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
-    align-items: baseline;
+    gap: 12px 20px;
     margin-bottom: 14px;
+  }
+
+  .play-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-2); }
+  .play-title b { color: var(--text); font-weight: 600; }
+
+  .play-buttons { display: flex; align-items: center; gap: 10px; }
+
+  .switch {
+    display: inline-flex;
+    padding: 3px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .switch button {
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+  .switch button:hover { color: var(--text); }
+  .switch button[aria-pressed='true'] { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .switch button[data-mode='on'][aria-pressed='true'] { background: var(--claude-strong); color: #fff; box-shadow: none; }
+
+  .replay {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 13px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .replay:hover { color: var(--text); border-color: var(--text-3); }
+  .replay svg { width: 14px; height: 14px; }
+
+  /* The window: as the app draws it, two panes and the file between them. */
+  .window {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    background: var(--bg);
+    box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.7);
+  }
+
+  .window-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 40px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
     font-size: 13px;
     color: var(--text-3);
   }
+  .lights { display: flex; gap: 7px; }
+  .lights i { width: 11px; height: 11px; border-radius: 50%; background: var(--surface-2); }
+  .window-bar strong { color: var(--claude); font-weight: 650; font-size: 13.5px; }
+  .window-bar .count { margin-left: auto; }
 
-  .demo-bar strong { font-weight: 650; color: var(--claude); }
-  .demo-bar .waiting { color: var(--accent); }
-
-  .grid {
+  .stage {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
   }
 
-  .box {
-    position: relative;
+  .pane {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-height: 196px;
-    padding: 16px 18px 14px;
+    min-width: 0;
     border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--surface);
-    transition: background-color 300ms ease, border-color 300ms ease;
+    border-radius: 11px;
+    background: var(--terminal);
+    transition: border-color 300ms ease;
   }
+  .pane[data-state='working'] { border-color: var(--line-strong); }
+  .pane[data-held] { border-color: rgba(240, 164, 60, 0.55); }
 
-  .aura {
-    position: absolute;
-    inset: -1px;
-    border: 1px solid transparent;
-    border-radius: inherit;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .box header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-  .box h3 { margin: 0; font-size: 15px; font-weight: 600; }
-
-  .state {
-    flex: none;
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-3);
-  }
-
-  .action {
+  .pane-head {
     display: flex;
-    gap: 7px;
-    min-height: 18px;
-    margin: 0;
+    align-items: baseline;
+    gap: 10px;
+    padding: 10px 14px 0;
+    font-size: 13.5px;
+  }
+  .pane-head h3 { margin: 0; font-size: 14px; font-weight: 650; }
+  .pane[data-who='a'] .pane-head h3 { color: var(--claude); }
+  .pane[data-who='b'] .pane-head h3 { color: var(--blue); }
+  .pane-state { font-size: 10.5px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+  .pane[data-state='working'] .pane-state { color: var(--text); }
+  .pane-folder { margin-left: auto; font: 11.5px var(--mono); color: var(--text-3); }
+
+  .guard-line {
+    min-height: 27px;
+    margin: 6px 14px 0;
+    padding: 0 0 8px;
+    border-bottom: 1px solid var(--line);
     overflow: hidden;
-    font: 12px/1.4 var(--mono);
+    font: 11.5px/19px var(--mono);
     white-space: nowrap;
     text-overflow: ellipsis;
-    color: var(--text-2);
+    color: var(--text-3);
   }
+  .guard-line:empty::before { content: ' '; }
+  .guard-line .mark { margin-right: 6px; color: var(--accent); }
+  .guard-line[data-kind='held'] { color: var(--accent); }
 
-  .action span:last-child { overflow: hidden; text-overflow: ellipsis; }
-
-  .summary {
-    min-height: 2.9em;
-    margin: 0;
-    font-size: 13px;
-    line-height: 1.45;
-    color: var(--text-2);
-  }
-
-  .ask {
-    display: none;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .ask code {
-    padding: 6px 8px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--bg);
-    font-size: 11.5px;
+  .term {
+    position: relative;
+    height: 372px;
+    overflow: hidden;
+    padding: 12px 14px 14px;
+    font: 11.5px/1.6 var(--mono);
+    font-variant-ligatures: none;
     color: var(--text);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
   }
+  .term-lines { position: absolute; left: 14px; right: 14px; bottom: 14px; }
+  .term p { margin: 0 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; animation: line-in 260ms ease-out both; }
+  .term .t-prompt { color: var(--text-2); }
+  .term .t-prompt::before { content: '> '; color: var(--text-3); }
+  .term .t-prompt.from-forchetta { color: var(--text); }
+  .term .t-prompt.from-forchetta::before { color: var(--claude); }
+  .term .t-tool { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); }
+  .term .dot { color: var(--green); }
+  .term .t-tool[data-status='run'] .dot { color: var(--text-3); animation: blink 1s steps(2, start) infinite; }
+  .term .t-tool[data-status='error'] .dot { color: var(--red); }
+  .term .t-tool b { font-weight: 700; }
+  .term .t-result { display: block; padding-left: calc(1em + 3ch); text-indent: -3ch; color: var(--text-3); }
+  .term .t-result::before { content: '⎿  '; }
+  .term .t-tool[data-status='error'] .t-result { color: var(--red); }
+  .term .t-say { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); }
+  .term .t-say .dot { color: var(--text); }
+  .term .t-spin { color: var(--claude); }
 
-  .ask div { display: flex; gap: 6px; align-items: center; }
+  @keyframes line-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @keyframes blink { to { visibility: hidden; } }
 
-  .ask span {
-    padding: 3px 10px;
+  /* The file both sessions want. Each line shows who wrote it. */
+  .file {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--surface);
+    transition: border-color 300ms ease;
+  }
+  .file[data-lock='held'] { border-color: rgba(240, 164, 60, 0.6); }
+  .file[data-lock='broken'] { border-color: rgba(239, 91, 91, 0.6); }
+
+  .file-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .file-head h3 { margin: 0; font: 650 13px var(--mono); }
+  .lock {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: auto;
+    padding: 2px 8px;
     border: 1px solid var(--line-strong);
     border-radius: 6px;
-    background: var(--surface-2);
-    font-size: 11.5px;
-    color: var(--text-2);
+    font: 11px var(--mono);
+    white-space: nowrap;
+    color: var(--text-3);
   }
+  .file[data-lock='held'] .lock { border-color: rgba(240, 164, 60, 0.6); background: rgba(240, 164, 60, 0.12); color: var(--accent); }
+  .file[data-lock='free'] .lock { border-color: rgba(70, 196, 138, 0.5); color: var(--green); }
+  .file[data-lock='off'] .lock { border-style: dashed; }
+  .file[data-lock='broken'] .lock { border-color: rgba(239, 91, 91, 0.6); background: rgba(239, 91, 91, 0.1); color: var(--red); }
+  .file.knock { animation: knock 420ms ease-in-out; }
+  @keyframes knock { 20%, 60% { transform: translateX(-3px); } 40%, 80% { transform: translateX(3px); } }
 
-  .ask .allow { border-color: rgba(240, 164, 60, 0.7); color: var(--accent); transition: background-color 150ms ease; }
-  .ask .allow.pressed { background: rgba(240, 164, 60, 0.25); }
+  .code { flex: 1; margin: 0; padding: 10px 0 12px; overflow: hidden; font: 11.5px/1.75 var(--mono); font-variant-ligatures: none; counter-reset: ln; }
+  .code div { position: relative; padding: 0 12px 0 44px; white-space: pre; transition: background-color 900ms ease; }
+  .code div::before { position: absolute; left: 0; width: 30px; color: var(--line-strong); text-align: right; counter-increment: ln; content: counter(ln); }
+  .code div[data-by]::after { position: absolute; left: 36px; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; content: ''; }
+  .code div[data-by='a']::after { background: var(--claude); }
+  .code div[data-by='b']::after { background: var(--blue); }
+  .code div.fresh[data-by='a'] { background: var(--claude-soft); transition: none; }
+  .code div.fresh[data-by='b'] { background: var(--blue-soft); transition: none; }
+  .code div.bug { background: rgba(239, 91, 91, 0.12); }
+  .code div.bug span { text-decoration: underline wavy rgba(239, 91, 91, 0.8); text-underline-offset: 4px; }
+  .code .k { color: #d9a3f0; }
+  .code .s { color: #a8cf8e; }
+  .code .n { color: #e8b26a; }
 
-  .box[data-ask] .ask { display: flex; }
-  .box[data-ask] .summary { display: none; }
+  .file-foot { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 9px 14px; border-top: 1px solid var(--line); font: 11px var(--mono); color: var(--text-3); }
+  .file-foot span::before { display: inline-block; width: 2px; height: 10px; margin-right: 7px; border-radius: 1px; vertical-align: -1px; content: ''; }
+  .file-foot .by-a::before { background: var(--claude); }
+  .file-foot .by-b::before { background: var(--blue); }
 
-  .ctx { display: flex; align-items: center; gap: 10px; margin-top: auto; }
-  .track { flex: 1; height: 3px; overflow: hidden; border-radius: 2px; background: var(--line); }
-  .fill { height: 100%; transform-origin: left; background: var(--claude); transition: transform 1.2s ease; }
-  .pct { flex: none; font: 11.5px var(--mono); color: var(--text-2); }
+  .progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; }
+  .progress i { display: block; height: 100%; transform: scaleX(0); transform-origin: left; background: var(--claude); opacity: 0.8; }
 
-  .meta { display: flex; gap: 10px; font: 11.5px var(--mono); color: var(--text-3); }
-  .meta .grow { flex: 1; }
-  .tag { padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; font-size: 10px; }
-
-  .done {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    width: 18px;
-    height: 18px;
-    opacity: 0;
-    color: var(--green);
+  .story {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+    min-height: 64px;
+    padding: 14px 2px 0;
   }
+  .narration { flex: 1 1 420px; margin: 0; font-size: 17px; line-height: 1.45; color: var(--text); }
+  .narration[data-tone='bad'] { color: #f3b0a6; }
+  .narration[data-tone='good'] { color: #bfe8d2; }
+  .story .button { flex: none; }
+  .story .button[hidden] { display: none; }
 
-  /* States, as in the app: a slow pulse at work, an amber breath when it waits for you, green once at the end
-     of a turn, one shake at an error. Each moves only opacity or transform. */
-  .box[data-state='working'] .aura { border-color: var(--text-3); animation: pulse 2.4s ease-in-out infinite; }
-  .box[data-state='working'] .state { color: var(--text); }
-  .box[data-state='waiting'] { border-color: rgba(240, 164, 60, 0.45); background: var(--surface-waiting); }
-  .box[data-state='waiting'] .aura { border-color: var(--accent); animation: breath 3.2s ease-in-out infinite; }
-  .box[data-state='waiting'] .state,
-  .box[data-state='waiting'] .action { color: var(--accent); }
-  .box[data-state='compacting'] .state { color: var(--text); }
-  .box[data-state='compacting'] .fill { background: var(--accent); }
-  .box[data-state='error'] { border-color: rgba(239, 91, 91, 0.55); }
-  .box[data-state='error'] .state,
-  .box[data-state='error'] .action { color: var(--red); }
-  .box[data-done] .done { animation: check 2.4s ease-out forwards; }
-  .box[data-done] .state { color: var(--green); }
-  .box[data-shake] { animation: shake 420ms ease-in-out; }
+  .play-note { margin: 10px 2px 0; font-size: 13.5px; color: var(--text-3); }
 
-  @keyframes pulse { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.55; } }
-  @keyframes breath { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.85; } }
-  @keyframes check { 0% { opacity: 0; transform: scale(0.6); } 15% { opacity: 1; transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
-  @keyframes shake { 20%, 60% { transform: translateX(-3px); } 40%, 80% { transform: translateX(3px); } }
-
-  .demo-note { margin: 14px 0 0; font-size: 13px; color: var(--text-3); }
-
-  /* Sections: a heading and a column of text, left aligned. */
-  section.part { padding-top: 88px; }
+  /* Sections: a heading and a column of text, left aligned, then what it looks like. */
+  section.part { padding-top: 112px; }
 
   h2 {
     margin: 0 0 18px;
-    font-size: clamp(26px, 3.4vw, 34px);
-    line-height: 1.15;
-    font-weight: 650;
-    letter-spacing: -0.02em;
+    font-size: clamp(28px, 3.6vw, 40px);
+    line-height: 1.1;
+    font-weight: 680;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
   }
 
   .part p { margin: 0 0 16px; color: var(--text-2); }
@@ -294,229 +424,375 @@
   .list li::before { position: absolute; left: 0; top: 0.72em; width: 8px; height: 1px; background: var(--text-3); content: ''; }
   .list b { color: var(--text); font-weight: 600; }
 
-  .shot { margin: 32px 0 0; }
+  /* The guard, in words: next to each other on a wide screen. */
+  .guard-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 56px; margin-top: 8px; }
+  .guard-grid > div > p:first-child { margin-top: 0; }
+
+  .shot { margin: 36px 0 0; }
   .shot img, .shot video { display: block; width: 100%; height: auto; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
   .shot figcaption { margin-top: 12px; font-size: 14px; color: var(--text-3); }
 
-  /* Three close-ups of the app side by side; one under the other on a phone. */
-  .shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 32px 0 0; }
+  .shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 36px 0 0; }
   .shots figure { margin: 0; }
   .shots img { display: block; width: 100%; height: auto; border: 1px solid var(--line-strong); border-radius: 12px; }
   .shots figcaption { margin-top: 10px; font-size: 14px; color: var(--text-3); }
-  @media (max-width: 720px) { .shots { grid-template-columns: 1fr; } }
+
+  /* The grid of the app, alive: the boxes change state, and the permission can be answered here. */
+  .demo-bar { display: flex; justify-content: space-between; align-items: baseline; margin: 36px 0 14px; font-size: 13px; color: var(--text-3); }
+  .demo-bar strong { font-weight: 650; color: var(--claude); }
+  .demo-bar .waiting { color: var(--accent); }
+
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+
+  .box {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 200px;
+    padding: 16px 18px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    transition: background-color 300ms ease, border-color 300ms ease;
+  }
+  .aura { position: absolute; inset: -1px; border: 1px solid transparent; border-radius: inherit; opacity: 0; pointer-events: none; }
+  .box header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .box h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .state { flex: none; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+  .action { display: flex; gap: 7px; min-height: 18px; margin: 0; overflow: hidden; font: 12px/1.4 var(--mono); white-space: nowrap; text-overflow: ellipsis; color: var(--text-2); }
+  .action span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  .summary { min-height: 2.9em; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-2); }
+
+  .ask { display: none; flex-direction: column; gap: 8px; }
+  .ask code { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 11.5px; color: var(--text); }
+  .ask div { display: flex; gap: 6px; align-items: center; }
+  .ask button {
+    padding: 3px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: var(--surface-2);
+    font-size: 12px;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .ask button:hover { color: var(--text); border-color: var(--text-3); }
+  .ask .allow { border-color: rgba(240, 164, 60, 0.7); color: var(--accent); }
+  .ask .allow:hover { background: rgba(240, 164, 60, 0.2); color: var(--accent); border-color: var(--accent); }
+  .ask .allow.pressed { background: rgba(240, 164, 60, 0.3); }
+  .ask .hint { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+  .box[data-ask] .ask { display: flex; }
+  .box[data-ask] .summary { display: none; }
+
+  .ctx { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+  .track { flex: 1; height: 3px; overflow: hidden; border-radius: 2px; background: var(--line); }
+  .fill { height: 100%; transform-origin: left; background: var(--claude); transition: transform 1.2s ease; }
+  .pct { flex: none; font: 11.5px var(--mono); color: var(--text-2); }
+
+  .meta { display: flex; align-items: center; gap: 10px; min-height: 22px; font: 11.5px var(--mono); color: var(--text-3); }
+  .meta .end { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .tag { padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; font-size: 10px; }
+
+  /* On hover, the commands of a session in tmux, as in the app. A read-only session has none. */
+  .cmds { display: none; gap: 6px; }
+  .cmds button {
+    padding: 1px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    background: var(--surface);
+    font: 11px var(--mono);
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .cmds button:hover { color: var(--text); border-color: var(--claude); }
+  .box[data-tmux]:hover .cmds, .box[data-tmux]:focus-within .cmds { display: flex; }
+  .box[data-tmux]:hover .tag, .box[data-tmux]:focus-within .tag { display: none; }
+
+  .done { position: absolute; top: 14px; right: 14px; width: 18px; height: 18px; opacity: 0; color: var(--green); }
+
+  .box[data-state='working'] .aura { border-color: var(--text-3); animation: pulse 2.4s ease-in-out infinite; }
+  .box[data-state='working'] .state { color: var(--text); }
+  .box[data-state='waiting'] { border-color: rgba(240, 164, 60, 0.45); background: var(--surface-waiting); }
+  .box[data-state='waiting'] .aura { border-color: var(--accent); animation: breath 3.2s ease-in-out infinite; }
+  .box[data-state='waiting'] .state, .box[data-state='waiting'] .action { color: var(--accent); }
+  .box[data-state='compacting'] .state { color: var(--text); }
+  .box[data-state='compacting'] .fill { background: var(--accent); }
+  .box[data-state='error'] { border-color: rgba(239, 91, 91, 0.55); }
+  .box[data-state='error'] .state, .box[data-state='error'] .action { color: var(--red); }
+  .box[data-done] .done { animation: check 2.4s ease-out forwards; }
+  .box[data-done] .state { color: var(--green); }
+  .box[data-shake] { animation: knock 420ms ease-in-out; }
+
+  @keyframes pulse { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.55; } }
+  @keyframes breath { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.85; } }
+  @keyframes check { 0% { opacity: 0; transform: scale(0.6); } 15% { opacity: 1; transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+  .demo-note { margin: 14px 0 0; font-size: 13.5px; color: var(--text-3); }
 
   /* Install: a real sequence, so numbered. */
   .steps { margin: 26px 0 0; padding: 0; list-style: none; counter-reset: step; }
-  .steps li { counter-increment: step; position: relative; padding: 0 0 26px 44px; }
+  .steps li { counter-increment: step; position: relative; padding: 0 0 28px 46px; }
   .steps li::before {
     position: absolute;
     left: 0;
     top: 1px;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     border: 1px solid var(--line-strong);
     border-radius: 50%;
-    font: 12px/24px var(--mono);
+    font: 12px/26px var(--mono);
     text-align: center;
     color: var(--text-2);
     content: counter(step);
   }
   .steps p { margin: 0 0 10px; color: var(--text); }
-
-  pre {
-    margin: 0;
-    padding: 14px 16px;
-    overflow-x: auto;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--surface);
-    font-size: 13.5px;
-    line-height: 1.55;
-    color: var(--text);
-  }
-
+  .steps .copy { width: 100%; justify-content: space-between; }
   .steps small { display: block; margin-top: 8px; font-size: 14px; color: var(--text-3); }
-  :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--surface); font-size: 0.88em; color: var(--text); }
+  :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--surface); font-size: 0.86em; color: var(--text); }
+  .copy code, .copy .cmd { padding: 0; background: none; font-size: inherit; }
+
+  .manual-links { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 18px; font-size: 15px; }
 
   footer.end {
-    margin-top: 96px;
+    margin-top: 120px;
     padding: 28px 0 48px;
     border-top: 1px solid var(--line);
     font-size: 14px;
     color: var(--text-3);
   }
-
   footer.end .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
   footer.end a { color: var(--text-2); }
+  footer.end .links { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 
-  @media (max-width: 900px) {
+  @media (max-width: 980px) {
+    .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .file { grid-column: 1 / -1; order: 3; }
+    .term { height: 330px; }
     .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
-  @media (max-width: 600px) {
+  @media (max-width: 720px) {
+    .guard-grid, .shots { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (max-width: 640px) {
     body { font-size: 16px; }
     .wrap { padding: 0 16px; }
-    .hero { padding-top: 48px; padding-bottom: 28px; }
-    .lead { font-size: 17px; }
-    .grid { grid-template-columns: minmax(0, 1fr); }
-    .grid .box:nth-child(n + 4) { display: none; }
-    section.part { padding-top: 64px; }
+    .hero { padding-top: 44px; }
+    .lead { font-size: 17.5px; }
+    .top nav { gap: 16px; }
     .top nav a.optional { display: none; }
+    .copy { font-size: 12.5px; }
+    .stage { grid-template-columns: minmax(0, 1fr); padding: 8px; gap: 8px; }
+    .term { height: 236px; font-size: 11px; }
+    .pane-folder { display: none; }
+    .window-bar .count { display: none; }
+    .narration { font-size: 16px; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    #b2, #b3, #b4 { display: none; }
+    .copy .cmd { white-space: normal; overflow-wrap: anywhere; }
+    section.part { padding-top: 84px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .box, .box *, .aura { animation: none !important; transition: none !important; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
     .box[data-state='working'] .aura { opacity: 0.4; }
     .box[data-state='waiting'] .aura { opacity: 0.7; }
   }
 </style>
 </head>
 <body>
-<div class="wrap top">
-  <a class="brand" href="#" aria-label="Forchetta">
-    <svg viewBox="0 0 18 18" aria-hidden="true"><g fill="#d97757"><rect x="5.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="7.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="10.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="12.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="5.1" y="6.4" width="8.8" height="2.6" rx="1.3"/><path d="M7.4 8.6h4.2l-1.5 2.8H8.9z"/><rect x="8.6" y="10.8" width="1.8" height="6.4" rx=".9"/></g></svg>
-    Forchetta
-  </a>
-  <nav aria-label="Page">
-    <a href="manual.html">Manual</a>
-    <a class="optional" href="#install">Install</a>
-    <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
-  </nav>
-</div>
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="#" aria-label="Forchetta, top of the page">
+      <svg viewBox="0 0 18 18" aria-hidden="true"><g fill="#d97757"><rect x="5.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="7.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="10.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="12.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="5.1" y="6.4" width="8.8" height="2.6" rx="1.3"/><path d="M7.4 8.6h4.2l-1.5 2.8H8.9z"/><rect x="8.6" y="10.8" width="1.8" height="6.4" rx=".9"/></g></svg>
+      Forchetta
+    </a>
+    <nav aria-label="Page">
+      <a class="optional" href="#guard">The guard</a>
+      <a href="manual.html">Manual</a>
+      <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
+      <a class="nav-install" href="#install">Install</a>
+    </nav>
+  </div>
+</header>
 
 <main>
   <div class="wrap hero">
     <h1>Run several Claude Code sessions in the same repo. They won't step on each other.</h1>
-    <p class="lead">When two sessions reach for the same file, Forchetta makes one wait, tells Claude why, and lets it go on by itself when the file is free. Around that: every Claude Code session on your Mac in one window, permission prompts answered from there, a notification when one needs you, and teams of agents.</p>
+    <p class="lead">When two sessions reach for the same file, Forchetta makes one wait, tells Claude why, and lets it go on by itself when the file is free. Every session on your Mac, in one window.</p>
     <div class="actions">
-      <a class="button" href="#install">Install with Homebrew</a>
-      <a class="button secondary" href="https://github.com/alessiodonato/forchetta">
+      <button class="copy" type="button" data-copy="brew install alessiodonato/tap/forchetta" aria-label="Copy the install command: brew install alessiodonato/tap/forchetta">
+        <span class="cmd"><span class="prompt">$ </span>brew install alessiodonato/tap/forchetta</span>
+        <span class="copy-label" aria-hidden="true">Copy</span>
+      </button>
+      <a class="button" href="https://github.com/alessiodonato/forchetta">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        View the code on GitHub
+        View on GitHub
       </a>
-      <span class="fine">Free and open source, Apache 2.0. macOS 12 or later. Everything runs on your Mac.</span>
     </div>
+    <p class="fine after">Then <code>forchetta setup</code>. Free and open source, Apache 2.0. macOS 12 or later. Everything runs on your Mac.</p>
   </div>
 
-  <div class="wrap demo" aria-label="A replay of the Forchetta window">
-    <div class="demo-bar"><strong>Forchetta</strong><span id="counts">6 sessions</span></div>
-    <div class="grid" id="grid">
-      <article class="box" id="b0" data-state="working">
-        <div class="aura"></div>
-        <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <header><h3>shop-api</h3><span class="state">working</span></header>
-        <p class="action"><span aria-hidden="true">✎</span><span class="text">Edit src/routes/orders.ts</span></p>
-        <p class="summary">Adding retries to the order client, then the tests.</p>
-        <div class="ask"></div>
-        <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.42)"></div></div><span class="pct">≈42% · 420k</span></div>
-        <div class="meta"><span>≈ $1.84</span><span>cache 54 min</span><span class="grow"></span><span class="tag">tmux</span></div>
-      </article>
-      <article class="box" id="b1" data-state="working">
-        <div class="aura"></div>
-        <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <header><h3>blog</h3><span class="state">working</span></header>
-        <p class="action"><span aria-hidden="true">›_</span><span class="text">Bash npm run lint</span></p>
-        <p class="summary">Moving the posts to the new layout.</p>
-        <div class="ask"><code>rm -rf dist &amp;&amp; npm run build</code><div><span class="allow">Allow</span><span>Deny</span><span>always…</span></div></div>
-        <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.18)"></div></div><span class="pct">≈18% · 180k</span></div>
-        <div class="meta"><span>≈ $0.62</span><span>cache 58 min</span><span class="grow"></span><span class="tag">tmux</span></div>
-      </article>
-      <article class="box" id="b2" data-state="idle">
-        <div class="aura"></div>
-        <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <header><h3>docs</h3><span class="state">idle</span></header>
-        <p class="action"><span class="text">turn finished</span></p>
-        <p class="summary">Rewrote the install guide and checked every link.</p>
-        <div class="ask"></div>
-        <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.31)"></div></div><span class="pct">≈31% · 310k</span></div>
-        <div class="meta"><span>≈ $0.97</span><span>cache 41 min</span><span class="grow"></span><span class="tag">tmux</span></div>
-      </article>
-      <article class="box" id="b3" data-state="compacting">
-        <div class="aura"></div>
-        <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <header><h3>data-pipeline</h3><span class="state">compacting</span></header>
-        <p class="action"><span class="text">compacting, as you asked</span></p>
-        <p class="summary">Migrating the jobs to the new schema.</p>
-        <div class="ask"></div>
-        <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.86)"></div></div><span class="pct">≈86% · 860k</span></div>
-        <div class="meta"><span>≈ $4.10</span><span>cache 59 min</span><span class="grow"></span><span class="tag">tmux</span></div>
-      </article>
-      <article class="box" id="b4" data-state="waiting">
-        <div class="aura"></div>
-        <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <header><h3>auth</h3><span class="state">waiting</span></header>
-        <p class="action"><span class="text">Question: OAuth or API keys for internal clients?</span></p>
-        <p class="summary">Designing the login for the internal tools.</p>
-        <div class="ask"></div>
-        <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.15)"></div></div><span class="pct">≈15% · 150k</span></div>
-        <div class="meta"><span>≈ $0.40</span><span>cache 55 min</span><span class="grow"></span><span class="tag">tmux</span></div>
-      </article>
-      <article class="box" id="b5" data-state="working">
-        <div class="aura"></div>
-        <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <header><h3>infra</h3><span class="state">working</span></header>
-        <p class="action"><span aria-hidden="true">›_</span><span class="text">Bash terraform plan</span></p>
-        <p class="summary">Checking the staging changes before the deploy.</p>
-        <div class="ask"></div>
-        <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.23)"></div></div><span class="pct">≈23% · 230k</span></div>
-        <div class="meta"><span>≈ $0.75</span><span>cache 57 min</span><span class="grow"></span><span class="tag">read only</span></div>
-      </article>
+  <!-- The guard, played in the page: two scripted sessions, the real messages of Claude Code and Forchetta. -->
+  <section class="wrap play" id="guard" aria-labelledby="play-title">
+    <div class="play-controls">
+      <p class="play-title" id="play-title"><b>Two sessions, one file.</b> Play it with the guard, then without.</p>
+      <div class="play-buttons">
+        <div class="switch" role="group" aria-label="The guard">
+          <button type="button" data-mode="on" aria-pressed="true">Guard on</button>
+          <button type="button" data-mode="off" aria-pressed="false">Guard off</button>
+        </div>
+        <button class="replay" type="button" id="replay">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8A5.2 5.2 0 1 1 11.6 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12.4 1.6v3.2H9.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Replay
+        </button>
+      </div>
     </div>
-    <p class="demo-note">A replay of the app's grid, with made-up sessions. Amber means a session waits for you; the green check, that a turn just ended.</p>
-  </div>
+
+    <div class="window">
+      <div class="window-bar" aria-hidden="true">
+        <span class="lights"><i></i><i></i><i></i></span>
+        <strong>Forchetta</strong>
+        <span class="count">2 sessions in ~/shop</span>
+      </div>
+      <div class="stage">
+        <div class="pane" data-who="a" id="pane-a" data-state="idle">
+          <div class="pane-head"><h3>retries</h3><span class="pane-state">idle</span><span class="pane-folder">~/shop</span></div>
+          <div class="guard-line" aria-live="off"></div>
+          <div class="term" aria-hidden="true"><div class="term-lines"></div></div>
+        </div>
+        <div class="file" id="file" data-lock="free">
+          <div class="file-head"><h3>src/api.ts</h3><span class="lock">free</span></div>
+          <div class="code" aria-hidden="true"></div>
+          <div class="file-foot" aria-hidden="true"><span class="by-a">retries</span><span class="by-b">rate-limit</span></div>
+        </div>
+        <div class="pane" data-who="b" id="pane-b" data-state="idle">
+          <div class="pane-head"><h3>rate-limit</h3><span class="pane-state">idle</span><span class="pane-folder">~/shop</span></div>
+          <div class="guard-line" aria-live="off"></div>
+          <div class="term" aria-hidden="true"><div class="term-lines"></div></div>
+        </div>
+      </div>
+      <div class="progress" aria-hidden="true"><i></i></div>
+    </div>
+
+    <div class="story">
+      <p class="narration" id="narration" aria-live="polite">Two Claude Code sessions in the same folder, each asked to change src/api.ts.</p>
+      <button class="button primary" type="button" id="next" hidden></button>
+    </div>
+    <p class="play-note">A scripted replay with stand-in sessions. What the guard tells Claude, and the message that lets it go on, are the ones Forchetta really sends.</p>
+  </section>
 
   <div class="wrap">
-    <section class="part" id="guard">
-      <div class="text">
-      <h2>Sessions that don't step on each other</h2>
-      <p>The usual way to run agents in parallel is a git worktree for each one. Then each worktree needs its own dependencies, its own <code>.env</code> and its own dev server, and you merge at the end. Forchetta lets sessions work side by side in one folder too: it sees every edit before it happens, for every session, also those started with plain <code>claude</code>.</p>
-      <ul class="list">
-        <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another session that tries to edit it is stopped, and Claude is told why: it works on something else, or ends its turn and waits.</li>
-        <li><b>It goes on by itself:</b> when the turn that held the file ends, the session that waited gets a prompt, "src/api.ts is free now", and picks up where it stopped.</li>
-        <li><b>git that asks first:</b> a <code>git checkout</code>, <code>reset --hard</code> or <code>stash</code> that would change the files under another session asks you before it runs.</li>
-        <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped and nothing waits.</li>
-      </ul>
+    <section class="part" aria-labelledby="guard-title">
+      <h2 id="guard-title">One folder, no worktrees needed</h2>
+      <div class="guard-grid">
+        <div>
+          <p>The usual way to run agents in parallel is a git worktree for each one. Then each worktree needs its own dependencies, its own <code>.env</code> and its own dev server, and you merge at the end.</p>
+          <p>Forchetta lets sessions work side by side in one folder. It sees every edit before it happens, for every session, also those started with plain <code>claude</code>.</p>
+        </div>
+        <ul class="list">
+          <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another session that tries to edit it is stopped, and Claude is told why.</li>
+          <li><b>It goes on by itself:</b> when the turn that held the file ends, the session that waited is told the file is free, and picks up where it stopped.</li>
+          <li><b>git that asks first:</b> a <code>git checkout</code>, <code>reset --hard</code> or <code>stash</code> that would change the files under another session asks you before it runs.</li>
+          <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped.</li>
+        </ul>
       </div>
-      <figure class="shot">
-        <video src="img/guard.mp4" poster="img/guard-poster.jpg" width="1600" height="950" autoplay muted loop playsinline preload="metadata" aria-label="Two sessions on the same file: retries changes src/api.ts; rate-limit tries to edit it, is stopped with the reason and waits; when retries ends its turn, rate-limit is told the file is free and makes its change."></video>
-        <figcaption>Two sessions, one file: rate-limit is stopped while retries changes src/api.ts, and goes on by itself when the file is free. Recorded in the repository's simulation: the app, the daemon and the guard are real, the sessions are scripted stand-ins for Claude Code.</figcaption>
-      </figure>
     </section>
 
-    <section class="part text">
-      <h2>Read every session at a glance</h2>
-      <p>Forchetta listens to the hooks of Claude Code, so it knows what each session does the moment it does it. Sessions you start anywhere show up by themselves: in the Terminal, in iTerm, in an editor.</p>
-      <ul class="list">
-        <li><b>What it is doing:</b> the tool it is running and its file or command, or the question it is asking you.</li>
-        <li><b>What it was about:</b> the last request, and the first sentences of its last reply.</li>
-        <li><b>How full it is:</b> its context, as Claude Code counts it, and when its prompt cache expires, from <a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a> if you use it.</li>
-        <li><b>What it costs:</b> the cost of the session as Claude Code computes it for <code>/cost</code>, and the total of the day.</li>
-        <li><b>What its subagents do:</b> each subagent it starts, with its task, its model and the tool it is running now. A click shows its transcript as it goes, up to the report it sends back.</li>
-      </ul>
-    </section>
-
-    <section class="part">
+    <section class="part" aria-labelledby="glance-title">
       <div class="text">
-        <h2>Four terminals, side by side</h2>
+        <h2 id="glance-title">Every session at a glance</h2>
+        <p>Forchetta listens to the hooks of Claude Code, so it knows what each session does the moment it does it. Sessions you start anywhere show up by themselves: in the Terminal, in iTerm, in an editor. Each box tells you what it is doing, what it was about, how full its context is, what it costs, and what its subagents are up to.</p>
+      </div>
+
+      <div class="demo-bar"><strong>Forchetta</strong><span id="counts">6 sessions</span></div>
+      <div class="grid" id="grid">
+        <article class="box" id="b0" data-state="working" data-tmux>
+          <div class="aura"></div>
+          <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <header><h3>shop-api</h3><span class="state">working</span></header>
+          <p class="action"><span aria-hidden="true">✎</span><span class="text">Edit src/routes/orders.ts</span></p>
+          <p class="summary">Adding retries to the order client, then the tests.</p>
+          <div class="ask"></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.42)"></div></div><span class="pct">42% · 420k</span></div>
+          <div class="meta"><span>≈ $1.84</span><span>cache 54 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+        </article>
+        <article class="box" id="b1" data-state="working" data-tmux>
+          <div class="aura"></div>
+          <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <header><h3>blog</h3><span class="state">working</span></header>
+          <p class="action"><span aria-hidden="true">›_</span><span class="text">Bash npm run lint</span></p>
+          <p class="summary">Moving the posts to the new layout.</p>
+          <div class="ask"><code>rm -rf dist &amp;&amp; npm run build</code><div><button type="button" class="allow" data-answer="allow">Allow</button><button type="button" data-answer="deny">Deny</button><span class="hint">answer it here</span></div></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.18)"></div></div><span class="pct">18% · 180k</span></div>
+          <div class="meta"><span>≈ $0.62</span><span>cache 58 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+        </article>
+        <article class="box" id="b2" data-state="idle" data-tmux>
+          <div class="aura"></div>
+          <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <header><h3>docs</h3><span class="state">idle</span></header>
+          <p class="action"><span class="text">turn finished</span></p>
+          <p class="summary">Rewrote the install guide and checked every link.</p>
+          <div class="ask"></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.31)"></div></div><span class="pct">31% · 310k</span></div>
+          <div class="meta"><span>≈ $0.97</span><span>cache 41 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+        </article>
+        <article class="box" id="b3" data-state="compacting" data-tmux>
+          <div class="aura"></div>
+          <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <header><h3>data-pipeline</h3><span class="state">compacting</span></header>
+          <p class="action"><span class="text">compacting, as you asked</span></p>
+          <p class="summary">Migrating the jobs to the new schema.</p>
+          <div class="ask"></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.86)"></div></div><span class="pct">86% · 860k</span></div>
+          <div class="meta"><span>≈ $4.10</span><span>cache 59 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+        </article>
+        <article class="box" id="b4" data-state="waiting" data-tmux>
+          <div class="aura"></div>
+          <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <header><h3>auth</h3><span class="state">waiting</span></header>
+          <p class="action"><span class="text">Question: OAuth or API keys for internal clients?</span></p>
+          <p class="summary">Designing the login for the internal tools.</p>
+          <div class="ask"></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.15)"></div></div><span class="pct">15% · 150k</span></div>
+          <div class="meta"><span>≈ $0.40</span><span>cache 55 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+        </article>
+        <article class="box" id="b5" data-state="working">
+          <div class="aura"></div>
+          <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <header><h3>infra</h3><span class="state">working</span></header>
+          <p class="action"><span aria-hidden="true">›_</span><span class="text">Bash terraform plan</span></p>
+          <p class="summary">Checking the staging changes before the deploy.</p>
+          <div class="ask"></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.23)"></div></div><span class="pct">23% · 230k</span></div>
+          <div class="meta"><span>≈ $0.75</span><span>cache 57 min</span><span class="end"><span class="tag">read only</span></span></div>
+        </article>
+      </div>
+      <p class="demo-note">A replay of the app's grid, with made-up sessions. Answer blog's permission when it asks, or hover a box for <code>compact</code> and <code>clear</code>. infra was started with plain <code>claude</code>: Forchetta shows it, but can't type into it.</p>
+    </section>
+
+    <section class="part" aria-labelledby="terms-title">
+      <div class="text">
+        <h2 id="terms-title">Four terminals, side by side</h2>
         <p>Click a box and its terminal opens next to the others, a real one you can type in. Sessions started with <code>forchetta run claude</code>, or from the app, live in Forchetta's own tmux: closing a pane, or the whole app, never ends them.</p>
       </div>
       <figure class="shot">
-        <img src="img/workspace.png" width="1400" height="786" alt="The Forchetta window: a column of sessions on the left, three terminals open side by side, one session waiting for a permission.">
+        <img src="img/workspace.png" width="1400" height="786" loading="lazy" alt="The Forchetta window: a column of sessions on the left, three terminals open side by side, one session waiting for a permission.">
         <figcaption>Three sessions open, the others in the column on the left. The one waiting for a permission can be answered from its box.</figcaption>
       </figure>
     </section>
 
-    <section class="part">
+    <section class="part" aria-labelledby="act-title">
       <div class="text">
-      <h2>Act without switching windows</h2>
-      <ul class="list">
-        <li><b>Answer permission prompts</b> from the box: allow once, deny, or pick one of the lasting rules Claude Code offers. The terminal shows the same prompt, and whichever answers first wins.</li>
-        <li><b>Send <code>/btw</code>, <code>/compact</code> and <code>/clear</code></b> to one session, or to several at once. Forchetta types a command only when it is safe: the session is idle, nobody is typing, the prompt is empty.</li>
-        <li><b>Ask about what you select:</b> select text in a terminal and a small menu asks that session about it, puts it in its prompt, or sends it to another session. Quick prompts you write once go with one click.</li>
-        <li><b>Start a new session</b> in any folder, with a first prompt, a model, a permission mode, or a git worktree of its own.</li>
-        <li><b>Name your sessions,</b> group them and give them roles, and see them as an org chart.</li>
-        <li><b>Search earlier sessions</b> of a project for what was asked, decided or changed.</li>
-      </ul>
+        <h2 id="act-title">Act without switching windows</h2>
+        <ul class="list">
+          <li><b>Answer permission prompts</b> from the box: allow once, deny, or pick one of the lasting rules Claude Code offers. The terminal shows the same prompt, and whichever answers first wins.</li>
+          <li><b>Send <code>/btw</code>, <code>/compact</code> and <code>/clear</code></b> to one session, or to several at once. Forchetta types a command only when it is safe: the session is idle, nobody is typing, the prompt is empty.</li>
+          <li><b>Ask about what you select</b> in a terminal: that session explains it, or it goes to another session.</li>
+          <li><b>Start a new session</b> in any folder, with a first prompt, a model, a permission mode, or a git worktree of its own.</li>
+          <li><b>Name your sessions,</b> group them, give them roles, and see them as an org chart. Search earlier sessions of a project for what was asked, decided or changed.</li>
+        </ul>
       </div>
       <div class="shots">
         <figure>
@@ -534,34 +810,25 @@
       </div>
     </section>
 
-    <section class="part" id="teams">
+    <section class="part" id="teams" aria-labelledby="teams-title">
       <div class="text">
-        <h2>Teams of agents that work together</h2>
+        <h2 id="teams-title">Teams of agents that work together</h2>
         <p>Start a team from one panel: a lead, which is a Claude session or you, and up to six members, each a Claude Code session with its own role. The lead splits the goal into numbered requests, and each member gets its own as a new prompt as soon as it is free.</p>
         <ul class="list">
-          <li><b>⇄ answers or → executes:</b> for each member, choose whether its final message goes back to the lead or it just does the work. Change it later with one click.</li>
           <li><b>Real tools, not copy and paste:</b> the lead sends requests and waits for the answers through a small MCP server of Forchetta; a member that is stuck asks the lead a question.</li>
-          <li><b>A worktree each:</b> every member can work on a branch of its own, and the lead merges the work when it is good.</li>
-          <li><b>One thread for it all:</b> every request, answer and question in order, and a field to write to the lead or to any member yourself.</li>
-          <li><b>Templates:</b> start from developer + reviewer, a feature squad or research + writing, or from a team you saved.</li>
+          <li><b>⇄ answers or → executes:</b> for each member, choose whether its final message goes back to the lead or it just does the work.</li>
+          <li><b>A worktree each, if you like:</b> every member can work on a branch of its own, and the lead merges the work when it is good.</li>
+          <li><b>Templates:</b> developer + reviewer, a feature squad, research + writing, or a team you saved.</li>
         </ul>
       </div>
       <figure class="shot">
-        <video src="img/demo.mp4" poster="img/demo-poster.jpg" width="1600" height="950" autoplay muted loop playsinline preload="metadata" aria-label="A team of agents in Forchetta: a team is created from a template, its four terminals open, the lead gets a goal, gives work to developer, then to reviewer and tester, collects their answers and reports back."></video>
+        <video src="img/demo.mp4" poster="img/demo-poster.jpg" width="1600" height="950" muted loop playsinline preload="none" aria-label="A team of agents in Forchetta: a team is created from a template, its four terminals open, the lead gets a goal, gives work to developer, then to reviewer and tester, collects their answers and reports back."></video>
         <figcaption>A team at work, from the template to the answer for you. Recorded in the repository's simulation: the app, the daemon and the queue are real, the sessions are scripted stand-ins for Claude Code.</figcaption>
-      </figure>
-      <figure class="shot">
-        <img src="img/org-chart.png" width="2400" height="1597" loading="lazy" alt="The org chart: the team checkout, its lead above and its three members below, each with the request it works on; three other sessions below.">
-        <figcaption>The team checkout at work: the lead waits for the answers it needs, each member shows the request it is working on.</figcaption>
-      </figure>
-      <figure class="shot">
-        <img src="img/team.png" width="2400" height="1418" loading="lazy" alt="The panel of the team checkout: the thread of requests, answers and a question between the lead and its members, then the field to write a new request.">
-        <figcaption>The thread of the team: what the lead asked, what came back, a question of the reviewer.</figcaption>
       </figure>
     </section>
 
-    <section class="part text">
-      <h2>It tells you when you're needed</h2>
+    <section class="part text" aria-labelledby="needed-title">
+      <h2 id="needed-title">It tells you when you're needed</h2>
       <ul class="list">
         <li>A notification and a badge on the Dock when a session waits for you, seems stuck, or stops on an error.</li>
         <li>A warning when two sessions write to the same file, or to the same repository.</li>
@@ -570,8 +837,8 @@
       </ul>
     </section>
 
-    <section class="part text" id="compare">
-      <h2>How it compares</h2>
+    <section class="part text" id="compare" aria-labelledby="compare-title">
+      <h2 id="compare-title">How it compares</h2>
       <p>Claude Code has its own ways to run several sessions, and there are good tools built around it. Forchetta is made for one way of working: several Claude Code sessions in your terminals, on one Mac, that you want to watch and coordinate.</p>
       <ul class="list">
         <li><b>Agent View</b> (<code>claude agents</code>) is Anthropic's full-screen list of your background sessions, in the terminal. Forchetta is a window that stays open next to your work, with a live box for each session and up to four terminals side by side.</li>
@@ -583,41 +850,40 @@
       <p>They don't rule each other out. Sessions started in any terminal show up in Forchetta, read only unless you started them with <code>forchetta run claude</code>.</p>
     </section>
 
-    <section class="part text">
-      <h2>It stays on your Mac</h2>
+    <section class="part text" aria-labelledby="mac-title">
+      <h2 id="mac-title">It stays on your Mac</h2>
       <p>The hooks talk to a small daemon that listens on <code>127.0.0.1</code> only. Your sessions are not sent anywhere. The one network call Forchetta can make is an optional one-line summary from the Claude API, off unless you turn it on.</p>
       <p>Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change, asks, and keeps a backup. Your other hooks stay exactly as they are, and <code>forchetta hooks uninstall</code> takes its own away.</p>
     </section>
 
-    <section class="part text" id="manual">
-      <h2>The manual</h2>
-      <p>Everything Forchetta does, step by step: the window and its states, the terminals, the commands and when they go, the permissions, new sessions, the teams of agents, the command line, the settings and what to do when something looks wrong.</p>
-      <div class="actions">
-        <a class="button secondary" href="manual.html">Read the manual</a>
-        <span class="fine"><a href="manual.html#teams">Teams of agents</a> · <a href="manual.html#cli">Command line</a> · <a href="manual.html#config">Configuration</a> · <a href="manual.html#trouble">Troubleshooting</a></span>
-      </div>
-    </section>
-
-    <section class="part text" id="install">
-      <h2>Install</h2>
+    <section class="part text" id="install" aria-labelledby="install-title">
+      <h2 id="install-title">Install</h2>
       <p>With <a href="https://brew.sh">Homebrew</a>, on macOS 12 or later. No clone, no Xcode, no Apple account.</p>
       <ol class="steps">
         <li>
-          <p>Install Forchetta. Homebrew brings Node.js and tmux with it:</p>
-          <pre>brew install alessiodonato/tap/forchetta</pre>
+          <p>Install Forchetta. Homebrew brings Node.js and tmux with it.</p>
+          <button class="copy" type="button" data-copy="brew install alessiodonato/tap/forchetta" aria-label="Copy: brew install alessiodonato/tap/forchetta"><span class="cmd"><span class="prompt">$ </span>brew install alessiodonato/tap/forchetta</span><span class="copy-label" aria-hidden="true">Copy</span></button>
         </li>
         <li>
-          <p>Build the app on your Mac and add its hooks to Claude Code. You see every change to your settings first:</p>
-          <pre>forchetta setup</pre>
+          <p>Build the app on your Mac and add its hooks to Claude Code. You see every change to your settings first.</p>
+          <button class="copy" type="button" data-copy="forchetta setup" aria-label="Copy: forchetta setup"><span class="cmd"><span class="prompt">$ </span>forchetta setup</span><span class="copy-label" aria-hidden="true">Copy</span></button>
           <small>Built on your Mac, the app opens with no warning from macOS. Run it again after <code>brew upgrade forchetta</code>.</small>
         </li>
         <li>
           <p>Open the app. Sessions already running appear on their own.</p>
-          <pre>open ~/Applications/Forchetta.app</pre>
+          <button class="copy" type="button" data-copy="open ~/Applications/Forchetta.app" aria-label="Copy: open ~/Applications/Forchetta.app"><span class="cmd"><span class="prompt">$ </span>open ~/Applications/Forchetta.app</span><span class="copy-label" aria-hidden="true">Copy</span></button>
           <small>To open a session's terminal from the app, start it with <code>forchetta run claude</code>, or with New session in the app.</small>
         </li>
       </ol>
-      <p>Forchetta works with <a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a> too: with it, every box shows when its prompt cache expires, the top shows the cost of the day, you can search earlier sessions, and a <code>/clear</code> from the box leaves a note for the new session. The <a href="manual.html">manual</a> explains the rest. The <a href="https://github.com/alessiodonato/forchetta#readme">README</a> is in English and in Italian, and <a href="https://github.com/alessiodonato/forchetta/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> explains how to build Forchetta from source.</p>
+      <p>Forchetta works with <a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a> too: with it, every box shows when its prompt cache expires, the top shows the cost of the day, you can search earlier sessions, and a <code>/clear</code> from the box leaves a note for the new session.</p>
+      <p>The <a href="manual.html">manual</a> explains everything step by step. The <a href="https://github.com/alessiodonato/forchetta#readme">README</a> is in English and in Italian, and <a href="https://github.com/alessiodonato/forchetta/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> explains how to build Forchetta from source.</p>
+      <div class="manual-links">
+        <a href="manual.html#guard">The guard</a>
+        <a href="manual.html#teams">Teams of agents</a>
+        <a href="manual.html#cli">Command line</a>
+        <a href="manual.html#config">Configuration</a>
+        <a href="manual.html#trouble">Troubleshooting</a>
+      </div>
     </section>
   </div>
 </main>
@@ -625,32 +891,457 @@
 <footer class="end">
   <div class="wrap">
     <span>Forchetta is Italian for fork. Apache 2.0.</span>
-    <span><a href="https://github.com/alessiodonato/forchetta">Source on GitHub</a>&nbsp;&nbsp;&nbsp;<a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a></span>
+    <span class="links"><a href="https://github.com/alessiodonato/forchetta">Source on GitHub</a><a href="manual.html">Manual</a><a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a></span>
   </div>
 </footer>
 
 <script>
-  // The replay of the grid: a script of state changes, played in a loop while the page can be seen. With "reduce
-  // motion" the grid stays as the page loads it.
-  (function () {
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // The demos, of the guard and of a team: with "reduce motion" they do not play by themselves, they wait for their controls.
-    document.querySelectorAll('video').forEach(function (video) {
-      if (!reduce) return;
-      video.removeAttribute('autoplay');
-      video.pause();
-      video.controls = true;
-    });
-    if (reduce) {
-      var b1 = document.getElementById('b1');
-      b1.dataset.state = 'waiting';
-      b1.setAttribute('data-ask', '');
-      b1.querySelector('.state').textContent = 'waiting';
-      b1.querySelector('.action .text').textContent = 'Permission: Bash rm -rf dist && npm run build';
-      counts();
-      return;
-    }
+(function () {
+  'use strict';
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // ———— The bar at the top: its line shows once the page has moved. ————
+  var top = document.getElementById('top');
+  function onScroll() { top.classList.toggle('scrolled', window.scrollY > 8); }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // ———— Copy buttons. ————
+  document.querySelectorAll('[data-copy]').forEach(function (button) {
+    var label = button.querySelector('.copy-label');
+    var timer;
+    button.addEventListener('click', function () {
+      var text = button.getAttribute('data-copy');
+      var done = function () {
+        button.classList.add('copied');
+        label.textContent = 'Copied';
+        clearTimeout(timer);
+        timer = setTimeout(function () { button.classList.remove('copied'); label.textContent = 'Copy'; }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () {});
+    });
+  });
+
+  // ———— The team video plays only while it can be seen, and not with "reduce motion". ————
+  document.querySelectorAll('video').forEach(function (video) {
+    if (reduce) { video.controls = true; return; }
+    if (!('IntersectionObserver' in window)) { video.play().catch(function () {}); return; }
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) video.play().catch(function () {});
+        else video.pause();
+      });
+    }, { threshold: 0.25 }).observe(video);
+  });
+
+  // ———— The guard, played: two sessions, one file. ————
+  // The lines of src/api.ts: [text, who wrote it ('a' retries, 'b' rate-limit), a bug to underline].
+  var FILES = {
+    start: [
+      ["import { http } from './http';"],
+      [''],
+      ['export function getOrder(id) {'],
+      ['  return http.order(id);'],
+      ['}'],
+      [''],
+      ['export function listOrders(client) {'],
+      ['  return http.orders(client);'],
+      ['}'],
+    ],
+    a1: [
+      ["import { http } from './http';"],
+      ["import { retry } from './retry';", 'a'],
+      [''],
+      ['export function getOrder(id) {'],
+      ['  return retry(() => http.order(id));', 'a'],
+      ['}'],
+      [''],
+      ['export function listOrders(client) {'],
+      ['  return http.orders(client);'],
+      ['}'],
+    ],
+    a2: [
+      ["import { http } from './http';"],
+      ["import { retry } from './retry';", 'a'],
+      [''],
+      ['export function getOrder(id) {'],
+      ['  return retry(() => http.order(id));', 'a'],
+      ['}'],
+      [''],
+      ['export function listOrders(client) {'],
+      ['  return retry(() => http.orders(client));', 'a'],
+      ['}'],
+    ],
+    both: [
+      ["import { http } from './http';"],
+      ["import { retry } from './retry';", 'a'],
+      ["import { limit } from './limit';", 'b'],
+      [''],
+      ['const perClient = limit({ perMinute: 100 });', 'b'],
+      ['', 'b'],
+      ['export function getOrder(id) {'],
+      ['  return retry(() => http.order(id));', 'a'],
+      ['}'],
+      [''],
+      ['export function listOrders(client) {'],
+      ['  await perClient.take(client);', 'b'],
+      ['  return retry(() => http.orders(client));', 'a'],
+      ['}'],
+    ],
+    b1: [
+      ["import { http } from './http';"],
+      ["import { retry } from './retry';", 'a'],
+      ["import { limit } from './limit';", 'b'],
+      [''],
+      ['const perClient = limit({ perMinute: 100 });', 'b'],
+      ['', 'b'],
+      ['export function getOrder(id) {'],
+      ['  return retry(() => http.order(id));', 'a'],
+      ['}'],
+      [''],
+      ['export function listOrders(client) {'],
+      ['  await perClient.take(client);', 'b'],
+      ['  return http.orders(client);'],
+      ['}'],
+    ],
+    tangled: [
+      ["import { http } from './http';"],
+      ["import { retry } from './retry';", 'a'],
+      ["import { limit } from './limit';", 'b'],
+      [''],
+      ['const perClient = limit({ perMinute: 100 });', 'b'],
+      ['', 'b'],
+      ['export function getOrder(id) {'],
+      ['  return retry(() => http.order(id));', 'a'],
+      ['}'],
+      [''],
+      ['export function listOrders(client) {'],
+      ['  return retry(async () => {', 'a'],
+      ['    await perClient.take(client);', 'b', true],
+      ['    return http.orders(client);', 'a'],
+      ['  });', 'a'],
+      ['}'],
+    ],
+  };
+
+  var DENY = 'PreToolUse:Edit hook error: Forchetta: "retries", another Claude Code session on this Mac, is changing src/api.ts in the turn it is working on now. Don\'t edit this file yet and don\'t try again now: work on something else first, or end your turn saying that you are waiting for src/api.ts. You will be told when the file is free.';
+  var STALE = 'Error: File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.';
+
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  // A little color for the code: keywords, strings, numbers.
+  function highlight(line) {
+    var out = '';
+    var re = /('[^']*'|`[^`]*`)|\b(import|from|export|async|function|return|await|const)\b|\b(\d+)\b/g;
+    var last = 0, m;
+    while ((m = re.exec(line))) {
+      out += esc(line.slice(last, m.index));
+      var cls = m[1] ? 's' : m[2] ? 'k' : 'n';
+      out += '<i class="' + cls + '" style="font-style:normal">' + esc(m[0]) + '</i>';
+      last = re.lastIndex;
+    }
+    return out + esc(line.slice(last));
+  }
+
+  var play = document.getElementById('guard');
+  var fileEl = document.getElementById('file');
+  var codeEl = fileEl.querySelector('.code');
+  var lockEl = fileEl.querySelector('.lock');
+  var narrationEl = document.getElementById('narration');
+  var nextButton = document.getElementById('next');
+  var progressEl = play.querySelector('.progress i');
+  var switchButtons = play.querySelectorAll('.switch button');
+  var shown = FILES.start;
+
+  function showFile(name) {
+    var lines = FILES[name];
+    var before = shown.map(function (l) { return l[0] + '|' + (l[1] || ''); });
+    codeEl.innerHTML = '';
+    lines.forEach(function (l) {
+      var div = document.createElement('div');
+      var indent = l[0].match(/^\s*/)[0];
+      div.innerHTML = indent + '<span>' + (highlight(l[0].slice(indent.length)) || ' ') + '</span>';
+      if (l[1]) div.setAttribute('data-by', l[1]);
+      if (l[2]) div.className = 'bug';
+      if (shown !== lines && before.indexOf(l[0] + '|' + (l[1] || '')) === -1 && l[0] !== '') div.classList.add('fresh');
+      codeEl.appendChild(div);
+    });
+    shown = lines;
+    // The new lines glow, then fade to normal.
+    setTimeout(function () {
+      codeEl.querySelectorAll('.fresh').forEach(function (div) { div.classList.remove('fresh'); });
+    }, 80);
+  }
+
+  function lock(kind, text) {
+    fileEl.setAttribute('data-lock', kind);
+    lockEl.textContent = text;
+  }
+
+  function knock() {
+    fileEl.classList.remove('knock');
+    void fileEl.offsetWidth;
+    fileEl.classList.add('knock');
+  }
+
+  function narrate(text, tone) {
+    narrationEl.textContent = text;
+    if (tone) narrationEl.setAttribute('data-tone', tone);
+    else narrationEl.removeAttribute('data-tone');
+  }
+
+  // A pane: its state, its guard line, its terminal.
+  function Pane(id) {
+    var el = document.getElementById(id);
+    var lines = el.querySelector('.term-lines');
+    var guardLine = el.querySelector('.guard-line');
+    var stateEl = el.querySelector('.pane-state');
+    var spin = null, pending = null;
+
+    function add(node) { lines.appendChild(node); return node; }
+    function p(cls, html) { var n = document.createElement('p'); n.className = cls; n.innerHTML = html; return add(n); }
+
+    return {
+      reset: function () {
+        lines.innerHTML = '';
+        this.state('idle');
+        this.guard(null);
+        this.stopSpin();
+        pending = null;
+      },
+      state: function (s) { el.setAttribute('data-state', s); stateEl.textContent = s; },
+      guard: function (text, kind) {
+        if (!text) { guardLine.innerHTML = ''; guardLine.removeAttribute('data-kind'); el.removeAttribute('data-held'); return; }
+        guardLine.innerHTML = '<span class="mark">‖</span>' + esc(text);
+        guardLine.setAttribute('data-kind', kind || 'holds');
+        if (kind === 'held') el.setAttribute('data-held', '');
+        else el.removeAttribute('data-held');
+      },
+      prompt: function (text, fromForchetta) { p('t-prompt' + (fromForchetta ? ' from-forchetta' : ''), esc(text)); },
+      say: function (text) { p('t-say', '<span class="dot">●</span><span>' + esc(text) + '</span>'); },
+      tool: function (name, arg, result, status) {
+        var n = p('t-tool', '<span class="dot">●</span><span><b>' + esc(name) + '</b>(' + esc(arg) + ')' + (result ? '<span class="t-result">' + esc(result) + '</span>' : '') + '</span>');
+        n.setAttribute('data-status', status || (result ? 'ok' : 'run'));
+        return n;
+      },
+      // A command that takes a while: the spinner of Claude Code under it, counting.
+      run: function (name, arg) {
+        pending = this.tool(name, arg, '', 'run');
+        var seconds = 0;
+        var s = p('t-spin', '✻ Running… (0s · esc to interrupt)');
+        this.stopSpin();
+        spin = { node: s, timer: setInterval(function () { seconds += 1; s.textContent = '✻ Running… (' + seconds + 's · esc to interrupt)'; }, 1000) };
+      },
+      finish: function (result, ok) {
+        this.stopSpin();
+        if (!pending) return;
+        pending.setAttribute('data-status', ok === false ? 'error' : 'ok');
+        var r = document.createElement('span');
+        r.className = 't-result';
+        r.textContent = result;
+        pending.lastChild.appendChild(r);
+        pending = null;
+      },
+      stopSpin: function () {
+        if (!spin) return;
+        clearInterval(spin.timer);
+        if (spin.node.parentNode) spin.node.parentNode.removeChild(spin.node);
+        spin = null;
+      },
+    };
+  }
+
+  var A = Pane('pane-a');
+  var B = Pane('pane-b');
+
+  var PROMPT_A = 'Add retries to the calls in src/api.ts: 3 tries, with a growing pause.';
+  var PROMPT_B = 'Add a rate limit to src/api.ts: 100 requests a minute for each client.';
+
+  // With the guard: rate-limit is stopped, waits, and goes on by itself when retries ends its turn.
+  var WITH = [
+    [0, function () { narrate('Two Claude Code sessions in the same folder, each asked to change src/api.ts.'); A.prompt(PROMPT_A); A.state('working'); }],
+    [500, function () { B.prompt(PROMPT_B); B.state('working'); }],
+    [1100, function () { A.tool('Read', 'src/api.ts', 'Read 9 lines'); }],
+    [1600, function () { B.tool('Read', 'src/api.ts', 'Read 9 lines'); }],
+    [2300, function () {
+      A.tool('Edit', 'src/api.ts', 'Updated src/api.ts with 2 additions and 1 removal');
+      showFile('a1');
+      lock('held', '‖ held by retries');
+      A.guard('holds src/api.ts');
+      narrate('retries changes src/api.ts. Until its turn ends, the file is held.');
+    }],
+    [3700, function () {
+      B.tool('Edit', 'src/api.ts', DENY, 'error');
+      knock();
+      B.guard('src/api.ts held by retries', 'held');
+      A.guard('holds src/api.ts · rate-limit waits');
+      lock('held', '‖ held by retries');
+      narrate('rate-limit tries to edit the same file. The guard stops the edit and tells Claude why.');
+    }],
+    [5300, function () {
+      B.say("src/api.ts is being changed by retries right now, so I won't touch it yet. I'll add the rate limit as soon as it is free.");
+      B.state('idle');
+      narrate('rate-limit ends its turn and waits. retries goes on, undisturbed.');
+    }],
+    [6000, function () { A.tool('Edit', 'src/api.ts', 'Updated src/api.ts with 1 addition and 1 removal'); showFile('a2'); }],
+    [6700, function () { A.run('Bash', 'npm test -- api'); }],
+    [9200, function () { A.finish('128 passed'); }],
+    [9700, function () {
+      A.say('Done: getOrder and listOrders try 3 times, with a growing pause. 128 tests pass.');
+      A.state('idle');
+      A.guard(null);
+      B.guard(null);
+      lock('free', 'free');
+      narrate('retries ends its turn. src/api.ts is free.');
+    }],
+    [10700, function () {
+      B.prompt('Forchetta: src/api.ts is free now ("retries" ended its turn). You can go on.', true);
+      B.state('working');
+      narrate('Forchetta tells rate-limit, and it goes on by itself.');
+    }],
+    [11400, function () { B.tool('Read', 'src/api.ts', 'Read 10 lines'); }],
+    [12100, function () { B.tool('Edit', 'src/api.ts', 'Updated src/api.ts with 4 additions'); showFile('both'); }],
+    [12800, function () { B.run('Bash', 'npm test -- api'); }],
+    [15000, function () { B.finish('131 passed'); }],
+    [15500, function () {
+      B.say('Rate limit added: 100 requests a minute for each client, checked before the retries. 131 tests pass.');
+      B.state('idle');
+      end('on');
+    }],
+  ];
+
+  // Without the guard: each edit lands on the other one's half-done change.
+  var WITHOUT = [
+    [0, function () { narrate('The same two sessions, the same requests, without the guard.'); lock('off', 'no guard'); A.prompt(PROMPT_A); A.state('working'); }],
+    [500, function () { B.prompt(PROMPT_B); B.state('working'); }],
+    [1100, function () { A.tool('Read', 'src/api.ts', 'Read 9 lines'); }],
+    [1600, function () { B.tool('Read', 'src/api.ts', 'Read 9 lines'); }],
+    [2300, function () {
+      A.tool('Edit', 'src/api.ts', 'Updated src/api.ts with 2 additions and 1 removal');
+      showFile('a1');
+      narrate('retries changes src/api.ts. Nothing holds the file.');
+    }],
+    [3700, function () {
+      B.tool('Edit', 'src/api.ts', STALE, 'error');
+      narrate('rate-limit read the file before that change, so its edit fails. It reads the file again.');
+    }],
+    [4500, function () { B.tool('Read', 'src/api.ts', 'Read 10 lines'); }],
+    [5300, function () {
+      B.tool('Edit', 'src/api.ts', 'Updated src/api.ts with 4 additions');
+      showFile('b1');
+      narrate('Its limit goes in the middle of retries’ change, which isn’t done yet.');
+    }],
+    [6400, function () {
+      A.tool('Edit', 'src/api.ts', STALE, 'error');
+      narrate('Now retries finds the file changed under it.');
+    }],
+    [7200, function () { A.tool('Read', 'src/api.ts', 'Read 14 lines'); }],
+    [7900, function () { A.say("src/api.ts has changes I didn't make in listOrders. I'll put the retries around them."); }],
+    [8700, function () {
+      A.tool('Edit', 'src/api.ts', 'Updated src/api.ts with 4 additions and 2 removals');
+      showFile('tangled');
+      lock('broken', 'changed by both');
+      narrate('Each session built on the other’s half-done code: now every retry uses up the limit.', 'bad');
+    }],
+    [9400, function () { B.run('Bash', 'npm test -- api'); }],
+    [9800, function () { A.run('Bash', 'npm test -- api'); }],
+    [12000, function () { B.finish('1 failed, 130 passed: listOrders › a retry does not use up the limit', false); }],
+    [12400, function () { A.finish('1 failed, 130 passed: listOrders › a retry does not use up the limit', false); }],
+    [13100, function () {
+      B.say('A test fails in listOrders, and the retries around my limit aren’t mine. Let me look at what changed.');
+      A.say('A test fails in listOrders. Looking at the limit code that appeared there.');
+      end('off');
+    }],
+  ];
+
+  var timers = [];
+  var mode = 'on';
+  var started = false;
+
+  function stopAll() {
+    timers.forEach(clearTimeout);
+    timers = [];
+    A.stopSpin();
+    B.stopSpin();
+  }
+
+  function setMode(next) {
+    mode = next;
+    switchButtons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === mode)); });
+  }
+
+  function reset() {
+    stopAll();
+    A.reset();
+    B.reset();
+    shown = FILES.start;
+    codeEl.innerHTML = '';
+    showFile('start');
+    lock(mode === 'on' ? 'free' : 'off', mode === 'on' ? 'free' : 'no guard');
+    nextButton.hidden = true;
+    progressEl.style.transition = 'none';
+    progressEl.style.transform = 'scaleX(0)';
+  }
+
+  function start(next) {
+    if (next) setMode(next);
+    started = true;
+    reset();
+    var script = mode === 'on' ? WITH : WITHOUT;
+    var length = script[script.length - 1][0];
+    void progressEl.offsetWidth;
+    if (!reduce) {
+      progressEl.style.transition = 'transform ' + length + 'ms linear';
+      progressEl.style.transform = 'scaleX(1)';
+    }
+    script.forEach(function (step) { timers.push(setTimeout(step[1], step[0])); });
+  }
+
+  function end(which) {
+    progressEl.style.transition = 'opacity 400ms ease';
+    if (which === 'on') {
+      narrate('Both changes are in, one after the other, and the tests pass. Nobody had to step in.', 'good');
+      nextButton.textContent = 'Now try it without the guard';
+      nextButton.onclick = function () { start('off'); };
+    } else {
+      nextButton.textContent = 'Turn the guard back on';
+      nextButton.onclick = function () { start('on'); };
+    }
+    nextButton.hidden = false;
+  }
+
+  // With "reduce motion", or for a still: the end of the run with the guard, all at once.
+  function finalState() {
+    started = true;
+    setMode('on');
+    reset();
+    WITH.forEach(function (step) { step[1](); });
+    A.stopSpin();
+    B.stopSpin();
+    progressEl.style.transform = 'scaleX(1)';
+  }
+
+  switchButtons.forEach(function (b) {
+    b.addEventListener('click', function () { start(b.getAttribute('data-mode')); });
+  });
+  document.getElementById('replay').addEventListener('click', function () { start(); });
+
+  showFile('start');
+  if (reduce) {
+    finalState();
+  } else if ('IntersectionObserver' in window) {
+    // It starts when you get to it, once; then it's yours to replay.
+    var seen = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; }) && !started) { start('on'); seen.disconnect(); }
+    }, { threshold: 0.35 });
+    seen.observe(play.querySelector('.window'));
+  } else {
+    start('on');
+  }
+  window.forchettaPlay = { start: start, finalState: finalState };
+
+  // ———— The grid of the app: a loop of state changes, and a permission you can answer. ————
+  (function grid() {
     function box(i) { return document.getElementById('b' + i); }
 
     function set(i, change) {
@@ -673,10 +1364,10 @@
         text.textContent = change.action;
         action.appendChild(text);
       }
-      if (change.summary) el.querySelector('.summary').textContent = change.summary;
+      if (change.summary !== undefined) el.querySelector('.summary').textContent = change.summary;
       if (change.ctx !== undefined) {
         el.querySelector('.fill').style.transform = 'scaleX(' + change.ctx / 100 + ')';
-        el.querySelector('.pct').textContent = '≈' + change.ctx + '% · ' + change.ctx * 10 + 'k';
+        el.querySelector('.pct').textContent = change.ctx + '% · ' + change.ctx * 10 + 'k';
       }
       if (change.ask !== undefined) {
         if (change.ask) el.setAttribute('data-ask', '');
@@ -705,23 +1396,66 @@
       document.getElementById('counts').innerHTML = '6 sessions' + (waiting ? ' <span class="waiting">· ' + waiting + ' waiting for you</span>' : '');
     }
 
-    // One loop of 18 seconds: blog asks for a permission and gets it, docs takes a turn, data-pipeline compacts,
-    // infra hits a rate limit and goes on, shop-api works through its task.
+    // What you did to a box wins over the loop, for a while; a permission you answered, until the loop starts again.
+    var touched = {};
+    var answered = false;
+    function yours(i) { return touched[i] && Date.now() - touched[i] < 9000; }
+
+    // The permission of blog: answered by you, or by the loop if you leave it.
+    document.querySelectorAll('.ask button[data-answer]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var el = button.closest('.box');
+        var i = Number(el.id.slice(1));
+        if (!el.hasAttribute('data-ask')) return;
+        touched[i] = Date.now();
+        answered = true;
+        if (button.getAttribute('data-answer') === 'allow') {
+          set(i, { press: true });
+          setTimeout(function () { set(i, { state: 'working', action: 'Bash rm -rf dist && npm run build', icon: '›_', ask: false, summary: 'You allowed the build: it runs now.' }); }, 250);
+          setTimeout(function () { set(i, { state: 'idle', action: 'turn finished', icon: '', summary: 'Built the new layout: 41 pages, no broken links.', done: true }); }, 3200);
+        } else {
+          set(i, { state: 'idle', action: 'denied: Bash rm -rf dist && npm run build', icon: '', ask: false, summary: 'You said no: Claude stopped and waits for what you want instead.' });
+        }
+      });
+    });
+
+    // compact and clear, from the box: what the app sends to the session.
+    document.querySelectorAll('.cmds button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var el = button.closest('.box');
+        var i = Number(el.id.slice(1));
+        touched[i] = Date.now();
+        if (button.getAttribute('data-cmd') === 'compact') {
+          set(i, { state: 'compacting', action: 'compacting, as you asked', icon: '', ask: false });
+          setTimeout(function () { set(i, { state: 'idle', action: 'compacted', icon: '', ctx: 9, done: true }); }, 2600);
+        } else {
+          set(i, { state: 'idle', action: 'new session after /clear', icon: '', ask: false, summary: 'A clean context, in the same folder.', ctx: 0 });
+        }
+      });
+    });
+
+    if (reduce) {
+      set(1, { state: 'waiting', action: 'Permission: Bash rm -rf dist && npm run build', icon: '', ask: true });
+      return;
+    }
+
+    // One loop of 18 seconds: blog asks for a permission, docs takes a turn, data-pipeline compacts, infra hits a
+    // rate limit and goes on, shop-api works through its task.
     var script = [
       [0, 0, { action: 'Edit src/routes/orders.ts', icon: '✎' }],
       [1200, 1, { state: 'waiting', action: 'Permission: Bash rm -rf dist && npm run build', icon: '', ask: true }],
       [2000, 3, { ctx: 21 }],
       [3200, 0, { action: 'Bash npm test -- --run', icon: '›_' }],
       [3600, 3, { state: 'working', action: 'Read jobs/schema.sql', icon: '◎', summary: 'Migrating the jobs to the new schema.' }],
-      [4600, 1, { press: true }],
-      [5000, 1, { state: 'working', action: 'Bash rm -rf dist && npm run build', icon: '›_', ask: false }],
       [6200, 2, { state: 'working', action: 'Edit guide/install.md', icon: '✎', summary: 'Adding the upgrade notes to the guide.' }],
       [6800, 0, { action: 'Edit test/orders.test.ts', icon: '✎' }],
       [8200, 5, { state: 'error', action: 'error: rate_limit', icon: '', summary: 'API Error: 429, try again in a minute.', shake: true }],
-      [9400, 1, { state: 'idle', action: 'turn finished', icon: '', summary: 'Built the new layout: 41 pages, no broken links.', done: true }],
+      [9000, 1, { press: true, auto: true }],
+      [9400, 1, { state: 'working', action: 'Bash rm -rf dist && npm run build', icon: '›_', ask: false, auto: true }],
       [10400, 0, { action: 'Bash npm test -- --run', icon: '›_' }],
       [11600, 2, { state: 'idle', action: 'turn finished', icon: '', summary: 'Added the upgrade notes and checked every link.', done: true }],
       [12600, 5, { state: 'working', action: 'Bash terraform plan', icon: '›_', summary: 'Checking the staging changes before the deploy.' }],
+      [12800, 1, { state: 'idle', action: 'turn finished', icon: '', summary: 'Built the new layout: 41 pages, no broken links.', done: true, auto: true }],
       [13800, 0, { state: 'idle', action: 'turn finished', icon: '', summary: 'Retries added, 128 tests pass.', done: true }],
       [15400, 3, { state: 'compacting', action: 'compacting, as you asked', icon: '', ctx: 86 }],
       [16200, 1, { state: 'working', action: 'Bash npm run lint', icon: '›_', summary: 'Moving the posts to the new layout.' }],
@@ -729,29 +1463,36 @@
       [17400, 2, { state: 'idle' }],
     ];
     var LOOP = 18000;
-    var timers = [];
+    var loopTimers = [];
 
-    function play() {
-      stop();
+    function run() {
+      halt();
+      answered = false;
       script.forEach(function (step) {
-        timers.push(setTimeout(function () { set(step[1], step[2]); }, step[0]));
+        loopTimers.push(setTimeout(function () {
+          var i = step[1], change = step[2];
+          if (yours(i)) return;
+          // The loop answers the permission only if you didn't.
+          if (change.auto && answered) return;
+          set(i, change);
+        }, step[0]));
       });
-      timers.push(setTimeout(play, LOOP));
+      loopTimers.push(setTimeout(run, LOOP));
     }
 
-    function stop() {
-      timers.forEach(clearTimeout);
-      timers = [];
+    function halt() {
+      loopTimers.forEach(clearTimeout);
+      loopTimers = [];
     }
 
-    // Nothing plays while the page cannot be seen.
     document.addEventListener('visibilitychange', function () {
-      if (document.hidden) stop();
-      else play();
+      if (document.hidden) halt();
+      else run();
     });
     counts();
-    play();
+    run();
   })();
+})();
 </script>
 </body>
 </html>
