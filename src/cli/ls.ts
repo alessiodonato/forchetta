@@ -5,8 +5,9 @@ import { code } from './help.ts';
 import type { RunIO } from './run.ts';
 import { plain, type Style } from './style.ts';
 
-// `forchetta ls`: the sessions the daemon knows, one line each, with context and cache from arricurdAI. On a
-// terminal each state has its symbol and, as in the app, amber is what waits for you and red what went wrong.
+// `forchetta ls`: the sessions the daemon knows, one line each, with their context (from the status line of Claude
+// Code, or estimated by arricurdAI) and cache (from arricurdAI). On a terminal each state has its symbol and, as in
+// the app, amber is what waits for you and red what went wrong.
 
 export { activity, ago } from '../shared/present.ts';
 

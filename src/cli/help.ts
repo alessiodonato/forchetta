@@ -52,8 +52,9 @@ const COMMANDS: Record<string, CommandHelp> = {
     summary: 'List the Claude Code sessions and their state',
     usage: 'forchetta ls [--json]',
     about: [
-      'One line per session the daemon knows: state, what it does, context and prompt cache (from arricurdAI),',
-      'whether Forchetta can send it commands (tmux) or only show it (read only).',
+      'One line per session the daemon knows: state, what it does, context (from Claude Code, or estimated by',
+      'arricurdAI), prompt cache (from arricurdAI), whether Forchetta can send it commands (tmux) or only show it',
+      '(read only).',
     ],
     options: [{ name: '--json', text: 'The sessions as JSON, for scripts and jq (times in ms since 1970)' }],
     examples: ['forchetta ls', `forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'`],

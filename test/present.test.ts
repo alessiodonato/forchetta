@@ -26,6 +26,8 @@ describe('texts of the box', () => {
     expect(shortTokens(357_310)).toBe('357k');
     expect(shortTokens(1_240_000)).toBe('1.2M');
     expect(percentText({ tokens: 1, window: 1, percent: 36, lastCallAt: 0, at: 0 })).toBe('≈36%');
+    // From the status line it is Claude Code's own number, not an estimate.
+    expect(percentText({ tokens: 1, window: 1, percent: 36, source: 'statusline', at: 0 })).toBe('36%');
   });
 });
 

@@ -73,8 +73,11 @@ export function shortTokens(tokens: number): string {
   return String(tokens);
 }
 
-/** The share of the window, marked as an estimate: the window comes from a table, not from Claude Code. */
-export const percentText = (context: ContextInfo): string => `≈${context.percent}%`;
+/**
+ * The share of the window. From the status line it is Claude Code's own number; from arricurdAI it is marked as an
+ * estimate (≈), because the window comes from a table, not from Claude Code.
+ */
+export const percentText = (context: ContextInfo): string => `${context.source === 'statusline' ? '' : '≈'}${context.percent}%`;
 
 /** cache 42 min, cache 45 s (in steps of 5 s), cache expired. */
 export function cacheText(cache: CacheInfo, now: number): string {

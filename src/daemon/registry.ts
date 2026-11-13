@@ -23,6 +23,19 @@ export interface HookMeta {
   agentId?: string;
 }
 
+/** The context of a session as its status line gives it: Claude Code's own numbers. */
+export interface StatusContext {
+  tokens: number;
+  window: number;
+  percent: number;
+}
+
+/** What the status line of a session says. `context: null`: Claude Code has none yet (first call, /compact). */
+export interface StatusLine {
+  usd?: number;
+  context?: StatusContext | null;
+}
+
 export interface RegistryOptions {
   now?: () => number;
   /** Called after any change, with the agent that changed. */
@@ -235,7 +248,8 @@ export class Registry {
 
   /**
    * Context and cache from `arricurdai status`, matched by session id. A session it does not list keeps what it
-   * had: arricurdAI lists only the sessions of the last 24 hours.
+   * had: arricurdAI lists only the sessions of the last 24 hours. A context from the status line stays: it is
+   * Claude Code's own, where arricurdAI's window is an estimate.
    */
   applyArricurdai(sessions: ReadonlyMap<string, ArricurdaiSession>, windowOf: (model: string | undefined) => number): Agent[] {
     const now = this.now();
@@ -246,7 +260,10 @@ export class Registry {
       // The model of the last call, as arricurdAI read it: /model can change it during a session.
       const model = entry.model ?? agent.model;
       const window = windowOf(model);
-      const context = { tokens: entry.context, window, percent: Math.min(100, Math.round((entry.context / window) * 100)), lastCallAt: entry.lastCallAt, at: now };
+      const context =
+        agent.context?.source === 'statusline'
+          ? agent.context
+          : { tokens: entry.context, window, percent: Math.min(100, Math.round((entry.context / window) * 100)), lastCallAt: entry.lastCallAt, at: now };
       const cache = { expiresAt: entry.cacheExpiresAt, live: entry.cacheLive, guardWillStop: entry.guardWillStop };
       const same =
         agent.context?.tokens === context.tokens &&
@@ -265,17 +282,36 @@ export class Registry {
     return changed;
   }
 
-  /** The cost of a session, from its status line. A session it does not know stays unknown. */
-  usage(sessionId: string, meta: HookMeta, usd: number): Agent | undefined {
+  /**
+   * Cost and context of a session, from its status line. Its context takes the place of the estimate of
+   * arricurdAI. When Claude Code says it has none yet (after /compact, until the next call) the box empties
+   * its own, and arricurdAI may fill it again. A session it does not know stays unknown.
+   */
+  status(sessionId: string, meta: HookMeta, status: StatusLine): Agent | undefined {
     const live = this.live();
     const agent =
       (meta.agentId ? live.find((candidate) => candidate.id === meta.agentId) : undefined) ??
       live.find((candidate) => candidate.sessionId === sessionId) ??
       (meta.pid ? live.find((candidate) => candidate.pid === meta.pid) : undefined);
     if (!agent) return undefined;
-    if (agent.usage?.usd === usd) return agent;
-    agent.usage = { usd, at: this.now() };
-    this.changed(agent);
+    // A late status line of the conversation before a /clear: its numbers are not those of this one.
+    if (sessionId !== agent.sessionId && agent.pastSessionIds.includes(sessionId)) return agent;
+    const now = this.now();
+    let changed = false;
+    if (status.usd !== undefined && agent.usage?.usd !== status.usd) {
+      agent.usage = { usd: status.usd, at: now };
+      changed = true;
+    }
+    const context = status.context;
+    const old = agent.context;
+    if (context && (old?.source !== 'statusline' || old.tokens !== context.tokens || old.window !== context.window || old.percent !== context.percent)) {
+      agent.context = { ...context, source: 'statusline', at: now };
+      changed = true;
+    } else if (context === null && old?.source === 'statusline') {
+      agent.context = undefined;
+      changed = true;
+    }
+    if (changed) this.changed(agent);
     return agent;
   }
 

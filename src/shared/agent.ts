@@ -69,13 +69,18 @@ export interface Action {
   at: number;
 }
 
-/** From `arricurdai status`: the tokens the next prompt sends again, and the share of the window they fill. */
+/**
+ * The tokens the next prompt sends again, and the share of the window they fill. From the status line of Claude
+ * Code when it gives them (`source: 'statusline'`): its own numbers, window included. Otherwise from `arricurdai status`, with the window from the table in the configuration: an estimate.
+ */
 export interface ContextInfo {
   tokens: number;
-  /** The context window of the model, from the table in the configuration: an estimate. */
   window: number;
   percent: number;
-  lastCallAt: number;
+  /** Absent: from arricurdAI. */
+  source?: 'statusline';
+  /** The last call, as arricurdAI read it. */
+  lastCallAt?: number;
   at: number;
 }
 
@@ -89,8 +94,8 @@ export interface CacheInfo {
 
 /**
  * From the status line of Claude Code: what the session cost at API prices since the process started, as Claude
- * Code computes it for /cost. The tokens of the status line are those of the last call only (its context, which
- * arricurdAI gives already), not a total: they are left out.
+ * Code computes it for /cost. The tokens of the status line are those of the last call only, not a total: they
+ * become the context (ContextInfo), not a count of the session.
  */
 export interface UsageInfo {
   usd: number;

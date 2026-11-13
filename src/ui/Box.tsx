@@ -71,9 +71,13 @@ function summaryText(agent: Agent): string | undefined {
 function ContextBar({ agent }: { agent: Agent }) {
   const context = agent.context;
   const share = context ? Math.min(1, Math.max(0, context.percent / 100)) : 0;
-  const title = context
-    ? `${context.tokens.toLocaleString('en-US')} tokens in the last request, of an estimated window of ${context.window.toLocaleString('en-US')} (data from arricurdAI)`
-    : 'No data from arricurdAI for this session';
+  const tokens = context?.tokens.toLocaleString('en-US');
+  const window = context?.window.toLocaleString('en-US');
+  const title = !context
+    ? 'No context yet: it shows after the first answer of the session'
+    : context.source === 'statusline'
+      ? `${tokens} tokens in the context, of a window of ${window} (from Claude Code)`
+      : `${tokens} tokens in the last request, of an estimated window of ${window} (data from arricurdAI)`;
   return (
     <div class="ctx" title={title} data-high={context && context.percent >= 80 ? '' : undefined}>
       <div class="track">

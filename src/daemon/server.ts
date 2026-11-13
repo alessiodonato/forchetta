@@ -4,7 +4,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { Hub } from './hub.ts';
 import type { Permissions } from './permissions.ts';
 import type { Terminals } from './terminals.ts';
-import type { HookMeta, Registry } from './registry.ts';
+import type { HookMeta, Registry, StatusContext, StatusLine } from './registry.ts';
 import type { Agent, HookPayload } from './state.ts';
 import { serveStatic } from './static.ts';
 import { artifactOf } from '../shared/artifacts.ts';
@@ -155,8 +155,32 @@ export function slimPayload(raw: unknown): HookPayload | undefined {
   };
 }
 
-/** Session and cost from the input of the status line; undefined when they are not there. */
-export function statusUsage(body: Buffer): { sessionId: string; usd: number } | undefined {
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+/**
+ * The context of the session from `context_window` of the status line. Null when Claude Code says there is none
+ * yet: before the first call, and after /compact until the next one. Undefined when it does not say: without
+ * `used_percentage` (Claude Code before 2.1.6) the context is left to arricurdAI.
+ */
+export function statusContext(value: unknown): StatusContext | null | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const window = value as Record<string, unknown>;
+  if (!('used_percentage' in window)) return undefined;
+  if (window.used_percentage === null || window.current_usage === null) return null;
+  const size = window.context_window_size;
+  if (!finite(window.used_percentage) || !finite(size) || size <= 0) return undefined;
+  let tokens = window.total_input_tokens;
+  if (!finite(tokens) || tokens < 0) {
+    // The same count from the parts of the last call: what was read from the cache, written to it, and the rest.
+    const usage = (window.current_usage ?? {}) as Record<string, unknown>;
+    const part = (key: string): number => (finite(usage[key]) && (usage[key] as number) > 0 ? (usage[key] as number) : 0);
+    tokens = part('input_tokens') + part('cache_creation_input_tokens') + part('cache_read_input_tokens');
+  }
+  return { tokens: Math.round(tokens as number), window: size, percent: Math.min(100, Math.max(0, Math.round(window.used_percentage))) };
+}
+
+/** Session, cost and context from the input of the status line; undefined when it carries neither. */
+export function statusUsage(body: Buffer): ({ sessionId: string } & StatusLine) | undefined {
   let raw: unknown;
   try {
     raw = JSON.parse(body.toString('utf8'));
@@ -164,10 +188,13 @@ export function statusUsage(body: Buffer): { sessionId: string; usd: number } | 
     return undefined;
   }
   if (!raw || typeof raw !== 'object') return undefined;
-  const input = raw as { session_id?: unknown; cost?: { total_cost_usd?: unknown } };
-  const usd = input.cost?.total_cost_usd;
-  if (typeof input.session_id !== 'string' || typeof usd !== 'number' || !Number.isFinite(usd) || usd < 0) return undefined;
-  return { sessionId: input.session_id, usd };
+  const input = raw as { session_id?: unknown; cost?: { total_cost_usd?: unknown }; context_window?: unknown };
+  if (typeof input.session_id !== 'string') return undefined;
+  const cost = input.cost?.total_cost_usd;
+  const usd = finite(cost) && cost >= 0 ? cost : undefined;
+  const context = statusContext(input.context_window);
+  if (usd === undefined && context === undefined) return undefined;
+  return { sessionId: input.session_id, ...(usd !== undefined && { usd }), ...(context !== undefined && { context }) };
 }
 
 /** A hook input for the record: tool responses cut short, the rest as it came. */
@@ -267,8 +294,8 @@ export function createDaemonServer(options: ServerOptions): Server {
       if (type !== undefined && !/^application\/json\b/i.test(type)) return send(res, 415);
       const body = await readBody(req);
       send(res, 200);
-      const usage = body ? statusUsage(body) : undefined;
-      if (usage) registry.usage(usage.sessionId, hookMeta(req.headers), usage.usd);
+      const status = body ? statusUsage(body) : undefined;
+      if (status) registry.status(status.sessionId, hookMeta(req.headers), status);
       return;
     }
 

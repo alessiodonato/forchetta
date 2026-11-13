@@ -4,11 +4,11 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { parseArricurdaiToday } from '../src/daemon/arricurdai.ts';
+import { parseArricurdaiStatus, parseArricurdaiToday } from '../src/daemon/arricurdai.ts';
 import { Registry } from '../src/daemon/registry.ts';
-import { statusUsage } from '../src/daemon/server.ts';
+import { statusContext, statusUsage } from '../src/daemon/server.ts';
 import { ROOT } from '../src/shared/paths.ts';
-import { usdText } from '../src/shared/present.ts';
+import { percentText, usdText } from '../src/shared/present.ts';
 import { isOurStatusLine, withForchettaStatusLine, withoutForchettaStatusLine } from '../src/shared/settings.ts';
 import { tempDir } from './helpers.ts';
 
@@ -22,28 +22,136 @@ const STATUS_INPUT = {
   context_window: { total_input_tokens: 51071, total_output_tokens: 7, context_window_size: 1000000 },
 };
 
+/** The same session of 2.1.323 at its start, and after its first answer (trimmed): the context comes with it. */
+const START_INPUT = {
+  session_id: 'b7c1e0d2-5a4f-4c8e-9f31-2d6a8e0c4b19',
+  version: '2.1.323',
+  model: { id: 'claude-haiku-5-5', display_name: 'Haiku 5.5' },
+  cost: { total_cost_usd: 0, total_duration_ms: 3072, total_api_duration_ms: 0, total_lines_added: 0, total_lines_removed: 0 },
+  context_window: { total_input_tokens: 0, total_output_tokens: 0, context_window_size: 1000000, current_usage: null, used_percentage: null, remaining_percentage: null },
+};
+const ANSWERED_INPUT = {
+  ...START_INPUT,
+  cost: { total_cost_usd: 0.00267648, total_duration_ms: 16010, total_api_duration_ms: 12874, total_lines_added: 0, total_lines_removed: 0 },
+  context_window: {
+    total_input_tokens: 40449,
+    total_output_tokens: 4,
+    context_window_size: 1000000,
+    current_usage: { input_tokens: 2, output_tokens: 4, cache_creation_input_tokens: 11299, cache_read_input_tokens: 29148 },
+    used_percentage: 4,
+    remaining_percentage: 96,
+  },
+};
+
+const input = (value: unknown): Buffer => Buffer.from(JSON.stringify(value));
+
 describe('status line input', () => {
-  it('gives session and cost; its tokens are those of the last call, so they are left out', () => {
-    expect(statusUsage(Buffer.from(JSON.stringify(STATUS_INPUT)))).toEqual({ sessionId: STATUS_INPUT.session_id, usd: 0.0049203300000000005 });
+  it('gives session and cost; without used_percentage the context is left to arricurdAI', () => {
+    expect(statusUsage(input(STATUS_INPUT))).toEqual({ sessionId: STATUS_INPUT.session_id, usd: 0.0049203300000000005 });
   });
 
-  it('gives nothing without a session or a cost', () => {
+  it('gives the context of Claude Code after the first answer, and none before it', () => {
+    expect(statusUsage(input(ANSWERED_INPUT))).toEqual({ sessionId: START_INPUT.session_id, usd: 0.00267648, context: { tokens: 40449, window: 1_000_000, percent: 4 } });
+    expect(statusUsage(input(START_INPUT))).toEqual({ sessionId: START_INPUT.session_id, usd: 0, context: null });
+  });
+
+  it('counts the context from the parts of the last call when the total is missing', () => {
+    const { total_input_tokens: _total, ...rest } = ANSWERED_INPUT.context_window;
+    expect(statusContext(rest)).toEqual({ tokens: 40449, window: 1_000_000, percent: 4 });
+    expect(statusContext({ ...rest, used_percentage: 120 })).toMatchObject({ percent: 100 });
+    expect(statusContext({ ...rest, context_window_size: 0 })).toBeUndefined();
+    expect(statusContext('many')).toBeUndefined();
+  });
+
+  it('gives nothing without a session, or with neither a cost nor a context', () => {
     expect(statusUsage(Buffer.from('{nope'))).toBeUndefined();
-    expect(statusUsage(Buffer.from(JSON.stringify({ ...STATUS_INPUT, session_id: undefined })))).toBeUndefined();
-    expect(statusUsage(Buffer.from(JSON.stringify({ ...STATUS_INPUT, cost: {} })))).toBeUndefined();
+    expect(statusUsage(input({ ...STATUS_INPUT, session_id: undefined }))).toBeUndefined();
+    expect(statusUsage(input({ ...STATUS_INPUT, cost: {} }))).toBeUndefined();
+    expect(statusUsage(input({ ...ANSWERED_INPUT, cost: {} }))).toEqual({ sessionId: START_INPUT.session_id, context: { tokens: 40449, window: 1_000_000, percent: 4 } });
   });
 
   it('updates the agent of the session, only when the numbers change, and never makes one up', () => {
     const changes: string[] = [];
     const registry = new Registry({ settleMs: 5, onChange: (agent) => changes.push(agent.id) });
-    expect(registry.usage('unknown', {}, 1)).toBeUndefined();
+    expect(registry.status('unknown', {}, { usd: 1 })).toBeUndefined();
     expect(registry.agents.size).toBe(0);
     const agent = registry.hook({ hook_event_name: 'UserPromptSubmit', session_id: 's-1', cwd: '/x/beta', prompt: 'ciao' });
     changes.length = 0;
-    registry.usage('s-1', {}, 0.42);
-    registry.usage('s-1', {}, 0.42);
+    registry.status('s-1', {}, { usd: 0.42 });
+    registry.status('s-1', {}, { usd: 0.42 });
     expect(agent.usage).toMatchObject({ usd: 0.42 });
     expect(changes).toEqual([agent.id]);
+    registry.dispose();
+  });
+});
+
+describe('context from the status line', () => {
+  /** What `arricurdai status --json` says of the session s-1: 150k tokens, which a 1M window makes 15%. */
+  const ARRICURDAI = parseArricurdaiStatus(
+    JSON.stringify({
+      sessions: [{ sessionId: 's-1', context: 150_000, lastCallAt: '2026-11-13T10:00:00.000Z', cacheExpiresAt: '2026-11-13T11:00:00.000Z', cacheLive: true, guardWillStop: false }],
+    }),
+  );
+  const exact = { tokens: 40449, window: 200_000, percent: 20 };
+
+  function session(): { registry: Registry; agent: ReturnType<Registry['hook']> } {
+    const registry = new Registry({ settleMs: 5 });
+    const agent = registry.hook({ hook_event_name: 'UserPromptSubmit', session_id: 's-1', cwd: '/x/beta', prompt: 'ciao' });
+    return { registry, agent };
+  }
+
+  it('is Claude Code own number, with no ≈', () => {
+    const { registry, agent } = session();
+    registry.status('s-1', {}, { usd: 0.1, context: exact });
+    expect(agent.context).toMatchObject({ ...exact, source: 'statusline' });
+    expect(percentText(agent.context!)).toBe('20%');
+    registry.dispose();
+  });
+
+  it('is not replaced by the estimate of arricurdAI, which still gives the cache', () => {
+    const { registry, agent } = session();
+    registry.status('s-1', {}, { context: exact });
+    registry.applyArricurdai(ARRICURDAI, () => 1_000_000);
+    expect(agent.context).toMatchObject({ ...exact, source: 'statusline' });
+    expect(agent.cache).toMatchObject({ live: true });
+    // The same numbers again: nothing changes.
+    expect(registry.applyArricurdai(ARRICURDAI, () => 1_000_000)).toEqual([]);
+    registry.dispose();
+  });
+
+  it('takes the place of the estimate of arricurdAI', () => {
+    const { registry, agent } = session();
+    registry.applyArricurdai(ARRICURDAI, () => 1_000_000);
+    expect(percentText(agent.context!)).toBe('≈15%');
+    registry.status('s-1', {}, { context: exact });
+    expect(agent.context).toMatchObject({ ...exact, source: 'statusline' });
+    registry.dispose();
+  });
+
+  it('empties when Claude Code has none yet (after /compact), and arricurdAI may fill it again', () => {
+    const { registry, agent } = session();
+    registry.status('s-1', {}, { context: exact });
+    registry.status('s-1', {}, { context: null });
+    expect(agent.context).toBeUndefined();
+    registry.applyArricurdai(ARRICURDAI, () => 1_000_000);
+    expect(agent.context).toMatchObject({ tokens: 150_000, percent: 15 });
+    expect(agent.context?.source).toBeUndefined();
+    // A null leaves the estimate of arricurdAI alone: it is all there is.
+    registry.status('s-1', {}, { context: null });
+    expect(agent.context).toMatchObject({ tokens: 150_000 });
+    registry.dispose();
+  });
+
+  it('ignores a late status line of the conversation before a /clear', () => {
+    const { registry, agent } = session();
+    // The /clear of the same process: the hook says which agent it is, as for a session in the tmux of Forchetta.
+    registry.hook({ hook_event_name: 'SessionStart', session_id: 's-2', cwd: '/x/beta', source: 'clear' }, { agentId: agent.id });
+    expect(agent.sessionId).toBe('s-2');
+    registry.status('s-1', { agentId: agent.id }, { usd: 3, context: exact });
+    expect(agent.context).toBeUndefined();
+    expect(agent.usage).toBeUndefined();
+    registry.status('s-2', { agentId: agent.id }, { usd: 0.01, context: exact });
+    expect(agent.context).toMatchObject({ source: 'statusline' });
     registry.dispose();
   });
 });
