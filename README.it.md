@@ -6,7 +6,7 @@
 
 ### Le tue sessioni di Claude Code, che lavorano insieme.
 
-Tieni in una finestra tutte le sessioni di Claude Code del tuo Mac: vedi cosa sta facendo ognuna, rispondi ai suoi permessi e ricevi una notifica quando una ha bisogno di te. Poi falle lavorare come un team. Un capo distribuisce il lavoro, ogni membro fa la sua parte nel suo worktree git, e Forchetta ti avvisa quando due sessioni scrivono lo stesso file.
+Tieni in una finestra tutte le sessioni di Claude Code del tuo Mac: vedi cosa sta facendo ognuna, rispondi ai suoi permessi e ricevi una notifica quando una ha bisogno di te. Poi falle lavorare come un team. Un capo distribuisce il lavoro, ogni membro fa la sua parte nel suo worktree git, e quando due sessioni vogliono lo stesso file, Forchetta ne fa aspettare una.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#installazione)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#installazione)
@@ -45,7 +45,7 @@ Tieni in una finestra tutte le sessioni di Claude Code del tuo Mac: vedi cosa st
 
 **Falle lavorare insieme.**
 - **Team di agenti.** Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree git. Il capo manda le richieste; i membri rispondono, o gli fanno una domanda quando sono bloccati. Puoi entrare nel terminale di qualsiasi membro, e salvare il team come modello per riavviarlo in un altro progetto.
-- **Avvisi di conflitto.** Quando due sessioni scrivono lo stesso file, lo dicono tutti e due i box.
+- **Il vigile.** Una sessione non può modificare un file che un'altra sta cambiando nel suo turno: Claude riceve il motivo, fa altro o aspetta, e riparte da sola quando il file è libero. Un comando git che cambierebbe i file sotto a un'altra sessione ti chiede prima conferma. Vedi [Il vigile](#il-vigile).
 - **Passaggi di lavoro.** Seleziona del testo in un terminale per chiederne a Claude, o per mandarlo a un'altra sessione. Prima di un `/clear`, Forchetta può lasciare una nota, così la sessione nuova riparte da dove si era fermata la vecchia (con arricurdAI).
 
 **Tutto il resto, sott'occhio.** I subagenti che ogni sessione avvia e cosa fanno, i file che ha cambiato, gli artefatti che ha pubblicato su claude.ai. Nomi, gruppi e ruoli, con un organigramma. La ricerca nelle sessioni passate (con arricurdAI). Un'icona nella barra dei menu e la scorciatoia ⌃⌥F.
@@ -63,7 +63,7 @@ Claude Code ha già i suoi modi per usare più sessioni, e intorno ci sono buoni
 | **Agent View** (`claude agents`) | La lista a schermo intero delle sessioni in background, di Anthropic, nel terminale | Una finestra che resta aperta accanto al tuo lavoro, con un box per sessione e fino a quattro terminali affiancati. |
 | **Claude Desktop** | L'app di Anthropic, con le sessioni in parallelo nella barra laterale | Lavora con la CLI `claude` che usi già nel terminale, con i tuoi hook e le tue impostazioni. |
 | **Agent teams** (sperimentali in Claude Code) | Una sessione capo che avvia i compagni e divide con loro una lista di compiti | I team si preparano in un pannello e si salvano come modelli: ruolo, modello, permessi e worktree per ogni membro. Il capo puoi essere tu. |
-| **cmux**, **Claude Squad** | Terminali e gestori di sessioni per molti tipi di agenti | Fatta solo per Claude Code, attraverso i suoi hook: permessi dal box, contesto e costo per sessione, subagenti, team che si parlano con un server MCP. |
+| **cmux**, **Claude Squad** | Terminali e gestori di sessioni per molti tipi di agenti | Fatta solo per Claude Code, attraverso i suoi hook: un vigile che tiene due sessioni lontane dallo stesso file, permessi dal box, contesto e costo per sessione, subagenti, team che si parlano con un server MCP. |
 
 Non si escludono a vicenda. Le sessioni avviate in qualsiasi terminale compaiono in Forchetta, in sola lettura se non le hai avviate con `forchetta run claude`.
 
@@ -137,6 +137,8 @@ Tutti gli eventi passano da `bin/forchetta-hook`, un piccolo script `sh` + `curl
 `SessionStart` e `SessionEnd` invece sono sincroni: durano circa 30 ms.
 
 `PermissionRequest` passa da `bin/forchetta-permission`, che aspetta la risposta del box (vedi [I permessi](#i-permessi-dal-box)). Il dialogo nel Terminale compare comunque, subito. Con il daemon spento lo script esce subito senza stampare nulla. Lo stesso succede con `claude -p` e con l'SDK, che non hanno un dialogo.
+
+Prima di `Edit`, `Write`, `MultiEdit`, `NotebookEdit` e `Bash`, `bin/forchetta-guard` chiede al daemon se lo strumento può partire (vedi [Il vigile](#il-vigile)). Claude lo aspetta: circa 30 ms, solo per questi strumenti. Con il daemon spento, lento o senza niente da dire, non stampa nulla e lo strumento va avanti come sempre.
 
 ## Uso
 
@@ -327,6 +329,28 @@ Se due sessioni attive hanno scritto lo stesso file nell'ultima ora, entrambi i 
 - La repo è la cartella di lavoro con `.git`: due worktree della stessa repo sono due posti diversi e non vanno in conflitto.
 - L'avviso sparisce dopo un'ora senza scritture comuni, o quando l'altra sessione termina.
 - Le scritture restano anche se il daemon si riavvia (in `var/state.json`).
+
+### Il vigile
+
+Due sessioni nella stessa cartella possono cambiare lo stesso file nello stesso momento, e ognuna finisce per lavorare sulle modifiche a metà dell'altra. Il vigile lo impedisce prima che succeda.
+
+**Un file tenuto.** Una sessione tiene un file che ha scritto nel turno su cui sta lavorando, finché il turno non finisce. Se un'altra sessione prova a modificare quel file, il vigile ferma la modifica e spiega a Claude il motivo (in inglese, il messaggio è per Claude):
+
+> Forchetta: "billing-api", another Claude Code session on this Mac, is changing src/api.ts in the turn it is working on now. Don't edit this file yet and don't try again now: work on something else first, or end your turn saying that you are waiting for src/api.ts. You will be told when the file is free.
+
+Claude Code lo mostra come "PreToolUse:Edit hook error"; Claude legge il motivo, e fa altro o chiude il turno. Tutti e due i box lo dicono: "⏸ src/api.ts held by billing-api" nella sessione che aspetta, "⏸ holds src/api.ts · beta waits" nell'altra. Nella colonna a sinistra, l'etichetta "⏸ held".
+
+**Di nuovo libero.** Quando il turno che teneva il file finisce, la sessione che aspettava riceve un prompt nuovo, scritto solo quando è pronta, come i comandi del box: "Forchetta: src/api.ts is free now ("billing-api" ended its turn). You can go on." Se nel frattempo ha già scritto il file, il prompt non parte. In una sessione avviata con un semplice `claude` non si può scrivere: arriva una notifica.
+
+**let it through**, nel box della sessione che aspetta, la lascia scrivere quel file comunque. Da lì tutte e due le sessioni possono cambiarlo, finché il turno dell'altra non finisce.
+
+**git.** Prima di un comando Bash con un git che cambia i file della cartella (`checkout`, `switch`, `restore`, `reset --hard`, `stash`, `clean`, `rebase`, `pull`, `merge`, `cherry-pick`, `revert`, `am`), se un'altra sessione attiva lavora nello stesso working tree (è in un turno lì, o ci ha cambiato file nell'ultima ora), Claude Code ti chiede conferma, con il motivo nel dialogo. Puoi rispondere anche dal box.
+
+- Un file conta come tenuto quando è stato scritto con `Edit`, `Write`, `MultiEdit` o `NotebookEdit`, come per i conflitti. Tra un turno e l'altro, un file scritto da un subagente in background resta tenuto per due minuti dall'ultima scrittura.
+- Due worktree della stessa repo sono due cartelle diverse: il vigile non ferma mai un membro di un team che lavora nel suo worktree.
+- La riga di comando di git si legge come una normale riga di shell: si seguono `&&`, `;`, `|`, le virgolette, `cd` e `git -C`; quello che non si riesce a leggere passa.
+- Quello che il vigile tiene sta nella memoria del daemon: dopo un riavvio niente è tenuto fino alle scritture successive.
+- Per spegnerlo, in `var/config.json`: `"guard": { "files": false, "git": false }`, poi riavvia il daemon. Le due parti si spengono anche una alla volta.
 
 ### Sessioni ferme
 

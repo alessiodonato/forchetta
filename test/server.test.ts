@@ -2,7 +2,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Registry } from '../src/daemon/registry.ts';
-import { createDaemonServer, HOOK_PATH, hookMeta } from '../src/daemon/server.ts';
+import { createDaemonServer, GUARD_PATH, HOOK_PATH, hookMeta } from '../src/daemon/server.ts';
 import { http } from './helpers.ts';
 
 const TOKEN = 'a'.repeat(64);
@@ -20,6 +20,7 @@ beforeAll(async () => {
     log: () => {},
     info: () => ({ pid: 1 }),
     onShutdown: () => shutdowns++,
+    guard: (agent, payload) => (payload.tool_name === 'Edit' ? { decided: agent.sessionId } : undefined),
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = (server.address() as AddressInfo).port;
@@ -71,6 +72,33 @@ describe('hook endpoint', () => {
   it('ignores malformed meta headers', () => {
     expect(hookMeta({ 'x-forchetta-pid': '1', 'x-forchetta-pane': 'bad', 'x-forchetta-agent': 'nope' })).toEqual({});
     expect(hookMeta({ 'x-forchetta-pid': '700', 'x-forchetta-claude-pid': '' })).toEqual({ pid: 700 });
+  });
+});
+
+describe('guard endpoint', () => {
+  const pre = (session: string, tool: string): string => JSON.stringify({ hook_event_name: 'PreToolUse', session_id: session, tool_name: tool, tool_input: { file_path: '/tmp/p/a.ts' } });
+
+  it('answers with the decision of the guard for a known session, and applies nothing', async () => {
+    await http(port, { method: 'POST', path: HOOK_PATH, headers: json, body: event({ session_id: 's-guard' }) });
+    const agent = registry.list().find((candidate) => candidate.sessionId === 's-guard')!;
+    const before = JSON.stringify(agent);
+    const reply = await http(port, { method: 'POST', path: GUARD_PATH, headers: json, body: pre('s-guard', 'Edit') });
+    expect(reply.status).toBe(200);
+    expect(JSON.parse(reply.body)).toEqual({ decided: 's-guard' });
+    // The event comes through the hook endpoint too: here it changes nothing.
+    expect(JSON.stringify(agent)).toBe(before);
+  });
+
+  it('answers empty when the guard has nothing to say, for a session it does not know, and for input it cannot read', async () => {
+    for (const body of [pre('s-guard', 'Bash'), pre('unknown', 'Edit'), '{not json', '[]']) {
+      expect(await http(port, { method: 'POST', path: GUARD_PATH, headers: json, body })).toMatchObject({ status: 200, body: '' });
+    }
+    expect(registry.list().some((agent) => agent.sessionId === 'unknown')).toBe(false);
+  });
+
+  it('refuses web pages', async () => {
+    expect((await http(port, { method: 'POST', path: GUARD_PATH, headers: { ...json, origin: 'https://evil.example' }, body: pre('s-guard', 'Edit') })).status).toBe(403);
+    expect((await http(port, { method: 'GET', path: GUARD_PATH })).status).toBe(405);
   });
 });
 

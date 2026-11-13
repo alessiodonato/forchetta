@@ -49,7 +49,7 @@ export type ServerMessage =
   /** The transcript of a subagent, for the window that asked: its steps, or why there are none. */
   | { type: 'subagent'; now: number; agentId: string; key: string; steps: SubagentStep[]; model?: string; skipped?: number; note?: string }
   /** A session waits for you, seems stuck or ended with an error: the app shows a notification of macOS. */
-  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error'; title: string; body: string };
+  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free'; title: string; body: string };
 
 /** What the page needs to know of the configuration. */
 export interface UiSettings {
@@ -65,6 +65,7 @@ export interface UiSettings {
 export type ClientMessage =
   | { type: 'visibility'; visible: boolean }
   | { type: 'scrollEnd'; agentId: string }
+  | { type: 'letThrough'; agentId: string; path: string }
   /** fromSelection: asked from the menu of a selection in the pane of this session (see daemon/commands.ts). */
   | { type: 'command'; agentId: string; kind: string; arg?: string; confirmed?: boolean; fromSelection?: boolean }
   /** A drag in a pane started or ended: at the end, the daemon reads what tmux copied. */
@@ -136,6 +137,8 @@ export interface HubOptions {
   onSubagent?: (agentId: string, key: string) => Promise<{ steps: SubagentStep[]; model?: string; skipped?: number; note?: string }>;
   /** "back to the end" in a pane scrolled back in tmux. */
   onScrollEnd?: (agentId: string) => void;
+  /** You let a session through on a file the guard held back (daemon/guard.ts). */
+  onLetThrough?: (agentId: string, path: string) => void;
   /** The answer of a box to a permission dialog. */
   onPermission?: (message: Extract<ClientMessage, { type: 'permission' }>) => void;
   /** The updates of Claude Code, for the top line. */
@@ -297,6 +300,8 @@ export class Hub {
           this.options.onClaudeUpdate?.(message.action);
         } else if (message.type === 'scrollEnd' && typeof message.agentId === 'string') {
           this.options.onScrollEnd?.(message.agentId);
+        } else if (message.type === 'letThrough' && typeof message.agentId === 'string' && typeof message.path === 'string') {
+          this.options.onLetThrough?.(message.agentId, message.path);
         } else if (message.type === 'files' && typeof message.agentId === 'string' && this.options.onFiles) {
           const agentId = message.agentId;
           void this.options.onFiles(agentId).then(
@@ -388,7 +393,7 @@ export class Hub {
     this.broadcast({ type: 'claudeUpdate', now: Date.now(), update });
   }
 
-  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error'; title: string; body: string }): void {
+  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free'; title: string; body: string }): void {
     this.broadcast({ type: 'notify', now: Date.now(), ...notice });
   }
 

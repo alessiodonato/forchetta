@@ -64,7 +64,7 @@ export interface CommanderOptions {
 
 export type EnqueueResult = { ok: true; command: QueuedCommand } | { ok: false; error: string };
 
-const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000, ask: 15_000 };
+const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000, ask: 15_000, free: 15_000 };
 /** The longest request, as the first prompt of a new session. */
 export const MAX_REQUEST = 20_000;
 /** A compaction that started may take minutes on a large context. */
@@ -74,8 +74,8 @@ const KEEP_DONE = 3;
 const WAITING: CommandStatus[] = ['in-coda', 'bloccato'];
 const DONE: CommandStatus[] = ['confermato', 'non-confermato', 'fallito'];
 
-/** A request of a team, or a question from the menu of a selection: a text that goes as your words, typed and pasted. */
-const isText = (command: Pick<QueuedCommand, 'kind'>): boolean => command.kind === 'request' || command.kind === 'ask';
+/** A request of a team, a question from the menu of a selection, a notice of the guard: a text that goes as your words, typed and pasted. */
+const isText = (command: Pick<QueuedCommand, 'kind'>): boolean => command.kind === 'request' || command.kind === 'ask' || command.kind === 'free';
 
 /** What is typed: "/btw …", "/compact", or the whole text of a request. */
 export const commandText = (command: Pick<QueuedCommand, 'kind' | 'arg'>): string =>
@@ -83,7 +83,11 @@ export const commandText = (command: Pick<QueuedCommand, 'kind' | 'arg'>): strin
 
 /** How the log calls it: a request by its number, not by its text. */
 const commandLabel = (command: Pick<QueuedCommand, 'kind' | 'arg' | 'request'>): string =>
-  command.kind === 'request' ? `request #${command.request?.n ?? '?'}` : command.kind === 'ask' ? `question "${requestParts(command.arg ?? '').head.slice(0, 40)}"` : commandText(command);
+  command.kind === 'request'
+    ? `request #${command.request?.n ?? '?'}`
+    : command.kind === 'ask' || command.kind === 'free'
+      ? `${command.kind === 'ask' ? 'question' : 'notice'} "${requestParts(command.arg ?? '').head.slice(0, 40)}"`
+      : commandText(command);
 
 /** What the prompt shows of a paste too long to show: "[Pasted text #1 +32 lines]". */
 const PASTED = /^\[Pasted text #\d+(?: \+\d+ lines?)?\]$/;
@@ -201,6 +205,25 @@ export class Commander {
     const command: QueuedCommand = { id: randomUUID(), kind: 'ask', arg: clean, status: 'in-coda', createdAt: now, ...(fromSelection ? { afterSelection: now } : {}) };
     agent.commands = [...(agent.commands ?? []), command];
     this.options.log(`domanda in coda per ${agent.team?.label ?? agent.project}`);
+    this.prune(agent);
+    this.options.registry.touch(agent);
+    this.kick(agent.id);
+    return { ok: true, command };
+  }
+
+  /**
+   * A notice of the guard: a file the session was stopped on is free. It goes as your words when the session is
+   * ready, like a request; the caller cancels it if the session writes the file first.
+   */
+  enqueueFree(agentId: string, text: string): EnqueueResult {
+    const agent = this.options.registry.agents.get(agentId);
+    if (!agent) return { ok: false, error: 'unknown session' };
+    if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'the session is read only or ended' };
+    const clean = text.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+    if (!clean) return { ok: false, error: 'the notice is empty' };
+    const command: QueuedCommand = { id: randomUUID(), kind: 'free', arg: clean, status: 'in-coda', createdAt: this.now() };
+    agent.commands = [...(agent.commands ?? []), command];
+    this.options.log(`avviso del vigile in coda per ${agent.team?.label ?? agent.project}`);
     this.prune(agent);
     this.options.registry.touch(agent);
     this.kick(agent.id);

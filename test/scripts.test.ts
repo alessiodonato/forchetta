@@ -64,6 +64,57 @@ describe('bin/forchetta-hook', () => {
   });
 });
 
+describe('bin/forchetta-guard', () => {
+  const INPUT = '{"hook_event_name":"PreToolUse","session_id":"abc","tool_name":"Edit","tool_input":{"file_path":"/p/a.ts"}}';
+
+  /** A daemon that answers the guard with this status and body. */
+  async function daemon(status: number, body: string) {
+    let received: { url?: string; headers: IncomingHttpHeaders; body: string } | undefined;
+    const server = createServer((req, res) => {
+      let text = '';
+      req.on('data', (chunk: Buffer) => (text += chunk.toString()));
+      req.on('end', () => {
+        received = { url: req.url, headers: req.headers, body: text };
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(body);
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    return { port: (server.address() as AddressInfo).port, received: () => received, close: () => new Promise((resolve) => server.close(resolve)) };
+  }
+
+  it('prints nothing and exits 0 at once when the daemon is not running: the tool goes on', async () => {
+    // macOS checks a script the first time it runs, which can take seconds on a busy Mac: that run is not timed.
+    await run(paths.guardScript, ['1'], BASE_ENV, INPUT);
+    const result = await run(paths.guardScript, ['1'], BASE_ENV, INPUT);
+    expect(result).toMatchObject({ code: 0, stdout: '', stderr: '' });
+    expect(result.ms).toBeLessThan(1500);
+  });
+
+  it('prints the decision of the daemon, as it came, for Claude Code to read', async () => {
+    const decision = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"busy"}}';
+    const server = await daemon(200, decision);
+    const result = await run(paths.guardScript, [String(server.port)], { ...BASE_ENV, FORCHETTA_AGENT: 'agent-1', TMUX_PANE: '%3' }, INPUT);
+    await server.close();
+    expect(result).toMatchObject({ code: 0, stdout: decision, stderr: '' });
+    expect(server.received()?.url).toBe('/forchetta/guard');
+    expect(server.received()?.body).toBe(INPUT);
+    expect(server.received()?.headers['x-forchetta-agent']).toBe('agent-1');
+  });
+
+  it('prints nothing when the daemon has nothing to say, or answers with an error', async () => {
+    for (const [status, body] of [
+      [200, ''],
+      [500, '{"error":"x"}'],
+    ] as const) {
+      const server = await daemon(status, body);
+      const result = await run(paths.guardScript, [String(server.port)], BASE_ENV, INPUT);
+      await server.close();
+      expect(result).toMatchObject({ code: 0, stdout: '', stderr: '' });
+    }
+  });
+});
+
 describe('bin/forchetta-statusline', () => {
   it('runs the status line you had, saved in the private folder of Forchetta', async () => {
     const data = join(temp.dir, 'dati con spazi');

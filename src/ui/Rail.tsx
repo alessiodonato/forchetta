@@ -3,6 +3,7 @@ import { useRef } from 'preact/hooks';
 import { type Agent, displayName, STATE_LABEL } from '../shared/agent.ts';
 import { agoShort, conflictsTitle, hasEvents, stalledFor, stallText, waitingText } from '../shared/present.ts';
 import { useMotionAnchor } from './anchor.ts';
+import { heldBackText } from './Guard.tsx';
 import { PermissionButtons } from './Permission.tsx';
 import { runningSubagentsTag } from './Subagents.tsx';
 import { canOpen, type Store } from './store.ts';
@@ -74,6 +75,11 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
         {stalledFor(agent, now, stallMs) !== undefined && (
           <span class="tag conflict-tag" title={stallText(agent, stalledFor(agent, now, stallMs)!)}>
             ◷ stuck?
+          </span>
+        )}
+        {agent.heldBack && (
+          <span class="tag guard-tag" title={agent.heldBack.map(heldBackText).join('\n')}>
+            ⏸ held
           </span>
         )}
         {agent.conflicts && (

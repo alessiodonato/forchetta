@@ -269,7 +269,9 @@ export function memberPrompt(crew: CrewSpec, member: CrewMemberSpec): string {
       ? [
           'You work in a git worktree of your own (a copy of the repository, on a branch of your own): the other members and your lead do not see your changes until you commit them. Commit your work at the end of each request, with a clear message, so that your lead can see it and merge it.',
         ]
-      : []),
+      : [
+          'You share the folder with other sessions. If Forchetta stops you from editing a file because another session is changing it, do not insist: work on another part of the request, or end your turn saying which file you are waiting for. You will be told when it is free.',
+        ]),
     ...(others.length > 0 ? ['', 'The other members of the team:', ...others.map((other) => `- ${other.name}: ${other.role.replace(/\s+/g, ' ')}`)] : []),
   ].join('\n');
 }

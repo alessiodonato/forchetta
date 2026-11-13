@@ -19,10 +19,15 @@ import { subagentResultOf } from './subagents.ts';
 // a ticket when the box may answer the dialog; the hook then waits on /forchetta/permission/<ticket> for the
 // decision (daemon/permissions.ts). The ticket is the only key to the answer.
 //
+// /forchetta/guard takes the PreToolUse of bin/forchetta-guard, which Claude waits for, and answers at once with
+// the decision of the guard as Claude Code reads it, or with an empty body (daemon/guard.ts). It applies nothing:
+// the same event comes through /forchetta/hook too.
+//
 // /api/* is for the CLI and the app, with the token of var/daemon.json.
 
 export const HOOK_PATH = '/forchetta/hook';
 export const PERMISSION_PATH = '/forchetta/permission';
+export const GUARD_PATH = '/forchetta/guard';
 /** The input of the status line, from bin/forchetta-statusline: the cost of the session. */
 export const STATUS_PATH = '/forchetta/status';
 const TICKET = /^[0-9a-f]{32}$/;
@@ -47,6 +52,8 @@ export interface ServerOptions {
   recordFile?: string;
   onShutdown: () => void;
   onHook?: (agent: Agent, payload: HookPayload) => void;
+  /** The guard: what to answer before a tool that writes files or runs a command; undefined lets it go. */
+  guard?: (agent: Agent, payload: HookPayload) => object | undefined;
   /** The routes of the MCP server of a team: /api/crew/<route>, POST with JSON. */
   crew?: (route: string, input: Record<string, unknown>) => Promise<{ status: number; body: unknown }>;
   log: (message: string) => void;
@@ -233,6 +240,24 @@ export function createDaemonServer(options: ServerOptions): Server {
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': ticket.length, 'Cache-Control': 'no-store' });
       res.end(ticket);
       return;
+    }
+
+    if (url.pathname === GUARD_PATH) {
+      if (req.method !== 'POST') return send(res, 405);
+      if (req.headers.origin !== undefined) return send(res, 403);
+      const type = req.headers['content-type'];
+      if (type !== undefined && !/^application\/json\b/i.test(type)) return send(res, 415);
+      const body = await readBody(req);
+      let decision: object | undefined;
+      try {
+        const payload = body ? slimPayload(JSON.parse(body.toString('utf8'))) : undefined;
+        const agent = payload ? registry.lookup(payload, hookMeta(req.headers)) : undefined;
+        if (payload && agent) decision = options.guard?.(agent, payload);
+      } catch (error) {
+        // A broken input, or a fault of the guard: the tool goes on as usual.
+        log(`guardia: ${String(error)}`);
+      }
+      return decision ? send(res, 200, decision) : send(res, 200);
     }
 
     if (url.pathname === STATUS_PATH) {

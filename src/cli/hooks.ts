@@ -132,7 +132,12 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
   let saveCommand: string | null | undefined;
   try {
     if (action === 'install') {
-      const hooks = withForchettaHooks(settings as Record<string, unknown>, { port: config.port, hookScript: paths.hookScript, permissionScript: paths.permissionScript });
+      const hooks = withForchettaHooks(settings as Record<string, unknown>, {
+        port: config.port,
+        hookScript: paths.hookScript,
+        permissionScript: paths.permissionScript,
+        guardScript: paths.guardScript,
+      });
       const status = withForchettaStatusLine(hooks.settings, { port: config.port, statusScript: paths.statusScript });
       plan = { settings: status.settings, changes: [...hooks.changes, ...status.changes] };
       // Only when the status line becomes ours now: a second install keeps the command saved the first time.

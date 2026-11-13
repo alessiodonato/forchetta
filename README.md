@@ -6,7 +6,7 @@
 
 ### Your Claude Code sessions, working together.
 
-Keep every Claude Code session on your Mac in one window: see what each one is doing, answer its permission prompts, and get a notification when one needs you. Then put them to work as a team. A lead hands out the work, each member does its part in its own git worktree, and Forchetta warns you when two sessions write the same file.
+Keep every Claude Code session on your Mac in one window: see what each one is doing, answer its permission prompts, and get a notification when one needs you. Then put them to work as a team. A lead hands out the work, each member does its part in its own git worktree, and when two sessions reach for the same file, Forchetta makes one wait for the other.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#install)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#install)
@@ -45,7 +45,7 @@ Keep every Claude Code session on your Mac in one window: see what each one is d
 
 **Make them work together.**
 - **Teams of agents.** A lead, which is a Claude session or you, and up to 6 members. Each member is a full Claude Code session with its own role and model, and by default its own git worktree. The lead sends requests; members answer, or ask the lead when they're stuck. You can step into any member's terminal, and save the team as a template to start it again in another project.
-- **Conflict warnings.** When two sessions write the same file, both boxes say so.
+- **The guard.** A session can't edit a file that another one is changing in its turn: Claude is told why, works on something else or waits, and goes on by itself when the file is free. A git command that would change the files under another session asks you first. See [The guard](#the-guard).
 - **Hand-offs.** Select text in one terminal to ask Claude about it, or to send it to another session. Before a `/clear`, Forchetta can leave a note so the new session starts where the old one stopped (with arricurdAI).
 
 **Keep track of the rest.** The subagents each session starts and what they're doing, the files it changed, the artifacts it published on claude.ai. Names, groups and roles, with an org chart. Search through earlier sessions (with arricurdAI). A menu bar icon, and the shortcut ⌃⌥F.
@@ -63,7 +63,7 @@ Claude Code has its own ways to run several sessions, and there are good tools b
 | **Agent View** (`claude agents`) | Anthropic's full-screen list of your background sessions, in the terminal | A window that stays open next to your work, with a live box for each session and up to four terminals side by side. |
 | **Claude Desktop** | Anthropic's app, with parallel sessions in its sidebar | It works with the `claude` CLI you already run in your terminal, with your hooks and settings. |
 | **Agent teams** (experimental in Claude Code) | A lead session that spawns teammates and shares a task list with them | Teams are set up in a panel and saved as templates: role, model, permissions and worktree for each member. The lead can be you. |
-| **cmux**, **Claude Squad** | Terminals and session managers for many kinds of coding agents | Built for Claude Code only, through its hooks: permissions answered from the box, context and cost per session, subagents, teams that talk through an MCP server. |
+| **cmux**, **Claude Squad** | Terminals and session managers for many kinds of coding agents | Built for Claude Code only, through its hooks: a guard that keeps two sessions off the same file, permissions answered from the box, context and cost per session, subagents, teams that talk through an MCP server. |
 
 They don't rule each other out. Sessions started in any terminal show up in Forchetta, read only unless you started them with `forchetta run claude`.
 
@@ -137,6 +137,8 @@ Every event goes through `bin/forchetta-hook`, a small `sh` + `curl` script that
 `SessionStart` and `SessionEnd` are synchronous instead: they take about 30 ms.
 
 `PermissionRequest` goes through `bin/forchetta-permission`, which waits for the answer of the box (see [Permissions from the box](#permissions-from-the-box)). The dialog in the Terminal shows up anyway, at once. With the daemon off, the script exits at once and prints nothing. The same happens with `claude -p` and with the SDK, which have no dialog.
+
+Before `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and `Bash`, `bin/forchetta-guard` asks the daemon whether the tool may go (see [The guard](#the-guard)). Claude waits for it: about 30 ms, only for these tools. With the daemon off, slow or with nothing to say, it prints nothing and the tool goes on as usual.
 
 ## Usage
 
@@ -327,6 +329,28 @@ If two live sessions wrote the same file in the last hour, both boxes say so: "�
 - The repository is the working folder with `.git`: two worktrees of the same repository are two different places and never conflict.
 - The warning goes away after an hour with no shared writes, or when the other session ends.
 - The writes stay even if the daemon restarts (in `var/state.json`).
+
+### The guard
+
+Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. The guard stops that before it happens.
+
+**A file held.** A session holds a file it wrote in the turn it is working on now, until the turn ends. When another session tries to edit that file, the guard stops the edit and tells Claude why:
+
+> Forchetta: "billing-api", another Claude Code session on this Mac, is changing src/api.ts in the turn it is working on now. Don't edit this file yet and don't try again now: work on something else first, or end your turn saying that you are waiting for src/api.ts. You will be told when the file is free.
+
+Claude Code shows it as "PreToolUse:Edit hook error"; Claude reads the reason, and works on something else or ends its turn. Both boxes say it: "⏸ src/api.ts held by billing-api" in the session that waits, "⏸ holds src/api.ts · beta waits" in the other. In the column on the left, the tag "⏸ held".
+
+**Free again.** When the turn that held the file ends, the session that waited gets a new prompt, typed only when it is ready, like the commands of the box: "Forchetta: src/api.ts is free now ("billing-api" ended its turn). You can go on." If it wrote the file in the meantime, the prompt is not sent. A session started with plain `claude` cannot be typed into: you get a notification instead.
+
+**let it through**, in the box of the session that waits, lets it write that file anyway. Then both sessions may change it until the turn of the other one ends.
+
+**git.** Before a Bash command with a git that changes the files of the folder (`checkout`, `switch`, `restore`, `reset --hard`, `stash`, `clean`, `rebase`, `pull`, `merge`, `cherry-pick`, `revert`, `am`), if another live session works in the same working tree (it is in a turn there, or changed files there in the last hour), Claude Code asks you first, with the reason in the dialog. You can answer from the box too.
+
+- A file counts as held when it was written with `Edit`, `Write`, `MultiEdit` or `NotebookEdit`, as for conflicts. Between turns, a file written by a subagent in the background stays held for two minutes after its last write.
+- Two worktrees of the same repository are two different folders: the guard never stops a member of a team in its own worktree.
+- The command line of git is read as a plain shell line: `&&`, `;`, `|`, quotes, `cd` and `git -C` are followed; what cannot be read goes through.
+- What the guard holds lives in the memory of the daemon: after a restart nothing is held until the next writes.
+- To turn it off, in `var/config.json`: `"guard": { "files": false, "git": false }`, then restart the daemon. Each part can be off on its own.
 
 ### Stalled sessions
 

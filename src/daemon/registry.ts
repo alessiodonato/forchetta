@@ -100,6 +100,11 @@ export class Registry {
     return undefined;
   }
 
+  /** The agent of a hook input, if known, without applying it: for the guard, whose event the async hook brings. */
+  lookup(payload: HookPayload, meta: HookMeta = {}): Agent | undefined {
+    return this.find(payload, meta);
+  }
+
   /** Applies a hook event, creating the agent when it is the first event of a session. */
   hook(payload: HookPayload, meta: HookMeta = {}): Agent {
     const now = this.now();

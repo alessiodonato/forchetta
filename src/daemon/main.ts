@@ -15,6 +15,7 @@ import { SelectionReader } from './selection.ts';
 import { Commander } from './commands.ts';
 import { Attention } from './attention.ts';
 import { Conflicts, writtenFile } from './conflicts.ts';
+import { Guard, hookOutput } from './guard.ts';
 import { changesOf } from './diffs.ts';
 import { editOf, Patches } from './patches.ts';
 import { runRecall } from './recall.ts';
@@ -33,6 +34,7 @@ import { anySubagentActive, applySubagentHook, checkSubagents, readSubagentThrea
 import { subagentKey } from '../shared/present.ts';
 import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
 import type { Agent } from './state.ts';
+import { displayName, type GuardHold } from '../shared/agent.ts';
 import { haikuComplete, Summarizer } from './summarizer.ts';
 import { Terminals } from './terminals.ts';
 
@@ -108,6 +110,7 @@ function main(): void {
   let permissions: Permissions | undefined;
   const attention = new Attention({ notify: (notice) => hub?.notify(notice), stallMs: config.stallMin * 60_000 });
   const conflicts = new Conflicts();
+  let guard: Guard | undefined;
   const teams = new Teams(paths.teams, log);
   const crews = new Crews(paths.crews, log);
   const templates = new CrewTemplates(paths.crewTemplates, log);
@@ -168,6 +171,7 @@ function main(): void {
       permissions?.agentChanged(agent);
       attention.agentChanged(agent);
       if (agent.state === 'ended' && agent.conflicts) updateConflicts();
+      if (agent.state === 'ended') guard?.ended(agent);
       // A session in a folder with a remembered team gets it: one more change, once.
       if (teams.apply(agent)) registry.touch(agent);
       if (CONTEXT_EVENTS.has(agent.lastEvent.name)) poller?.soon();
@@ -182,6 +186,33 @@ function main(): void {
       patches.forget(ids);
     },
     onUnknownPid: reconcileSoon,
+  });
+  // The notices of the guard waiting in the queue of a session, with their files: a session that writes one of
+  // those files first went on by itself, and its notice goes.
+  const notices = new Map<string, { commandId: string; paths: Set<string> }>();
+  /** A file the guard held back is free: the session that waited is told, in its terminal when it can be. */
+  const freed = (waiter: Agent, files: GuardHold[], by: Agent): void => {
+    const names = files.map((file) => file.file);
+    const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names.at(-1)!}`;
+    const byName = files[0]?.withName ?? displayName(by);
+    log(`vigile: ${list} di nuovo libero per ${waiter.team?.label ?? waiter.project}`);
+    if (waiter.control.kind === 'tmux') {
+      const earlier = notices.get(waiter.id);
+      if (earlier) commander?.cancel(waiter.id, earlier.commandId);
+      const text = `Forchetta: ${list} ${names.length === 1 ? 'is' : 'are'} free now ("${byName}" ended its turn). You can go on.`;
+      const result = commander?.enqueueFree(waiter.id, text);
+      if (result?.ok) notices.set(waiter.id, { commandId: result.command.id, paths: new Set([...(earlier?.paths ?? []), ...files.map((file) => file.path)]) });
+      return;
+    }
+    hub?.notify({ agentId: waiter.id, kind: 'free', title: `${displayName(waiter)} can go on`, body: `${list} ${names.length === 1 ? 'is' : 'are'} free: ${byName} ended its turn.` });
+  };
+  guard = new Guard({
+    agents: () => registry.agents.values(),
+    repoOf: (dir) => conflicts.repoOf(dir),
+    writesOf: (agentId) => conflicts.filesOf(agentId),
+    enabled: () => config.guard,
+    touch: (agent) => registry.touch(agent),
+    onFree: (waiter, files, by) => freed(waiter, files, by),
   });
   // The artifacts a session showed before Forchetta saw them come: read once from its transcript, one transcript at
   // a time (they can be tens of MB), when the daemon starts and when a session first sends an event.
@@ -206,6 +237,11 @@ function main(): void {
     if (existsSync(paths.state)) {
       const saved = JSON.parse(readFileSync(paths.state, 'utf8')) as { agents?: Agent[]; writes?: unknown };
       registry.restore(saved.agents ?? []);
+      // What the guard held lives in its memory only: after a restart nothing is held, and the boxes say so.
+      for (const agent of registry.agents.values()) {
+        agent.heldBack = undefined;
+        agent.holding = undefined;
+      }
       for (const agent of registry.agents.values()) readArtifacts(agent);
       conflicts.load(saved.writes);
       updateConflicts();
@@ -256,6 +292,9 @@ function main(): void {
       }
     },
     onScrollEnd: (agentId) => void scrollEnd(agentId),
+    onLetThrough: (agentId, path) => {
+      if (guard?.letThrough(agentId, path)) log(`vigile: lasciata passare ${registry.agents.get(agentId)?.project ?? agentId} su ${path}`);
+    },
     onSpawn: (input) => spawnSession({ tmux, registry, claude, log }, input),
     crews: () => crews.summaries(),
     onCrewRequest: (crewId, to, text) => crews.request(crewId, to, text),
@@ -436,6 +475,12 @@ function main(): void {
     recordFile: process.env.FORCHETTA_RECORD === '1' ? paths.payloads : undefined,
     log,
     crew: (route, input) => crewApi(crews, route, input),
+    guard: (agent, payload) => {
+      const decision = guard?.decide(agent, payload);
+      if (!decision) return undefined;
+      log(`guardia: ${decision.decision} per ${agent.team?.label ?? agent.project} (${payload.tool_name})`);
+      return hookOutput(decision);
+    },
     onHook: (agent, payload) => {
       quietInterval = QUIET_RECONCILE_MIN_MS;
       commander?.hook(agent, payload);
@@ -456,6 +501,15 @@ function main(): void {
       readArtifacts(agent);
       if (applySubagentHook(agent, payload, Date.now())) registry.touch(agent);
       const file = writtenFile(payload, agent.cwd);
+      if (file) {
+        guard?.wrote(agent, file);
+        const notice = notices.get(agent.id);
+        if (notice?.paths.has(file)) {
+          commander?.cancel(agent.id, notice.commandId);
+          notices.delete(agent.id);
+        }
+      }
+      guard?.hook(agent, payload);
       if (file) {
         conflicts.wrote(agent.id, file);
         updateConflicts();

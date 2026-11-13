@@ -144,6 +144,23 @@ export interface Conflict {
   repo?: string;
 }
 
+/**
+ * A file the guard held back (daemon/guard.ts): another session is changing it in the turn it works on now. The
+ * session that was stopped has it in `heldBack`, with the other one in `with`; the other one has it in `holding`,
+ * with the session that waits in `with`.
+ */
+export interface GuardHold {
+  /** The file, relative to its working tree when there is one. */
+  file: string;
+  /** The file, absolute: what the box sends back to let it through. */
+  path: string;
+  with: string;
+  withName: string;
+  since: number;
+  /** You let it through from the box: its next write goes. */
+  letThrough?: boolean;
+}
+
 /** One change a session made to a file, as Claude Code reported it (daemon/patches.ts). */
 export interface SessionEdit {
   at: number;
@@ -260,8 +277,11 @@ export function cleanTeam(input: unknown): TeamInfo | undefined {
 export const displayName = (agent: Pick<Agent, 'project' | 'team'>): string => agent.team?.label ?? agent.project;
 
 /** The commands of the box, and the requests of a team of agents (pasted as a prompt). */
-/** request: of a team of agents; ask: a question about a selection, from the menu of a pane. */
-export type CommandKind = 'btw' | 'compact' | 'clear' | 'request' | 'ask';
+/**
+ * request: of a team of agents; ask: a question about a selection, from the menu of a pane; free: the guard tells a
+ * session that a file it was stopped on is free (daemon/guard.ts).
+ */
+export type CommandKind = 'btw' | 'compact' | 'clear' | 'request' | 'ask' | 'free';
 
 export type CommandStatus =
   /** Waits for the session to be ready for input. */
@@ -341,6 +361,10 @@ export interface Agent {
   scrolledBack?: boolean;
   /** Other sessions that write the same files or in the same working tree (daemon/conflicts.ts). */
   conflicts?: Conflict[];
+  /** Files the guard stopped this session from writing: another session is changing them now (daemon/guard.ts). */
+  heldBack?: GuardHold[];
+  /** Files of its turn that the guard kept other sessions from writing. */
+  holding?: GuardHold[];
   /** The permission dialog that the box can answer now. */
   permission?: PermissionAsk;
   permissionOutcome?: PermissionOutcome;

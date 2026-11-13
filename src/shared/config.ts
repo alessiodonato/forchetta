@@ -33,6 +33,11 @@ export interface Config {
   stallMin: number;
   /** The shortcut that shows or hides the app from anywhere, read by the app: "ctrl+alt+f", or "" for none. */
   hotkey: string;
+  /**
+   * The guard (daemon/guard.ts): files stops a session from editing a file that another session is changing in its
+   * turn; git asks before a git command that would change the files under another session.
+   */
+  guard: { files: boolean; git: boolean };
 }
 
 /** Native 1M window for the current models; 200k for those that compact at 200k without extended context. */
@@ -53,6 +58,7 @@ export const DEFAULT_CONFIG: Config = {
   reconcileIntervalMin: 5,
   stallMin: 10,
   hotkey: 'ctrl+alt+f',
+  guard: { files: true, git: true },
 };
 
 const positive = (value: unknown, fallback: number): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback);
@@ -81,6 +87,7 @@ export function loadConfig(file = paths.config): Config {
     }
   }
   const summaries = (raw.summaries && typeof raw.summaries === 'object' ? raw.summaries : {}) as Record<string, unknown>;
+  const guard = (raw.guard && typeof raw.guard === 'object' ? raw.guard : {}) as Record<string, unknown>;
   return {
     port: typeof port === 'number' && Number.isInteger(port) && port > 0 && port < 65536 ? port : DEFAULT_PORT,
     paths: toolPaths,
@@ -96,6 +103,8 @@ export function loadConfig(file = paths.config): Config {
     reconcileIntervalMin: positive(raw.reconcileIntervalMin, DEFAULT_CONFIG.reconcileIntervalMin),
     stallMin: positive(raw.stallMin, DEFAULT_CONFIG.stallMin),
     hotkey: typeof raw.hotkey === 'string' ? raw.hotkey : DEFAULT_CONFIG.hotkey,
+    // On unless turned off: only false counts.
+    guard: { files: guard.files !== false, git: guard.git !== false },
   };
 }
 

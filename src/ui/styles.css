@@ -1205,6 +1205,45 @@ html[data-hidden] *::after {
   text-overflow: ellipsis;
 }
 
+/* ——— The guard: a file held back, a file held ——— */
+
+.guard-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font: 11px var(--mono);
+  color: var(--text-2);
+}
+
+.guard-mark,
+.guard-tag {
+  color: var(--text-3);
+}
+
+.guard-line[data-kind='held'] .guard-mark {
+  color: var(--text-2);
+}
+
+.guard-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.guard-line .link {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  color: var(--claude);
+  cursor: pointer;
+}
+
 /* ——— One command to several sessions ——— */
 
 .top-right {

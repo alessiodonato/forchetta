@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ASYNC_EVENTS,
   formatSettings,
+  GUARD_MATCHER,
   HOOK_EVENTS,
   isOurHook,
   PERMISSION_EVENT,
@@ -16,7 +17,11 @@ const PERMISSION_SCRIPT = '/Users/dev/Desktop/Forchetta/bin/forchetta-permission
 const SYNC = { type: 'command', command: `${SCRIPT} 47821`, timeout: 3 };
 const ASYNC = { type: 'command', command: `${SCRIPT} 47821`, async: true };
 const PERMISSION = { type: 'command', command: `${PERMISSION_SCRIPT} 47821`, timeout: 3600 };
-const targets = (port: number, hookScript = SCRIPT) => ({ port, hookScript, permissionScript: PERMISSION_SCRIPT });
+const GUARD_SCRIPT = '/Users/dev/Desktop/Forchetta/bin/forchetta-guard';
+const GUARD = { type: 'command', command: `${GUARD_SCRIPT} 47821`, timeout: 3 };
+const targets = (port: number, hookScript = SCRIPT) => ({ port, hookScript, permissionScript: PERMISSION_SCRIPT, guardScript: GUARD_SCRIPT });
+/** Every hook of Forchetta is one per event, and PreToolUse has the guard too. */
+const OURS = HOOK_EVENTS.length + 1;
 
 /** The shape of the real settings: other keys, and the two hooks of arricurdAI. */
 const settings = (): Record<string, unknown> => ({
@@ -38,12 +43,14 @@ describe('install', () => {
     const { settings: after, changes } = withForchettaHooks(before, targets(47821));
     const hooks = after.hooks as Groups;
 
-    expect(changes).toHaveLength(HOOK_EVENTS.length);
+    expect(changes).toHaveLength(OURS);
     // arricurdAI: same groups, same place, same content.
     expect(hooks.UserPromptSubmit![0]).toEqual((before.hooks as Groups).UserPromptSubmit![0]);
     expect(hooks.SessionStart![0]).toEqual((before.hooks as Groups).SessionStart![0]);
     for (const event of SYNC_EVENTS) expect(hooks[event]!.at(-1)).toEqual({ hooks: [SYNC] });
-    for (const event of ASYNC_EVENTS) expect(hooks[event]!.at(-1)).toEqual({ hooks: [ASYNC] });
+    for (const event of ASYNC_EVENTS) expect(hooks[event]).toContainEqual({ hooks: [ASYNC] });
+    // The guard: a group of its own, with its matcher, after the hook of every event.
+    expect(hooks.PreToolUse).toEqual([{ hooks: [ASYNC] }, { matcher: GUARD_MATCHER, hooks: [GUARD] }]);
     expect(hooks[PERMISSION_EVENT]!.at(-1)).toEqual({ hooks: [PERMISSION] });
     for (const key of ['cleanupPeriodDays', 'permissions', 'statusLine', 'theme']) expect(after[key]).toEqual(before[key]);
     // The input is not touched.
@@ -84,6 +91,37 @@ describe('install', () => {
     expect((after.hooks as Groups).PermissionRequest).toEqual([{ hooks: [{ type: 'command', command: 'say ok' }] }, { hooks: [PERMISSION] }]);
   });
 
+  it('over the hooks of 0.8.5 adds only the guard', () => {
+    const old = withForchettaHooks(settings(), targets(47821)).settings;
+    const hooks = old.hooks as Groups;
+    // 0.8.5 had no guard: the hooks as it left them.
+    hooks.PreToolUse = hooks.PreToolUse!.filter((group) => !('matcher' in group));
+    const { settings: after, changes } = withForchettaHooks(old, targets(47821));
+    expect(changes).toEqual([`+ PreToolUse [${GUARD_MATCHER}]: command ${GUARD_SCRIPT} 47821 (waits, timeout 3 s)`]);
+    expect((after.hooks as Groups).PreToolUse).toEqual([{ hooks: [ASYNC] }, { matcher: GUARD_MATCHER, hooks: [GUARD] }]);
+  });
+
+  it('puts the matcher of the guard back, and moves the guard out of a group of yours', () => {
+    const alone = { hooks: { PreToolUse: [{ hooks: [ASYNC] }, { matcher: 'Bash', hooks: [GUARD] }] } };
+    const fixed = withForchettaHooks(alone, targets(47821));
+    expect((fixed.settings.hooks as Groups).PreToolUse).toEqual([{ hooks: [ASYNC] }, { matcher: GUARD_MATCHER, hooks: [GUARD] }]);
+    expect(fixed.changes).toContain(`~ PreToolUse [Bash]: command ${GUARD_SCRIPT} 47821 (waits, timeout 3 s) now in PreToolUse [${GUARD_MATCHER}]`);
+
+    const mixed = { hooks: { PreToolUse: [{ hooks: [ASYNC] }, { matcher: 'Bash', hooks: [{ type: 'command', command: 'say bash' }, GUARD] }] } };
+    const moved = withForchettaHooks(mixed, targets(47821)).settings.hooks as Groups;
+    expect(moved.PreToolUse).toEqual([
+      { hooks: [ASYNC] },
+      { matcher: 'Bash', hooks: [{ type: 'command', command: 'say bash' }] },
+      { matcher: GUARD_MATCHER, hooks: [GUARD] },
+    ]);
+  });
+
+  it('the matcher of the guard takes the tools that write or run commands, and no other', () => {
+    const matcher = new RegExp(GUARD_MATCHER);
+    for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash']) expect(matcher.test(tool)).toBe(true);
+    for (const tool of ['Read', 'Grep', 'BashOutput', 'mcp__files__Write', 'WebFetch']) expect(matcher.test(tool)).toBe(false);
+  });
+
   it('quotes a script path with spaces', () => {
     const { settings: after } = withForchettaHooks({}, targets(1, '/Users/a b/Forchetta/bin/forchetta-hook'));
     const command = String((after.hooks as Groups).SessionStart![0]!.hooks[0]!.command);
@@ -103,7 +141,8 @@ describe('uninstall', () => {
     const original = settings();
     const installed = withForchettaHooks(original, targets(47821)).settings;
     const { settings: removed, changes } = withoutForchettaHooks(installed);
-    expect(changes).toHaveLength(HOOK_EVENTS.length);
+    expect(changes).toHaveLength(OURS);
+    expect(changes).toContain(`- PreToolUse [${GUARD_MATCHER}]: command ${GUARD_SCRIPT} 47821 (waits, timeout 3 s)`);
     expect(formatSettings(removed)).toBe(formatSettings(original));
   });
 
@@ -128,6 +167,7 @@ describe('isOurHook', () => {
     expect(isOurHook({ type: 'http', url: 'http://127.0.0.1:47821/forchetta/hook' })).toBe(true);
     expect(isOurHook({ type: 'command', command: `${SCRIPT} 47821` })).toBe(true);
     expect(isOurHook({ type: 'command', command: `${PERMISSION_SCRIPT} 47821` })).toBe(true);
+    expect(isOurHook({ type: 'command', command: `${GUARD_SCRIPT} 47821` })).toBe(true);
     expect(isOurHook({ type: 'command', command: 'node /x/arricurdAI/packages/cli/dist/bin.js guard' })).toBe(false);
     expect(isOurHook({ type: 'http', url: 'http://127.0.0.1:47821/hook' })).toBe(false);
     expect(isOurHook({ type: 'http', url: 'https://example.com/forchetta/hook' })).toBe(false);

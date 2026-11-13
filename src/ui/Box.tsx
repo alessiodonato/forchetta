@@ -28,6 +28,7 @@ import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
 import { SubagentRows, SubagentsButton } from './Subagents.tsx';
 import { PermissionOutcomeLine, PermissionPrompt, visibleOutcome } from './Permission.tsx';
+import { GuardLines } from './Guard.tsx';
 import { roleText, TeamEditor } from './Team.tsx';
 import { canOpen, type Store } from './store.ts';
 
@@ -267,6 +268,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: B
           </span>
         </div>
       )}
+      <GuardLines agent={agent} store={store} />
       {crewLine && (
         <p class="crew-line" title={crewLine}>
           {crewLine}

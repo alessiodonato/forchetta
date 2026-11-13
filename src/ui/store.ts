@@ -437,6 +437,11 @@ export class Store {
     this.send({ type: 'scrollEnd', agentId });
   }
 
+  /** Lets a session write a file the guard held back for it: another session changes it too, until its turn ends. */
+  letThrough(agentId: string, path: string): void {
+    this.send({ type: 'letThrough', agentId, path });
+  }
+
   /** Opens the panel of the changes of a session, or reads them again. */
   showFiles(agentId: string): void {
     this.set({ files: { agentId } });

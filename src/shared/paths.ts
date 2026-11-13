@@ -79,6 +79,7 @@ export interface Paths {
   tmuxConf: string;
   hookScript: string;
   permissionScript: string;
+  guardScript: string;
   statusScript: string;
   startScript: string;
   /** The status line command you had, run by bin/forchetta-statusline. */
@@ -109,6 +110,7 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     tmuxConf: join(root, 'config', 'tmux.conf'),
     hookScript: join(root, 'bin', 'forchetta-hook'),
     permissionScript: join(root, 'bin', 'forchetta-permission'),
+    guardScript: join(root, 'bin', 'forchetta-guard'),
     statusScript: join(root, 'bin', 'forchetta-statusline'),
     startScript: join(root, 'bin', 'forchetta-start'),
     statusCommand: join(varDir, 'statusline-command'),

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Hook of Forchetta for PreToolUse of the tools that write files or run commands (Edit, Write, MultiEdit,
+# NotebookEdit, Bash): Claude waits for it. It sends the tool call to the local daemon, which may answer with a
+# decision: "deny" when another session is changing that file, "ask" before a git command that would change the
+# files of another session (daemon/guard.ts). What it prints is that decision, as Claude Code reads it on stdout.
+#
+# Daemon off, slow, or with nothing to say: it prints nothing and exits 0, and the tool goes on as usual. Claude
+# Code also lets the tool go on when the hook runs past its timeout.
+port=${1:-47821}
+/usr/bin/curl --silent --fail --max-time 1 \
+  --header 'Content-Type: application/json' \
+  --header "X-Forchetta-Pid: ${PPID:-}" \
+  --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
+  --header "X-Forchetta-Pane: ${TMUX_PANE:-}" \
+  --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
+  --data-binary @- "http://127.0.0.1:$port/forchetta/guard" 2>/dev/null
+exit 0

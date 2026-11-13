@@ -16,7 +16,9 @@ export const label = (command: QueuedCommand): string =>
       ? `request #${command.request?.n ?? '?'}`
       : command.kind === 'ask'
         ? `question “${clip((command.arg ?? '').split('\n')[0] ?? '', 28)}”`
-        : `/${command.kind}`;
+        : command.kind === 'free'
+          ? 'the notice that its file is free'
+          : `/${command.kind}`;
 
 /** The command to show: the one waiting or sent, else the last one done in the last two minutes. */
 export function currentCommand(agent: Agent, now: number): QueuedCommand | undefined {
@@ -51,6 +53,8 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
             ? `✓ request #${command.request?.n ?? '?'} delivered`
             : command.kind === 'ask'
               ? '✓ question delivered'
+            : command.kind === 'free'
+              ? '✓ told that its file is free'
             : command.kind === 'compact'
               ? '✓ /compact done'
               : '✓ /clear done';

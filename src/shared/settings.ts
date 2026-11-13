@@ -8,6 +8,10 @@
 //
 // PermissionRequest goes through bin/forchetta-permission instead: it waits for an answer from the box, while
 // Claude Code shows its dialog as usual.
+//
+// PreToolUse has a second hook of Forchetta, in a group of its own with a matcher: bin/forchetta-guard, before the
+// tools that write files or run commands. Claude waits for it: the guard can stop the tool (daemon/guard.ts). For
+// every other tool nothing waits.
 
 type Json = Record<string, unknown>;
 
@@ -36,17 +40,30 @@ export const SYNC_TIMEOUT_S = 3;
 /** One hour: the hook waits 3540 s at most (its default), then the dialog stays in the terminal only. */
 export const PERMISSION_TIMEOUT_S = 3600;
 
+/** The guard: before the tools that write files or run commands, a hook Claude waits for. */
+export const GUARD_EVENT = 'PreToolUse';
+export const GUARD_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash'] as const;
+/** Claude Code reads the matcher as a regular expression, not anchored: anchored here, or "Edit" would match "NotebookEdit" and any tool whose name holds it. */
+export const GUARD_MATCHER = `^(${GUARD_TOOLS.join('|')})$`;
+/** The script gives up on the daemon after 1 s; past this, Claude Code lets the tool go on by itself. */
+export const GUARD_TIMEOUT_S = 3;
+
 export interface HookTargets {
   port: number;
   /** Full path of bin/forchetta-hook. */
   hookScript: string;
   /** Full path of bin/forchetta-permission. */
   permissionScript: string;
+  /** Full path of bin/forchetta-guard. */
+  guardScript: string;
 }
 
 /** The http hooks of the first version of Forchetta: still recognised, so that install replaces them. */
 const OUR_URL = /^http:\/\/127\.0\.0\.1:\d+\/forchetta\/hook$/;
-const OUR_COMMAND = /(?:^|[/"'\s])forchetta-(?:hook|permission)["']?(?:\s|$)/;
+const OUR_COMMAND = /(?:^|[/"'\s])forchetta-(hook|permission|guard)["']?(?:\s|$)/;
+
+/** Which script of Forchetta a hook runs. */
+type Kind = 'hook' | 'permission' | 'guard';
 
 export class UnexpectedSettings extends Error {
   override name = 'UnexpectedSettings';
@@ -54,20 +71,36 @@ export class UnexpectedSettings extends Error {
 
 const isObject = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** A hook of Forchetta, from any copy of the folder and any port. */
-export function isOurHook(hook: Json): boolean {
-  if (hook.type === 'http') return typeof hook.url === 'string' && OUR_URL.test(hook.url);
-  if (hook.type === 'command') return typeof hook.command === 'string' && OUR_COMMAND.test(hook.command);
-  return false;
+function kindOf(hook: Json): Kind | undefined {
+  if (hook.type === 'http') return typeof hook.url === 'string' && OUR_URL.test(hook.url) ? 'hook' : undefined;
+  if (hook.type !== 'command' || typeof hook.command !== 'string') return undefined;
+  return OUR_COMMAND.exec(hook.command)?.[1] as Kind | undefined;
 }
+
+/** A hook of Forchetta, from any copy of the folder and any port. */
+export const isOurHook = (hook: Json): boolean => kindOf(hook) !== undefined;
 
 const quoteIfNeeded = (path: string): string => (/^[\w/.@+-]+$/.test(path) ? path : `"${path.replace(/(["\\$`])/g, '\\$1')}"`);
 
-export function wantedHook(event: string, targets: HookTargets): Json {
-  if (event === PERMISSION_EVENT) return { type: 'command', command: `${quoteIfNeeded(targets.permissionScript)} ${targets.port}`, timeout: PERMISSION_TIMEOUT_S };
+/** A hook of Forchetta as it should be, and the matcher of its group (none: every tool). */
+export interface WantedHook {
+  kind: Kind;
+  matcher?: string;
+  hook: Json;
+}
+
+/** The hooks of Forchetta for one event, in the order they go in. */
+export function wantedHooks(event: string, targets: HookTargets): WantedHook[] {
+  if (event === PERMISSION_EVENT) {
+    return [{ kind: 'permission', hook: { type: 'command', command: `${quoteIfNeeded(targets.permissionScript)} ${targets.port}`, timeout: PERMISSION_TIMEOUT_S } }];
+  }
   const command = `${quoteIfNeeded(targets.hookScript)} ${targets.port}`;
-  if ((SYNC_EVENTS as readonly string[]).includes(event)) return { type: 'command', command, timeout: SYNC_TIMEOUT_S };
-  return { type: 'command', command, async: true };
+  const sync = (SYNC_EVENTS as readonly string[]).includes(event);
+  const wanted: WantedHook[] = [{ kind: 'hook', hook: sync ? { type: 'command', command, timeout: SYNC_TIMEOUT_S } : { type: 'command', command, async: true } }];
+  if (event === GUARD_EVENT) {
+    wanted.push({ kind: 'guard', matcher: GUARD_MATCHER, hook: { type: 'command', command: `${quoteIfNeeded(targets.guardScript)} ${targets.port}`, timeout: GUARD_TIMEOUT_S } });
+  }
+  return wanted;
 }
 
 function hooksOf(settings: Json): Json {
@@ -93,29 +126,50 @@ const describe = (hook: Json): string =>
     ? `http ${String(hook.url)}`
     : `command ${String(hook.command)}${hook.async === true ? ' (async)' : typeof hook.timeout === 'number' ? ` (waits, timeout ${hook.timeout} s)` : ''}`;
 
-/** The settings with every hook of Forchetta in place, and one line for each change. */
+/** The event, with the matcher of the group when it has one: "PreToolUse [^(Edit|Write)$]". */
+const where = (event: string, matcher: unknown): string => (typeof matcher === 'string' && matcher ? `${event} [${matcher}]` : event);
+
+/**
+ * The settings with every hook of Forchetta in place, and one line for each change. Each wanted hook takes the place
+ * of one of ours already there: the one with the same script, or else any other of ours (the PermissionRequest hook
+ * of 0.4 ran forchetta-hook). With none, it gets a group of its own at the end.
+ */
 export function withForchettaHooks(settings: Json, targets: HookTargets): { settings: Json; changes: string[] } {
   const next = structuredClone(settings);
   const hooks = hooksOf(next);
   const changes: string[] = [];
   for (const event of HOOK_EVENTS) {
-    const groups = groupsOf(hooks, event);
-    const wanted = wantedHook(event, targets);
-    let found = false;
-    for (const group of groups) {
-      const handlers = handlersOf(group, event);
-      handlers.forEach((hook, index) => {
-        if (!isOurHook(hook)) return;
-        found = true;
-        if (JSON.stringify(hook) === JSON.stringify(wanted)) return;
-        handlers[index] = wanted;
-        changes.push(`~ ${event}: ${describe(hook)} → ${describe(wanted)}`);
-      });
+    let groups = groupsOf(hooks, event);
+    const ours = groups.flatMap((group) => handlersOf(group, event).map((hook) => ({ group, hook })).filter(({ hook }) => isOurHook(hook)));
+    const taken = new Set<Json>();
+    for (const wanted of wantedHooks(event, targets)) {
+      const found = ours.find(({ hook }) => !taken.has(hook) && kindOf(hook) === wanted.kind) ?? ours.find(({ hook }) => !taken.has(hook));
+      if (!found) {
+        groups = [...groups, wanted.matcher ? { matcher: wanted.matcher, hooks: [wanted.hook] } : { hooks: [wanted.hook] }];
+        changes.push(`+ ${where(event, wanted.matcher)}: ${describe(wanted.hook)}`);
+        continue;
+      }
+      taken.add(found.hook);
+      const handlers = handlersOf(found.group, event);
+      const index = handlers.indexOf(found.hook);
+      const matcher = found.group.matcher || undefined;
+      if (JSON.stringify(found.hook) !== JSON.stringify(wanted.hook)) {
+        handlers[index] = wanted.hook;
+        changes.push(`~ ${where(event, matcher)}: ${describe(found.hook)} → ${describe(wanted.hook)}`);
+      }
+      if (matcher === wanted.matcher) continue;
+      // The group of this hook has another matcher. Alone in it, the group takes the right one; next to hooks of
+      // yours, it moves to a group of its own, and yours keep theirs.
+      if (handlers.length === 1) {
+        if (wanted.matcher) found.group.matcher = wanted.matcher;
+        else delete found.group.matcher;
+      } else {
+        handlers.splice(index, 1);
+        groups = [...groups, wanted.matcher ? { matcher: wanted.matcher, hooks: [wanted.hook] } : { hooks: [wanted.hook] }];
+      }
+      changes.push(`~ ${where(event, matcher)}: ${describe(wanted.hook)} now in ${where(event, wanted.matcher)}`);
     }
-    if (!found) {
-      hooks[event] = [...groups, { hooks: [wanted] }];
-      changes.push(`+ ${event}: ${describe(wanted)}`);
-    }
+    hooks[event] = groups;
   }
   next.hooks = hooks;
   return { settings: next, changes };
@@ -133,7 +187,7 @@ export function withoutForchettaHooks(settings: Json): { settings: Json; changes
       const handlers = handlersOf(group, event);
       const others = handlers.filter((hook) => {
         if (!isOurHook(hook)) return true;
-        changes.push(`- ${event}: ${describe(hook)}`);
+        changes.push(`- ${where(event, group.matcher)}: ${describe(hook)}`);
         return false;
       });
       if (others.length === handlers.length) kept.push(group);
