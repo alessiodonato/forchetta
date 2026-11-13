@@ -3,7 +3,7 @@
   "version": "0.9.2",
   "private": true,
   "license": "Apache-2.0",
-  "description": "Centro di controllo locale per sessioni Claude Code parallele su macOS.",
+  "description": "Run several Claude Code sessions in the same repo without them stepping on each other.",
   "type": "module",
   "engines": {
     "node": ">=22"
