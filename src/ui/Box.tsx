@@ -126,17 +126,19 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
           guard
         </span>
       )}
-      <span class="grow" />
-      {/* Its rows open the panel while they are in the box: the button only after. */}
-      {shownSubagents(agent, now).length === 0 && <SubagentsButton agent={agent} store={store} />}
-      <FilesButton agent={agent} store={store} />
-      <ArtifactsButton agent={agent} />
-      {hasEvents(agent) && agent.state !== 'ended' && (
-        <span class="ago" title="Time since the last event">
-          {agoShort(now - agent.lastEvent.at)}
-        </span>
-      )}
-      <span class={`tag control-${agent.control.kind}`}>{controlLabel(agent)}</span>
+      {/* One group, on the right: when the box is too narrow for one line, it goes whole to the next line. */}
+      <span class="meta-end">
+        {/* Its rows open the panel while they are in the box: the button only after. */}
+        {shownSubagents(agent, now).length === 0 && <SubagentsButton agent={agent} store={store} />}
+        <FilesButton agent={agent} store={store} />
+        <ArtifactsButton agent={agent} />
+        {hasEvents(agent) && agent.state !== 'ended' && (
+          <span class="ago" title="Time since the last event">
+            {agoShort(now - agent.lastEvent.at)}
+          </span>
+        )}
+        <span class={`tag control-${agent.control.kind}`}>{controlLabel(agent)}</span>
+      </span>
     </footer>
   );
 }

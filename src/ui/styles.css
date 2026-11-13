@@ -320,10 +320,13 @@ header.top {
   color: var(--text-2);
 }
 
+/* The last line of a box. Too narrow for all of it, it becomes two: the cost and the cache on the left, the
+   buttons, the time and the control on the right of the next line. Nothing is cut or covered. */
 .meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 5px 10px;
   min-width: 0;
   font: 11.5px var(--mono);
   white-space: nowrap;
@@ -334,11 +337,22 @@ header.top {
   flex: none;
 }
 
-.meta .grow {
-  flex: 1;
+.meta > .meta-end {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px 10px;
 }
 
-/* When the box is narrow the expiry of the cache and the time give way; the cost stays whole. */
+.meta-end > * {
+  flex: none;
+}
+
+/* Only when even half a line is too narrow do the expiry of the cache and the time give way; the cost stays whole. */
 .meta .usage {
   flex: none;
 }
@@ -934,8 +948,10 @@ html[data-hidden] *::after {
   bottom: 9px;
   left: 12px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 5px 6px;
   background: var(--surface);
   opacity: 0;
   pointer-events: none;
@@ -957,11 +973,19 @@ html[data-hidden] *::after {
   background: inherit;
 }
 
+/* The commands keep their width, on the right: with no room next to the buttons of the box they go to a line of
+   their own below them, never over them. A question or a confirmation takes the whole line. */
 .box-commands .command-bar {
-  flex: 1;
-  min-width: 0;
+  flex: none;
+  max-width: 100%;
+  margin-left: auto;
   justify-content: flex-end;
   background: var(--surface);
+}
+
+.box-commands.active .command-bar {
+  flex: 1;
+  min-width: 0;
 }
 
 .box[data-state='waiting'] .box-commands,

@@ -1,6 +1,6 @@
 {
   "name": "forchetta",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "private": true,
   "license": "Apache-2.0",
   "description": "Run several Claude Code sessions in the same repo without them stepping on each other.",
