@@ -14,12 +14,12 @@ Quando due sessioni vogliono lo stesso file, Forchetta ne fa aspettare una, spie
 [![Gira in locale](https://img.shields.io/badge/gira-in%20locale-46c48a?style=flat-square)](#cosa-tocca-sul-tuo-mac)
 [![Test](https://img.shields.io/github/actions/workflow/status/alessiodonato/forchetta/ci.yml?branch=main&style=flat-square&label=test)](https://github.com/alessiodonato/forchetta/actions/workflows/ci.yml)
 [![Licenza: Apache 2.0](https://img.shields.io/badge/licenza-Apache%202.0-8b867d?style=flat-square)](LICENSE)
-[![Sito](https://img.shields.io/badge/sito-forchetta-d97757?style=flat-square)](https://alessiodonato.github.io/forchetta/)
+[![Sito](https://img.shields.io/badge/sito-forchetta.dev-d97757?style=flat-square)](https://forchetta.dev/)
 
 [Installazione](#installazione) ·
 [Il vigile](#il-vigile) ·
 [Rispetto ad altri strumenti](#rispetto-ad-altri-strumenti) ·
-[Manuale (in inglese)](https://alessiodonato.github.io/forchetta/manual.html) ·
+[Manuale (in inglese)](https://forchetta.dev/manual.html) ·
 [🇬🇧 English](README.md)
 
 <br>
@@ -43,7 +43,7 @@ Il modo solito di far lavorare più agenti in parallelo è un worktree git per o
 - quando il turno che teneva il file finisce, la sessione in attesa viene avvisata che il file è libero, e riparte da sola;
 - un comando git che cambierebbe i file sotto a un'altra sessione (`checkout`, `reset --hard`, `stash`, `pull`…) ti chiede prima conferma.
 
-Vale per tutte le sessioni, anche per quelle avviate con `claude` normale. **let it through**, nel box, lo scavalca. [Il vigile nel manuale](https://alessiodonato.github.io/forchetta/manual.html#guard).
+Vale per tutte le sessioni, anche per quelle avviate con `claude` normale. **let it through**, nel box, lo scavalca. [Il vigile nel manuale](https://forchetta.dev/manual.html#guard).
 
 ### Funziona con il `claude` che usi già
 
@@ -62,7 +62,7 @@ Avvia una sessione con `forchetta run claude`, o dall'app, e Forchetta può anch
 
 ### I team, quando servono
 
-Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree. Il capo distribuisce le richieste attraverso un server MCP; i membri rispondono, o gli fanno una domanda quando sono bloccati. Salva il team come modello e riavvialo in un altro progetto. [I team nel manuale](https://alessiodonato.github.io/forchetta/manual.html#teams).
+Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree. Il capo distribuisce le richieste attraverso un server MCP; i membri rispondono, o gli fanno una domanda quando sono bloccati. Salva il team come modello e riavvialo in un altro progetto. [I team nel manuale](https://forchetta.dev/manual.html#teams).
 
 ## Rispetto ad altri strumenti
 
@@ -101,20 +101,20 @@ La seconda sessione viene fermata, dice che aspetterà `src/api.ts`, e riparte q
 
 ## Cos'altro fa
 
-- **Comandi**: `/btw`, `/compact` e `/clear` a una sessione o a più insieme, scritti solo quando è sicuro: mai dentro un dialogo, mai sopra una tua bozza. [Altro](https://alessiodonato.github.io/forchetta/manual.html#commands)
-- **Passaggi di lavoro**: seleziona del testo in un terminale per chiederne a Claude, o per mandarlo a un'altra sessione. [Altro](https://alessiodonato.github.io/forchetta/manual.html#selection)
-- **Cosa ha fatto ogni sessione**: i file che ha cambiato, i subagenti al lavoro, gli artefatti che ha pubblicato su claude.ai, e un avviso quando due sessioni hanno scritto lo stesso file. [Altro](https://alessiodonato.github.io/forchetta/manual.html#changes)
-- **Nuove sessioni e nuovi team dall'app**, con modello, modalità dei permessi e worktree. [Altro](https://alessiodonato.github.io/forchetta/manual.html#new-session)
-- **Nomi, gruppi e ruoli**, con un organigramma. [Altro](https://alessiodonato.github.io/forchetta/manual.html#window)
-- **Icona nella barra dei menu**, badge nel Dock e la scorciatoia ⌃⌥F. [Altro](https://alessiodonato.github.io/forchetta/manual.html#alerts)
-- **`forchetta ls --json`**, per gli script. [Altro](https://alessiodonato.github.io/forchetta/manual.html#cli)
+- **Comandi**: `/btw`, `/compact` e `/clear` a una sessione o a più insieme, scritti solo quando è sicuro: mai dentro un dialogo, mai sopra una tua bozza. [Altro](https://forchetta.dev/manual.html#commands)
+- **Passaggi di lavoro**: seleziona del testo in un terminale per chiederne a Claude, o per mandarlo a un'altra sessione. [Altro](https://forchetta.dev/manual.html#selection)
+- **Cosa ha fatto ogni sessione**: i file che ha cambiato, i subagenti al lavoro, gli artefatti che ha pubblicato su claude.ai, e un avviso quando due sessioni hanno scritto lo stesso file. [Altro](https://forchetta.dev/manual.html#changes)
+- **Nuove sessioni e nuovi team dall'app**, con modello, modalità dei permessi e worktree. [Altro](https://forchetta.dev/manual.html#new-session)
+- **Nomi, gruppi e ruoli**, con un organigramma. [Altro](https://forchetta.dev/manual.html#window)
+- **Icona nella barra dei menu**, badge nel Dock e la scorciatoia ⌃⌥F. [Altro](https://forchetta.dev/manual.html#alerts)
+- **`forchetta ls --json`**, per gli script. [Altro](https://forchetta.dev/manual.html#cli)
 
-Tutto il resto è nel [manuale](https://alessiodonato.github.io/forchetta/manual.html) (in inglese).
+Tutto il resto è nel [manuale](https://forchetta.dev/manual.html) (in inglese).
 
 ## Cosa tocca sul tuo Mac
 
 - **`~/.claude/settings.json`**, solo con `forchetta setup` o `forchetta hooks install`, dopo averti mostrato ogni modifica, e con un backup. Gli hook di Forchetta si aggiungono accanto ai tuoi senza cambiarli; `forchetta hooks uninstall` toglie solo quelli.
-- **Gli hook sono piccoli script `sh` + `curl`.** Terminano sempre con 0 e stampano solo una decisione: la tua risposta a un permesso, o il vigile che ferma una modifica. Con Forchetta spenta, una sessione si comporta esattamente come senza. Quasi tutti girano in background; il vigile fa aspettare Claude circa 30 ms, solo prima delle modifiche ai file e dei comandi Bash. [Come funzionano gli hook](https://alessiodonato.github.io/forchetta/manual.html#hooks)
+- **Gli hook sono piccoli script `sh` + `curl`.** Terminano sempre con 0 e stampano solo una decisione: la tua risposta a un permesso, o il vigile che ferma una modifica. Con Forchetta spenta, una sessione si comporta esattamente come senza. Quasi tutti girano in background; il vigile fa aspettare Claude circa 30 ms, solo prima delle modifiche ai file e dei comandi Bash. [Come funzionano gli hook](https://forchetta.dev/manual.html#hooks)
 - **Tutto il resto** sta in `~/Library/Application Support/Forchetta`, leggibile solo da te. Il daemon ascolta solo su `127.0.0.1`, con un token. Nessuna telemetria. L'unica chiamata esterna è facoltativa e spenta di default: un riassunto di una riga scritto da Haiku, attraverso la Claude API.
 - A riposo, app, pagina e daemon insieme restano sotto l'1% della CPU.
 

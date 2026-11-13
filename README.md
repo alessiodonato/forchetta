@@ -14,12 +14,12 @@ When two sessions reach for the same file, Forchetta makes one wait, tells Claud
 [![Runs locally](https://img.shields.io/badge/runs-locally-46c48a?style=flat-square)](#what-it-touches-on-your-mac)
 [![Tests](https://img.shields.io/github/actions/workflow/status/alessiodonato/forchetta/ci.yml?branch=main&style=flat-square&label=tests)](https://github.com/alessiodonato/forchetta/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-8b867d?style=flat-square)](LICENSE)
-[![Website](https://img.shields.io/badge/website-forchetta-d97757?style=flat-square)](https://alessiodonato.github.io/forchetta/)
+[![Website](https://img.shields.io/badge/website-forchetta.dev-d97757?style=flat-square)](https://forchetta.dev/)
 
 [Install](#install) ·
 [The guard](#the-guard) ·
 [How it compares](#how-it-compares) ·
-[Manual](https://alessiodonato.github.io/forchetta/manual.html) ·
+[Manual](https://forchetta.dev/manual.html) ·
 [🇮🇹 Italiano](README.it.md)
 
 <br>
@@ -41,7 +41,7 @@ The usual way to run agents in parallel is a git worktree for each one. Then eac
 - when the turn that held the file ends, the waiting session is told the file is free, and goes on by itself;
 - a git command that would change the files under another session (`checkout`, `reset --hard`, `stash`, `pull`…) asks you first.
 
-It works for every session, also those started with plain `claude`. **let it through** in the box overrides it. [The guard in the manual](https://alessiodonato.github.io/forchetta/manual.html#guard).
+It works for every session, also those started with plain `claude`. **let it through** in the box overrides it. [The guard in the manual](https://forchetta.dev/manual.html#guard).
 
 ### It works with the `claude` you already run
 
@@ -60,7 +60,7 @@ Start a session with `forchetta run claude`, or from the app, and Forchetta can 
 
 ### Teams, when you want them
 
-A lead, which is a Claude session or you, and up to 6 members. Each member is a full Claude Code session with its own role and model, and by default its own worktree. The lead hands out requests through an MCP server; members answer, or ask the lead when they're stuck. Save a team as a template and start it again in another project. [Teams in the manual](https://alessiodonato.github.io/forchetta/manual.html#teams).
+A lead, which is a Claude session or you, and up to 6 members. Each member is a full Claude Code session with its own role and model, and by default its own worktree. The lead hands out requests through an MCP server; members answer, or ask the lead when they're stuck. Save a team as a template and start it again in another project. [Teams in the manual](https://forchetta.dev/manual.html#teams).
 
 ## How it compares
 
@@ -99,20 +99,20 @@ The second session is stopped, says it will wait for `src/api.ts`, and goes on w
 
 ## What else it does
 
-- **Commands**: `/btw`, `/compact` and `/clear` to one session or to several, typed only when it's safe: never into a dialog, never over a draft of yours. [More](https://alessiodonato.github.io/forchetta/manual.html#commands)
-- **Hand-offs**: select text in a terminal to ask Claude about it, or to send it to another session. [More](https://alessiodonato.github.io/forchetta/manual.html#selection)
-- **What each session did**: the files it changed, its subagents at work, the artifacts it published on claude.ai, and a warning when two sessions wrote the same file. [More](https://alessiodonato.github.io/forchetta/manual.html#changes)
-- **New sessions and teams from the app**, with model, permission mode and worktree. [More](https://alessiodonato.github.io/forchetta/manual.html#new-session)
-- **Names, groups and roles**, with an org chart. [More](https://alessiodonato.github.io/forchetta/manual.html#window)
-- **Menu bar icon**, Dock badge and the shortcut ⌃⌥F. [More](https://alessiodonato.github.io/forchetta/manual.html#alerts)
-- **`forchetta ls --json`**, for scripts. [More](https://alessiodonato.github.io/forchetta/manual.html#cli)
+- **Commands**: `/btw`, `/compact` and `/clear` to one session or to several, typed only when it's safe: never into a dialog, never over a draft of yours. [More](https://forchetta.dev/manual.html#commands)
+- **Hand-offs**: select text in a terminal to ask Claude about it, or to send it to another session. [More](https://forchetta.dev/manual.html#selection)
+- **What each session did**: the files it changed, its subagents at work, the artifacts it published on claude.ai, and a warning when two sessions wrote the same file. [More](https://forchetta.dev/manual.html#changes)
+- **New sessions and teams from the app**, with model, permission mode and worktree. [More](https://forchetta.dev/manual.html#new-session)
+- **Names, groups and roles**, with an org chart. [More](https://forchetta.dev/manual.html#window)
+- **Menu bar icon**, Dock badge and the shortcut ⌃⌥F. [More](https://forchetta.dev/manual.html#alerts)
+- **`forchetta ls --json`**, for scripts. [More](https://forchetta.dev/manual.html#cli)
 
-Everything is in the [manual](https://alessiodonato.github.io/forchetta/manual.html).
+Everything is in the [manual](https://forchetta.dev/manual.html).
 
 ## What it touches on your Mac
 
 - **`~/.claude/settings.json`**, only with `forchetta setup` or `forchetta hooks install`, after showing you every change, and with a backup. The hooks of Forchetta go next to yours without changing them; `forchetta hooks uninstall` removes only them.
-- **The hooks are small `sh` + `curl` scripts.** They always exit with 0, and print only a decision: your answer to a permission, or the guard stopping an edit. With Forchetta off, a session behaves exactly as without it. Most run in the background; the guard makes Claude wait about 30 ms, only before edits and Bash commands. [How the hooks work](https://alessiodonato.github.io/forchetta/manual.html#hooks)
+- **The hooks are small `sh` + `curl` scripts.** They always exit with 0, and print only a decision: your answer to a permission, or the guard stopping an edit. With Forchetta off, a session behaves exactly as without it. Most run in the background; the guard makes Claude wait about 30 ms, only before edits and Bash commands. [How the hooks work](https://forchetta.dev/manual.html#hooks)
 - **Everything else** stays in `~/Library/Application Support/Forchetta`, readable only by you. The daemon listens on `127.0.0.1` only, with a token. No telemetry. The one outside call is optional and off by default: a one-line summary of a session by Haiku, through the Claude API.
 - At rest, the app, the page and the daemon together stay under 1% of CPU.
 
