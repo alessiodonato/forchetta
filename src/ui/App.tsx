@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { Agent, TodayInfo } from '../shared/agent.ts';
-import { nextChange, shortTokens, usdText } from '../shared/present.ts';
+import { type Agent, displayName, type TodayInfo, type UsageLimits } from '../shared/agent.ts';
+import { limitParts, nextChange, shortTokens, usdText } from '../shared/present.ts';
 import { startAmbient, stopAmbient } from './ambient.ts';
 import { Box } from './Box.tsx';
 import { BroadcastButton, BroadcastPanel } from './Broadcast.tsx';
@@ -89,16 +89,28 @@ function todayTitle(today: TodayInfo): string {
   return `Every session since ${since}: ${today.calls.toLocaleString('en-US')} calls, ${today.tokens.toLocaleString('en-US')} tokens, at API prices${unpriced} (data from arricurdAI)`;
 }
 
-function counts(agents: readonly Agent[], today: TodayInfo | undefined) {
+function counts(agents: readonly Agent[], today: TodayInfo | undefined, limits: UsageLimits | undefined) {
   const live = agents.filter((agent) => agent.state !== 'ended').length;
   const waiting = agents.filter((agent) => agent.state === 'waiting').length;
+  const byId = new Map(agents.map((agent) => [agent.id, agent]));
+  const parts = limitParts(limits, Date.now(), (id) => {
+    const agent = byId.get(id);
+    return agent ? displayName(agent) : undefined;
+  });
+  // With the limits of a plan, what counts is how much of them is left: the cost at API prices goes in their tooltip.
+  const todayLine = today ? `today ≈ ${usdText(today.usd)} · ${shortTokens(today.tokens)} tokens` : undefined;
   return (
     <p class="counts">
-      {today && (
+      {today && parts.length === 0 && (
         <span class="today" title={todayTitle(today)}>
-          today ≈ {usdText(today.usd)} · {shortTokens(today.tokens)} tokens ·{' '}
+          {todayLine} ·{' '}
         </span>
       )}
+      {parts.map((part, index) => (
+        <span key={part.text} class={`limit ${part.level}`} title={index === 0 && today ? `${part.title}\n\n${todayLine}: ${todayTitle(today)}` : part.title}>
+          {part.text} ·{' '}
+        </span>
+      ))}
       {live} {live === 1 ? 'session' : 'sessions'}
       {waiting > 0 && <span class="waiting"> · {waiting} {waiting === 1 ? 'waits for you' : 'wait for you'}</span>}
     </p>
@@ -169,7 +181,7 @@ export function App({ store }: { store: Store }) {
         <h1>Forchetta</h1>
         <div class="top-right">
           {state.ready && <ClaudeUpdateNotice info={state.claudeUpdate} store={store} />}
-          {state.ready && counts(agents, state.today)}
+          {state.ready && counts(agents, state.today, state.limits)}
           {state.ready && grouped && !working && (
             <span class="view-switch" role="group" aria-label="View">
               <button type="button" class={view === 'grid' ? 'on' : undefined} onClick={() => chooseView('grid')}>
@@ -186,14 +198,15 @@ export function App({ store }: { store: Store }) {
               search
             </button>
           )}
-          {state.ready && state.crews.length > 0 && (
-            <button type="button" class={`broadcast-toggle${panel === 'crew' ? ' active' : ''}`} title="Write a request to the members of a team, and see where the last ones stand" onClick={() => toggle('crew')}>
-              team
-            </button>
-          )}
           {state.ready && (
-            <button type="button" class={`broadcast-toggle${panel === 'team' ? ' active' : ''}`} title="Start a team of Claude Code sessions that work together: a lead and its members" onClick={() => toggle('team')}>
-              new team
+            // One button for the teams: their thread when there are some, with "+ new team" in it; a new one otherwise.
+            <button
+              type="button"
+              class={`broadcast-toggle${panel === 'crew' || panel === 'team' ? ' active' : ''}`}
+              title={state.crews.length > 0 ? 'Your teams: write a request to their members, see where the last ones stand, or start a new one' : 'Start a team of Claude Code sessions that work together: a lead and its members'}
+              onClick={() => (panel === 'crew' || panel === 'team' ? setPanel(undefined) : toggle(state.crews.length > 0 ? 'crew' : 'team'))}
+            >
+              {state.crews.length > 0 ? 'teams' : 'new team'}
             </button>
           )}
           {state.ready && (
@@ -206,7 +219,7 @@ export function App({ store }: { store: Store }) {
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && panel === 'new' && <NewSessionPanel agents={agents} store={store} onClose={() => toggle('new')} />}
       {state.ready && panel === 'team' && <NewTeamPanel agents={agents} store={store} onClose={() => toggle('team')} />}
-      {state.ready && panel === 'crew' && <TeamPanel crews={state.crews} store={store} onClose={() => toggle('crew')} />}
+      {state.ready && panel === 'crew' && <TeamPanel crews={state.crews} store={store} onClose={() => toggle('crew')} onNew={() => setPanel('team')} />}
       {state.ready && panel === 'recall' && <RecallPanel agents={agents} store={store} onClose={() => toggle('recall')} />}
       {state.ready && panel === 'prompts' && <PromptsPanel store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && !state.connected && <p class="notice">Daemon unreachable: trying again…</p>}
@@ -226,13 +239,35 @@ export function App({ store }: { store: Store }) {
           agents={agents}
           crews={state.crews}
           render={(agent) => (
-            <Box key={agent.id} agent={agent} now={now} entering={store.entering.has(agent.id)} onEntered={entered} onOpen={open} store={store} crewLine={crewLineOf(agent.id, state.crews)} />
+            <Box
+              key={agent.id}
+              agent={agent}
+              now={now}
+              entering={store.entering.has(agent.id)}
+              onEntered={entered}
+              onOpen={open}
+              store={store}
+              crewLine={crewLineOf(agent.id, state.crews)}
+              unseen={store.unseen(agent)}
+              limits={agent.state === 'error' ? state.limits : undefined}
+            />
           )}
         />
       ) : (
         <main class="grid" ref={grid}>
           {agents.map((agent) => (
-            <Box key={agent.id} agent={agent} now={now} entering={store.entering.has(agent.id)} onEntered={entered} onOpen={open} store={store} crewLine={crewLineOf(agent.id, state.crews)} />
+            <Box
+              key={agent.id}
+              agent={agent}
+              now={now}
+              entering={store.entering.has(agent.id)}
+              onEntered={entered}
+              onOpen={open}
+              store={store}
+              crewLine={crewLineOf(agent.id, state.crews)}
+              unseen={store.unseen(agent)}
+              limits={agent.state === 'error' ? state.limits : undefined}
+            />
           ))}
         </main>
       )}

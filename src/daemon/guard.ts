@@ -1,7 +1,11 @@
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Agent, GuardHold } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
 import type { HookPayload } from './state.ts';
+import { removedLines } from './coherence.ts';
+import { commandStart, isCheckCommand, placedCommands, shellCommands } from './shell.ts';
+
+export { shellCommands } from './shell.ts';
 
 // The guard: sessions that do not step on each other. bin/forchetta-guard asks the daemon before every Edit, Write,
 // MultiEdit, NotebookEdit and Bash of every session, and Claude waits for the answer (daemon/server.ts).
@@ -15,7 +19,14 @@ import type { HookPayload } from './state.ts';
 // if another live session works in that same working tree, the answer is "ask": you decide, with the reason in
 // the dialog. The command is read as well as a plain reading of a shell line allows; what cannot be read is let go.
 //
-// The guard answers from memory, at once. With nothing to say it says nothing, and the tool goes on as usual.
+// It also tells Claude what it should know, without stopping anything: before tests or a build, that another session
+// is halfway through some files, so the errors there are probably its work in progress. And it stops once what
+// would undo the work of another session without knowing: taking away lines another session added in the last hour,
+// or a git add -A / commit -a that would take the changes of another session into this one's commit. The same call
+// again goes through: Claude was told, and means it.
+//
+// The guard answers from memory, at once (the files of a commit need one git status). With nothing to say it says
+// nothing, and the tool goes on as usual.
 
 const FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 /**
@@ -26,16 +37,34 @@ export const HOLD_AFTER_TURN_MS = 2 * 60_000;
 /** A session that changed files in a working tree this recently still works there, for the git guard. */
 export const WORKS_THERE_MS = 60 * 60_000;
 
+/** A warning that stops a session once: the same call again within this time goes through. */
+export const ONCE_MS = 10 * 60_000;
+/** The note before tests is said again for the same files only after this long. */
+export const CHECK_NOTE_AGAIN_MS = 15 * 60_000;
+
 export interface GuardDecision {
-  decision: 'deny' | 'ask';
+  /** Absent: the tool goes on, and Claude reads the context with its result. */
+  decision?: 'deny' | 'ask';
   /** For "deny" Claude reads it; for "ask" you do, in the dialog. */
-  reason: string;
+  reason?: string;
+  /** A note for Claude that stops nothing (additionalContext): it comes with the result of the tool. */
+  context?: string;
 }
 
 /** What Claude Code reads on the stdout of a PreToolUse hook. */
-export const hookOutput = (decision: GuardDecision): object => ({
-  hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision.decision, permissionDecisionReason: decision.reason },
+export const hookOutput = (answer: GuardDecision): object => ({
+  hookSpecificOutput: {
+    hookEventName: 'PreToolUse',
+    ...(answer.decision && { permissionDecision: answer.decision, permissionDecisionReason: answer.reason }),
+    ...(answer.context && { additionalContext: answer.context }),
+  },
 });
+
+/** A file git sees as changed in a working tree (git status): absolute, and whether git does not track it yet. */
+export interface DirtyFile {
+  path: string;
+  untracked: boolean;
+}
 
 /** The file a tool is about to write, absolute; undefined for any other tool. */
 export function targetFile(tool: string | undefined, input: unknown, cwd: string | undefined): string | undefined {
@@ -71,60 +100,6 @@ export interface GitCommand {
   text: string;
 }
 
-/**
- * The words of a shell line, split into simple commands at ;, &, |, &&, || and newlines, with quotes and
- * backslashes taken away. A plain reading: no expansions, no subshells. Undefined when a quote is left open.
- */
-export function shellCommands(line: string): string[][] | undefined {
-  const commands: string[][] = [];
-  let words: string[] = [];
-  let word = '';
-  let inWord = false;
-  const endWord = (): void => {
-    if (inWord) words.push(word);
-    word = '';
-    inWord = false;
-  };
-  const endCommand = (): void => {
-    endWord();
-    if (words.length > 0) commands.push(words);
-    words = [];
-  };
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]!;
-    if (c === '\\') {
-      if (i + 1 < line.length && line[i + 1] !== '\n') {
-        word += line[++i];
-        inWord = true;
-      } else i++;
-    } else if (c === "'") {
-      const end = line.indexOf("'", i + 1);
-      if (end < 0) return undefined;
-      word += line.slice(i + 1, end);
-      inWord = true;
-      i = end;
-    } else if (c === '"') {
-      let j = i + 1;
-      for (; j < line.length && line[j] !== '"'; j++) {
-        if (line[j] === '\\' && j + 1 < line.length) word += line[++j];
-        else word += line[j];
-      }
-      if (j >= line.length) return undefined;
-      inWord = true;
-      i = j;
-    } else if (c === ';' || c === '&' || c === '|' || c === '\n' || c === '(' || c === ')') {
-      endCommand();
-    } else if (c === ' ' || c === '\t') {
-      endWord();
-    } else {
-      word += c;
-      inWord = true;
-    }
-  }
-  endCommand();
-  return commands;
-}
-
 /** The options of git itself that take a value as the next word. */
 const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env']);
 
@@ -135,9 +110,8 @@ export function gitCommands(line: string, cwd: string): GitCommand[] {
   const found: GitCommand[] = [];
   let dir = cwd;
   for (const words of commands) {
-    let i = 0;
     // VAR=value before the command, and the words that only run it: command, exec, env, nice, time.
-    while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]!) || ['command', 'exec', 'env', 'nice', 'time', 'nohup'].includes(words[i]!))) i++;
+    let i = commandStart(words);
     const name = words[i];
     if (name === 'cd') {
       const to = words[i + 1];
@@ -209,8 +183,16 @@ export interface GuardOptions {
   repoOf: (dir: string) => string | undefined;
   /** The files an agent wrote, with when and in which working tree (daemon/conflicts.ts). */
   writesOf: (agentId: string) => Array<{ path: string; at: number; repo?: string }>;
-  /** What is on, from var/config.json. */
-  enabled: () => { files: boolean; git: boolean };
+  /** What is on, from var/config.json: notes are those for Claude that stop nothing (before tests). */
+  enabled: () => { files: boolean; git: boolean; notes?: boolean };
+  /** Of the lines a session takes away from a file, those another session added in the last hour (daemon/coherence.ts). */
+  addedByOthers?: (agentId: string, file: string, removed: string[]) => { agentId: string; at: number; lines: string[] } | undefined;
+  /** Whether another session changed the file in the last hour: when not, the lines taken away are not even read. */
+  changedByOthers?: (agentId: string, file: string) => boolean;
+  /** The text of a file, for a Write over it; undefined when it cannot be read. */
+  readText?: (path: string) => string | undefined;
+  /** The changed files of a working tree, for git add -A and commit -a; undefined when git does not answer. */
+  dirty?: (repo: string) => Promise<DirtyFile[] | undefined>;
   /** The lines of the guard of a box changed. */
   touch: (agent: Agent) => void;
   /** A file held back is free again: the session that waited for it may go on (daemon/main.ts). */
@@ -229,6 +211,10 @@ export class Guard {
   private readonly holds = new Map<string, Map<string, number>>();
   /** For each agent that was stopped: the files, and who held each. */
   private readonly stops = new Map<string, Map<string, Stop>>();
+  /** The warnings that stop once, by agent and call: when they were said. */
+  private readonly warned = new Map<string, number>();
+  /** The last note before tests, by agent: its files, and when. */
+  private readonly checkNotes = new Map<string, { key: string; at: number }>();
   private readonly now: () => number;
 
   constructor(private readonly options: GuardOptions) {
@@ -292,12 +278,130 @@ export class Guard {
     const enabled = this.options.enabled();
     const cwd = agent.cwd ?? payload.cwd;
     const file = targetFile(payload.tool_name, payload.tool_input, cwd);
-    if (file) return enabled.files ? this.decideFile(agent, file) : undefined;
-    if (payload.tool_name === 'Bash' && enabled.git && cwd) {
-      const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
-      if (typeof command === 'string') return this.decideGit(agent, command, cwd);
+    if (file) return enabled.files ? (this.decideFile(agent, file) ?? this.decideUndo(agent, payload, file)) : undefined;
+    const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
+    if (payload.tool_name !== 'Bash' || !cwd || typeof command !== 'string') return undefined;
+    const git = enabled.git ? this.decideGit(agent, command, cwd) : undefined;
+    if (git) return git;
+    return enabled.notes !== false ? this.checkNote(agent, command, cwd) : undefined;
+  }
+
+  /**
+   * The part of the answer that needs git: a git add -A or commit -a that would take the changes of other sessions
+   * into this commit is stopped once, with the files of this session to add instead.
+   */
+  async decideCommit(agent: Agent, payload: HookPayload): Promise<GuardDecision | undefined> {
+    if (payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || agent.state === 'ended' || !this.options.enabled().git) return undefined;
+    const line = (payload.tool_input as { command?: unknown } | undefined)?.command;
+    const cwd = agent.cwd ?? payload.cwd;
+    if (typeof line !== 'string' || !cwd || !this.options.dirty) return undefined;
+    for (const command of gitCommands(line, cwd)) {
+      const sweep = sweepOf(command);
+      if (!sweep) continue;
+      const repo = this.options.repoOf(command.dir);
+      if (!repo) continue;
+      const now = this.now();
+      const recent = (id: string): Set<string> =>
+        new Set(this.options.writesOf(id).filter((write) => write.repo === repo && now - write.at < WORKS_THERE_MS).map((write) => write.path));
+      const others = [...this.options.agents()].filter((other) => other.id !== agent.id && other.state !== 'ended' && recent(other.id).size > 0);
+      if (others.length === 0) continue;
+      const dirty = await this.options.dirty(repo);
+      if (!dirty) continue;
+      const inScope = dirty.filter((file) => (sweep.tracked ? !file.untracked : true) && sweep.under.some((dir) => inside(file.path, dir)));
+      const mine = recent(agent.id);
+      const theirs = new Map<string, Agent[]>();
+      for (const file of inScope) {
+        for (const other of others) if (recent(other.id).has(file.path)) theirs.set(file.path, [...(theirs.get(file.path) ?? []), other]);
+      }
+      if (theirs.size === 0) continue;
+      const key = `commit\n${command.text}`;
+      if (!this.firstTime(agent.id, key)) return undefined;
+      const rel = (path: string): string => relative(repo, path);
+      const onlyTheirs = [...theirs.keys()].filter((path) => !mine.has(path));
+      const both = [...theirs.keys()].filter((path) => mine.has(path));
+      const own = inScope.map((file) => file.path).filter((path) => mine.has(path) && !theirs.has(path));
+      const names = [...new Set([...theirs.values()].flat())].map((other) => `"${otherName(other, agent)}"${inTurn(other) ? ', in the middle of its turn' : ''}`);
+      const listed = (paths: string[]): string => (paths.length <= 6 ? paths.map(rel).join(', ') : `${paths.slice(0, 6).map(rel).join(', ')} and ${paths.length - 6} more`);
+      const parts = [
+        `Forchetta: "${command.text}" would also take changes of other Claude Code sessions working in this folder (${names.join('; ')})` +
+          (onlyTheirs.length > 0 ? `: ${listed(onlyTheirs)}.` : '.'),
+        both.length > 0 ? `${listed(both)} ${both.length === 1 ? 'has' : 'have'} changes of yours and of the other session: add only your part (git add -p), or leave ${both.length === 1 ? 'it' : 'them'}.` : '',
+        own.length > 0 ? `Add only your own files: git add ${own.map(rel).join(' ')}` : 'You changed no other file here yourself.',
+        'Run the same command again only if you were asked to commit the work of every session.',
+      ];
+      return { decision: 'deny', reason: parts.filter(Boolean).join(' ') };
     }
     return undefined;
+  }
+
+  /**
+   * True the first time a warning is said to an agent: it is stopped. The same call again within ONCE_MS goes
+   * through, and the next one after that is stopped again.
+   */
+  private firstTime(agentId: string, key: string): boolean {
+    const now = this.now();
+    for (const [known, at] of this.warned) if (now - at >= ONCE_MS) this.warned.delete(known);
+    const full = `${agentId}\n${key}`;
+    if (this.warned.delete(full)) return false;
+    this.warned.set(full, now);
+    return true;
+  }
+
+  /** An edit that takes away lines another session added in the last hour: stopped once, with those lines. */
+  private decideUndo(agent: Agent, payload: HookPayload, file: string): GuardDecision | undefined {
+    if (!this.options.addedByOthers || this.options.changedByOthers?.(agent.id, file) === false) return undefined;
+    const removed = removedBy(payload.tool_name, payload.tool_input, () => this.options.readText?.(file));
+    if (removed.length === 0) return undefined;
+    const found = this.options.addedByOthers(agent.id, file, removed);
+    const other = found ? this.byId(found.agentId) : undefined;
+    if (!found || !other) return undefined;
+    if (!this.firstTime(agent.id, `undo\n${file}\n${found.lines.join('\n')}`)) return undefined;
+    const shown = this.shownPath(file, agent);
+    const lines = found.lines.slice(0, 8).map((line) => `    + ${line.trim().slice(0, 160)}`);
+    const more = found.lines.length > 8 ? [`    … and ${found.lines.length - 8} more`] : [];
+    return {
+      decision: 'deny',
+      reason: [
+        `Forchetta: this change takes away lines that "${otherName(other, agent)}", another Claude Code session on this Mac, added to ${shown} ${ago(this.now() - found.at)}:`,
+        ...lines,
+        ...more,
+        "If that is not on purpose, leave its lines and change only your part. If you do mean to take them away, make the same change again: it will go through.",
+      ].join('\n'),
+    };
+  }
+
+  /**
+   * Before tests, a build or a linter: the files other sessions in this working tree are changing in the turn they
+   * are on now, so that errors there are not taken for this session's own. Said again for the same files only after
+   * a while.
+   */
+  private checkNote(agent: Agent, line: string, cwd: string): GuardDecision | undefined {
+    const checks = placedCommands(line, cwd).filter((command) => isCheckCommand(command.words));
+    if (checks.length === 0) return undefined;
+    const repo = this.options.repoOf(checks[0]!.dir) ?? checks[0]!.dir;
+    const now = this.now();
+    const busy: Array<{ other: Agent; files: string[] }> = [];
+    for (const other of this.options.agents()) {
+      if (other.id === agent.id || other.state === 'ended' || !inTurn(other)) continue;
+      const files = [...(this.holds.get(other.id)?.keys() ?? [])].filter((file) => file === repo || file.startsWith(`${repo}/`)).sort();
+      if (files.length > 0) busy.push({ other, files });
+    }
+    if (busy.length === 0) return undefined;
+    const key = busy.map((item) => `${item.other.id}:${item.files.join(',')}`).join('|');
+    const last = this.checkNotes.get(agent.id);
+    if (last && last.key === key && now - last.at < CHECK_NOTE_AGAIN_MS) return undefined;
+    this.checkNotes.set(agent.id, { key, at: now });
+    const and = (items: string[]): string => (items.length === 1 ? items[0]! : `${items.slice(0, -1).join(', ')} and ${items.at(-1)!}`);
+    const who = busy.map(({ other, files }) => {
+      const shown = files.slice(0, 5).map((file) => this.shownPath(file, agent));
+      return `"${otherName(other, agent)}" is in the middle of changing ${and(files.length > 5 ? [...shown, `${files.length - 5} more`] : shown)}`;
+    });
+    return {
+      context:
+        `Forchetta: other Claude Code sessions work in this folder right now: ${who.join('; ')}. ` +
+        "If this fails in those files, or in code that uses them, it is probably their unfinished work, not yours: don't fix it. " +
+        'Work on your part, run your own tests, and say so if you are blocked.',
+    };
   }
 
   private decideFile(agent: Agent, file: string): GuardDecision | undefined {
@@ -444,4 +548,63 @@ export class Guard {
       this.options.touch(agent);
     }
   }
+}
+
+/** The lines an Edit, MultiEdit or Write takes away for good (the text of a Write's file is read only if needed). */
+export function removedBy(tool: string | undefined, input: unknown, current: () => string | undefined): string[] {
+  if (!input || typeof input !== 'object') return [];
+  const fields = input as Record<string, unknown>;
+  if (tool === 'Edit' && typeof fields.old_string === 'string' && typeof fields.new_string === 'string') return removedLines(fields.old_string, fields.new_string);
+  if (tool === 'MultiEdit' && Array.isArray(fields.edits)) {
+    return fields.edits.flatMap((item) => {
+      const one = (item ?? {}) as Record<string, unknown>;
+      return typeof one.old_string === 'string' && typeof one.new_string === 'string' ? removedLines(one.old_string, one.new_string) : [];
+    });
+  }
+  if (tool === 'Write' && typeof fields.content === 'string') {
+    const before = current();
+    return before === undefined ? [] : removedLines(before, fields.content);
+  }
+  return [];
+}
+
+/**
+ * What a git command would put in a commit beyond the files it names: git add -A, --all, -u, ., a folder, and git
+ * commit -a. The folders it covers, and whether it takes only files git tracks (-u, commit -a). Undefined for the
+ * others, and for git add of files by name.
+ */
+export function sweepOf(command: GitCommand): { under: string[]; tracked: boolean } | undefined {
+  const { sub, args, dir } = command;
+  // "/" is the whole working tree: commit -a, and add -A or -u with no path, take every changed file of it.
+  if (sub === 'commit') {
+    const all = args.some((arg) => arg === '--all' || (/^-[a-zA-Z]+$/.test(arg) && arg.includes('a')));
+    return all ? { under: ['/'], tracked: true } : undefined;
+  }
+  if (sub !== 'add') return undefined;
+  const paths = args.filter((arg) => !arg.startsWith('-'));
+  const all = args.some((arg) => arg === '-A' || arg === '--all' || arg === '--no-ignore-removal');
+  const update = args.some((arg) => arg === '-u' || arg === '--update');
+  if (paths.length === 0) return all || update ? { under: ['/'], tracked: update && !all } : undefined;
+  // git add . or a folder: what is under it. A path with a dot in its last part is taken for a file, named by itself.
+  const folders = paths.filter((path) => path === '.' || path === ':/' || path.endsWith('/') || !/\.[^/]+$/.test(path.split('/').at(-1) ?? ''));
+  if (folders.length === 0) return undefined;
+  return { under: folders.map((path) => (path === ':/' ? '/' : resolve(dir, path))), tracked: update && !all };
+}
+
+/** Whether a path is a folder or under it; "/" holds everything. */
+const inside = (path: string, dir: string): boolean => dir === '/' || path === dir || path.startsWith(`${dir}/`);
+
+/** `git status --porcelain=v1 -z --untracked-files=all` of a working tree: its changed files, absolute. */
+export function parseStatus(text: string, repo: string): DirtyFile[] {
+  const out: DirtyFile[] = [];
+  const parts = text.split('\0');
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i]!;
+    if (entry.length < 4) continue;
+    const code = entry.slice(0, 2);
+    out.push({ path: join(repo, entry.slice(3)), untracked: code === '??' });
+    // A rename or a copy: the old path follows, as an entry of its own.
+    if (code[0] === 'R' || code[0] === 'C') i++;
+  }
+  return out;
 }

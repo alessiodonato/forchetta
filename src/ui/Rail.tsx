@@ -1,7 +1,7 @@
 import { memo } from 'preact/compat';
 import { useRef } from 'preact/hooks';
-import { type Agent, displayName, STATE_LABEL } from '../shared/agent.ts';
-import { agoShort, conflictsTitle, hasEvents, stalledFor, stallText, waitingText } from '../shared/present.ts';
+import { type Agent, displayName, STATE_LABEL, type UsageLimits } from '../shared/agent.ts';
+import { conflictsTitle, cornerTime, errorLine, stalledFor, stallText, waitingText } from '../shared/present.ts';
 import { useMotionAnchor } from './anchor.ts';
 import { heldBackText } from './Guard.tsx';
 import { PermissionButtons } from './Permission.tsx';
@@ -12,10 +12,10 @@ import { ColorDot } from './Team.tsx';
 // With panes open, the boxes become a column on the left: project, state, one line, time. They keep their state
 // colors and animations (the amber breath shows here too). A click opens or activates the pane of the session.
 
-function line(agent: Agent): string {
+function line(agent: Agent, now: number, limits: UsageLimits | undefined): string {
   if (agent.state === 'waiting') return waitingText(agent);
   if (agent.state === 'working') return agent.action ? agent.action.label : 'thinking…';
-  if (agent.state === 'error') return `error · ${agent.error?.kind ?? '?'}`;
+  if (agent.state === 'error') return errorLine(agent, limits, now);
   return agent.summary?.text ?? (agent.state === 'ended' ? 'ended' : 'ready');
 }
 
@@ -25,9 +25,11 @@ interface Props {
   open: boolean;
   onOpen: (id: string) => void;
   store: Store;
+  unseen: boolean;
+  limits?: UsageLimits;
 }
 
-function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
+function CompactBoxView({ agent, now, open, onOpen, store, unseen, limits }: Props) {
   const stallMs = (store.state.settings.stallMin ?? 10) * 60_000;
   const ref = useRef<HTMLDivElement>(null);
   const since = useMotionAnchor(ref, agent.state);
@@ -61,14 +63,19 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
           <ColorDot agent={agent} />
           {displayName(agent)}
         </span>
+        {unseen && (
+          <span class="unseen" title="It finished since you last looked">
+            ●
+          </span>
+        )}
         <span class="state">{STATE_LABEL[agent.state]}</span>
       </span>
       <span class="compact-line" title={agent.permission?.detail}>
-        {line(agent)}
+        {line(agent, now, limits)}
       </span>
       {agent.permission && <PermissionButtons agent={agent} store={store} />}
       <span class="compact-meta">
-        <span>{hasEvents(agent) && agent.state !== 'ended' ? agoShort(now - agent.lastEvent.at) : ''}</span>
+        <span title={cornerTime(agent, now)?.title}>{cornerTime(agent, now)?.text ?? ''}</span>
         {subagents && (
           <span class="tag" title={subagents.title}>
             {subagents.text}
@@ -96,16 +103,24 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
 }
 
 export const CompactBox = memo(CompactBoxView, (before, after) => {
-  if (before.agent !== after.agent || before.open !== after.open || before.onOpen !== after.onOpen) return false;
-  const a = before.agent;
-  return !hasEvents(a) || agoShort(before.now - a.lastEvent.at) === agoShort(after.now - a.lastEvent.at);
+  if (before.agent !== after.agent || before.open !== after.open || before.onOpen !== after.onOpen || before.unseen !== after.unseen || before.limits !== after.limits) return false;
+  return cornerTime(before.agent, before.now)?.text === cornerTime(after.agent, after.now)?.text;
 });
 
 export function Rail({ agents, now, open, onOpen, store }: { agents: readonly Agent[]; now: number; open: readonly string[]; onOpen: (id: string) => void; store: Store }) {
   return (
     <nav class="rail" aria-label="Sessions">
       {agents.map((agent) => (
-        <CompactBox key={agent.id} agent={agent} now={now} open={open.includes(agent.id)} onOpen={onOpen} store={store} />
+        <CompactBox
+          key={agent.id}
+          agent={agent}
+          now={now}
+          open={open.includes(agent.id)}
+          onOpen={onOpen}
+          store={store}
+          unseen={store.unseen(agent)}
+          limits={agent.state === 'error' ? store.state.limits : undefined}
+        />
       ))}
     </nav>
   );

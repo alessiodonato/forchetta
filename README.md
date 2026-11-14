@@ -42,6 +42,14 @@ The usual way to run agents in parallel is a git worktree for each one. Then eac
 - when the turn that held the file ends, the waiting session is told the file is free, and goes on by itself;
 - a git command that would change the files under another session (`checkout`, `reset --hard`, `stash`, `pull`…) asks you first.
 
+And it tells each session what the others did, right when it matters:
+
+- **a file it read changed since**: who changed it, and the lines. With worktrees you find out at the merge; here the session adapts at once;
+- **before tests or a build**: which files the others are halfway through, so their errors are not taken for its bugs;
+- **lines another session added**, about to be taken away: stopped once, so no work is undone without knowing;
+- **a `git add -A`** that would sweep in the changes of another session: stopped once, with its own files to add instead;
+- **a dev server already running** in the folder: its address, instead of a second one; a kill of another session's process asks you first.
+
 It works for every session, also those started with plain `claude`. **let it through** in the box overrides it. [The guard in the manual](https://forchetta.dev/manual.html#guard).
 
 ### It works with the `claude` you already run
@@ -54,7 +62,8 @@ Start a session with `forchetta run claude`, or from the app, and Forchetta can 
 
 <img src="docs/img/overview.png" alt="The Forchetta window: twelve sessions, each in a box with its state, what it is doing, a summary, its context and its cost. Two wait for you, in amber." width="100%">
 
-- A live box per session: its state, what it is doing now, a short summary, its context and its cost. Amber when it waits for you, green when it's done, red on an error.
+- A live box per session: its state, what it is doing now, a short summary, its context and its cost. Amber when it waits for you, green when it's done, red on an error, and a dot on a result you haven't looked at yet.
+- The limits of your plan at the top (`5h 62% · week 31%`), and when the 5-hour one runs out at this pace.
 - Answer permission prompts from the box, once or "always".
 - A notification when a session waits for you, seems stuck, or ends with an error.
 - Up to four real terminals side by side.
@@ -71,6 +80,7 @@ A lead, which is a Claude session or you, and up to 6 members. Each member is a 
 | **Claude Desktop** | Anthropic's app, with parallel sessions in its sidebar | It works with the `claude` CLI you already run in your terminals, with your hooks and settings. |
 | **Agent teams** (experimental in Claude Code) | A lead session that spawns teammates and shares a task list with them | Teams are set up in a panel and saved as templates: role, model, permissions and worktree for each member. The lead can be you. |
 | **Conductor** and similar Mac apps | Apps that run several coding agents, each in an isolated workspace | Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely. |
+| **Orca**, **Paseo** | Open-source desktop and phone apps that run many kinds of coding agents, each in its own git worktree | No worktree to set up: sessions share one folder, and the guard keeps them off each other's files. It works with the `claude` you already run, in any terminal. |
 | **cmux**, **Claude Squad** | Terminals and session managers for many kinds of coding agents | Built for Claude Code only, through its hooks: the guard, permissions from the box, context and cost per session, subagents. |
 
 They don't rule each other out: sessions started in any terminal show up in Forchetta.
@@ -86,7 +96,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.9.4. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.9.5. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

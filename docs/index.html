@@ -697,6 +697,10 @@
           <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another session that tries to edit it is stopped, and Claude is told why.</li>
           <li><b>It goes on by itself:</b> when the turn that held the file ends, the session that waited is told the file is free, and picks up where it stopped.</li>
           <li><b>git that asks first:</b> a <code>git checkout</code>, <code>reset --hard</code> or <code>stash</code> that would change the files under another session asks you before it runs.</li>
+          <li><b>What the others changed:</b> a session that read a file another one changed since is told who changed it, with the lines. It adapts at once, instead of at the merge.</li>
+          <li><b>Not its bug:</b> before tests or a build, a session learns which files the others are halfway through, and leaves their errors alone.</li>
+          <li><b>Nothing undone without knowing:</b> taking away lines another session just added, or a <code>git add -A</code> that would sweep in its changes, is stopped once, with the reason.</li>
+          <li><b>One dev server:</b> a session about to start a second one gets the address of the one already running in the folder.</li>
           <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped.</li>
         </ul>
       </div>
@@ -717,8 +721,8 @@
           <p class="action"><span aria-hidden="true">✎</span><span class="text">Edit src/routes/orders.ts</span></p>
           <p class="summary">Adding retries to the order client, then the tests.</p>
           <div class="ask"></div>
-          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.42)"></div></div><span class="pct">42% · 420k</span></div>
-          <div class="meta"><span>≈ $1.84</span><span>cache 54 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.42)"></div></div><span class="pct">42%</span></div>
+          <div class="meta"><span>≈ $1.84</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span></span></div>
         </article>
         <article class="box" id="b1" data-state="working" data-tmux>
           <div class="aura"></div>
@@ -727,28 +731,28 @@
           <p class="action"><span aria-hidden="true">›_</span><span class="text">Bash npm run lint</span></p>
           <p class="summary">Moving the posts to the new layout.</p>
           <div class="ask"><code>rm -rf dist &amp;&amp; npm run build</code><div><button type="button" class="allow" data-answer="allow">Allow</button><button type="button" data-answer="deny">Deny</button><span class="hint">answer it here</span></div></div>
-          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.18)"></div></div><span class="pct">18% · 180k</span></div>
-          <div class="meta"><span>≈ $0.62</span><span>cache 58 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.18)"></div></div><span class="pct">18%</span></div>
+          <div class="meta"><span>≈ $0.62</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span></span></div>
         </article>
         <article class="box" id="b2" data-state="idle" data-tmux>
           <div class="aura"></div>
           <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <header><h3>docs</h3><span class="state">idle</span></header>
-          <p class="action"><span class="text">turn finished</span></p>
+          <p class="action"><span class="text">finished just now</span></p>
           <p class="summary">Rewrote the install guide and checked every link.</p>
           <div class="ask"></div>
-          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.31)"></div></div><span class="pct">31% · 310k</span></div>
-          <div class="meta"><span>≈ $0.97</span><span>cache 41 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.31)"></div></div><span class="pct">31%</span></div>
+          <div class="meta"><span>≈ $0.97</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span></span></div>
         </article>
         <article class="box" id="b3" data-state="compacting" data-tmux>
           <div class="aura"></div>
           <svg class="done" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <header><h3>data-pipeline</h3><span class="state">compacting</span></header>
-          <p class="action"><span class="text">compacting, as you asked</span></p>
+          <p class="action"><span class="text">as you asked</span></p>
           <p class="summary">Migrating the jobs to the new schema.</p>
           <div class="ask"></div>
-          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.86)"></div></div><span class="pct">86% · 860k</span></div>
-          <div class="meta"><span>≈ $4.10</span><span>cache 59 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.86)"></div></div><span class="pct">86%</span></div>
+          <div class="meta"><span>≈ $4.10</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span></span></div>
         </article>
         <article class="box" id="b4" data-state="waiting" data-tmux>
           <div class="aura"></div>
@@ -757,8 +761,8 @@
           <p class="action"><span class="text">Question: OAuth or API keys for internal clients?</span></p>
           <p class="summary">Designing the login for the internal tools.</p>
           <div class="ask"></div>
-          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.15)"></div></div><span class="pct">15% · 150k</span></div>
-          <div class="meta"><span>≈ $0.40</span><span>cache 55 min</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span><span class="tag">tmux</span></span></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.15)"></div></div><span class="pct">15%</span></div>
+          <div class="meta"><span>≈ $0.40</span><span class="end"><span class="cmds"><button type="button" data-cmd="compact">compact</button><button type="button" data-cmd="clear">clear</button></span></span></div>
         </article>
         <article class="box" id="b5" data-state="working">
           <div class="aura"></div>
@@ -767,8 +771,8 @@
           <p class="action"><span aria-hidden="true">›_</span><span class="text">Bash terraform plan</span></p>
           <p class="summary">Checking the staging changes before the deploy.</p>
           <div class="ask"></div>
-          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.23)"></div></div><span class="pct">23% · 230k</span></div>
-          <div class="meta"><span>≈ $0.75</span><span>cache 57 min</span><span class="end"><span class="tag">read only</span></span></div>
+          <div class="ctx"><div class="track"><div class="fill" style="transform: scaleX(.23)"></div></div><span class="pct">23%</span></div>
+          <div class="meta"><span>≈ $0.75</span><span class="end"><span class="tag">read only</span></span></div>
         </article>
       </div>
       <p class="demo-note">A replay of the app's grid, with made-up sessions. Answer blog's permission when it asks, or hover a box for <code>compact</code> and <code>clear</code>. infra was started with plain <code>claude</code>: Forchetta shows it, but can't type into it.</p>
@@ -847,6 +851,7 @@
         <li><b>Claude Desktop</b> is Anthropic's app, with parallel sessions in its sidebar. Forchetta works with the <code>claude</code> CLI you already run in your terminal, with your hooks and settings.</li>
         <li><b>Agent teams</b>, experimental in Claude Code, are a lead session that spawns teammates and shares a task list with them. In Forchetta, teams are set up in a panel and saved as templates, with a role, model, permissions and worktree for each member, and the lead can be you.</li>
         <li><b>Conductor</b> and similar Mac apps run several coding agents, each in an isolated workspace. Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely.</li>
+        <li><b>Orca</b> and <b>Paseo</b> are open-source desktop and phone apps that run many kinds of coding agents, each in its own git worktree. With Forchetta there is no worktree to set up: sessions share one folder, and the guard keeps them off each other's files.</li>
         <li><b>cmux</b> and <b>Claude Squad</b> are terminals and session managers for many kinds of coding agents. Forchetta is built for Claude Code only, through its hooks: a guard that keeps two sessions off the same file, permissions answered from the box, context and cost per session, subagents, teams that talk through an MCP server.</li>
       </ul>
       <p>They don't rule each other out. Sessions started in any terminal show up in Forchetta, read only unless you started them with <code>forchetta run claude</code>.</p>
@@ -1369,7 +1374,7 @@
       if (change.summary !== undefined) el.querySelector('.summary').textContent = change.summary;
       if (change.ctx !== undefined) {
         el.querySelector('.fill').style.transform = 'scaleX(' + change.ctx / 100 + ')';
-        el.querySelector('.pct').textContent = change.ctx + '% · ' + change.ctx * 10 + 'k';
+        el.querySelector('.pct').textContent = change.ctx + '%';
       }
       if (change.ask !== undefined) {
         if (change.ask) el.setAttribute('data-ask', '');
@@ -1414,7 +1419,7 @@
         if (button.getAttribute('data-answer') === 'allow') {
           set(i, { press: true });
           setTimeout(function () { set(i, { state: 'working', action: 'Bash rm -rf dist && npm run build', icon: '›_', ask: false, summary: 'You allowed the build: it runs now.' }); }, 250);
-          setTimeout(function () { set(i, { state: 'idle', action: 'turn finished', icon: '', summary: 'Built the new layout: 41 pages, no broken links.', done: true }); }, 3200);
+          setTimeout(function () { set(i, { state: 'idle', action: 'finished just now', icon: '', summary: 'Built the new layout: 41 pages, no broken links.', done: true }); }, 3200);
         } else {
           set(i, { state: 'idle', action: 'denied: Bash rm -rf dist && npm run build', icon: '', ask: false, summary: 'You said no: Claude stopped and waits for what you want instead.' });
         }
@@ -1428,7 +1433,7 @@
         var i = Number(el.id.slice(1));
         touched[i] = Date.now();
         if (button.getAttribute('data-cmd') === 'compact') {
-          set(i, { state: 'compacting', action: 'compacting, as you asked', icon: '', ask: false });
+          set(i, { state: 'compacting', action: 'as you asked', icon: '', ask: false });
           setTimeout(function () { set(i, { state: 'idle', action: 'compacted', icon: '', ctx: 9, done: true }); }, 2600);
         } else {
           set(i, { state: 'idle', action: 'new session after /clear', icon: '', ask: false, summary: 'A clean context, in the same folder.', ctx: 0 });
@@ -1455,11 +1460,11 @@
       [9000, 1, { press: true, auto: true }],
       [9400, 1, { state: 'working', action: 'Bash rm -rf dist && npm run build', icon: '›_', ask: false, auto: true }],
       [10400, 0, { action: 'Bash npm test -- --run', icon: '›_' }],
-      [11600, 2, { state: 'idle', action: 'turn finished', icon: '', summary: 'Added the upgrade notes and checked every link.', done: true }],
+      [11600, 2, { state: 'idle', action: 'finished just now', icon: '', summary: 'Added the upgrade notes and checked every link.', done: true }],
       [12600, 5, { state: 'working', action: 'Bash terraform plan', icon: '›_', summary: 'Checking the staging changes before the deploy.' }],
-      [12800, 1, { state: 'idle', action: 'turn finished', icon: '', summary: 'Built the new layout: 41 pages, no broken links.', done: true, auto: true }],
-      [13800, 0, { state: 'idle', action: 'turn finished', icon: '', summary: 'Retries added, 128 tests pass.', done: true }],
-      [15400, 3, { state: 'compacting', action: 'compacting, as you asked', icon: '', ctx: 86 }],
+      [12800, 1, { state: 'idle', action: 'finished just now', icon: '', summary: 'Built the new layout: 41 pages, no broken links.', done: true, auto: true }],
+      [13800, 0, { state: 'idle', action: 'finished just now', icon: '', summary: 'Retries added, 128 tests pass.', done: true }],
+      [15400, 3, { state: 'compacting', action: 'as you asked', icon: '', ctx: 86 }],
       [16200, 1, { state: 'working', action: 'Bash npm run lint', icon: '›_', summary: 'Moving the posts to the new layout.' }],
       [16800, 0, { state: 'working', action: 'Edit src/routes/orders.ts', icon: '✎', summary: 'Adding retries to the order client, then the tests.' }],
       [17400, 2, { state: 'idle' }],

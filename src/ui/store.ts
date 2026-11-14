@@ -1,4 +1,5 @@
-import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SessionColor, SubagentStep, TodayInfo } from '../shared/agent.ts';
+import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SessionColor, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
+import { resultAt } from '../shared/present.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Talk } from '../shared/crew.ts';
@@ -20,6 +21,8 @@ export interface UiState {
   settings: UiSettings;
   /** Every call since midnight, from arricurdAI. */
   today?: TodayInfo;
+  /** The limits of the Claude plan, from the status line of any session. */
+  limits?: UsageLimits;
   /** A failed automatic update of Claude Code, and the `claude update` started from the top line. */
   claudeUpdate?: ClaudeUpdateInfo;
   /** The panel of the changes of a session: list undefined while the daemon reads them. */
@@ -94,6 +97,20 @@ export function defaultSubagent(agent: Agent | undefined): string | undefined {
 /** At most 4 panes: the lead and the first members of a new team open, the lead last, in the large pane. */
 export const panesToOpen = (agentIds: readonly string[]): string[] => agentIds.slice(0, 4).reverse();
 
+const SEEN_KEY = 'forchetta.seen';
+
+/** The results you saw, by session: when the turn or the error you looked at happened. Undefined: never kept yet. */
+function loadSeen(): Record<string, number> | undefined {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    if (raw === null) return undefined;
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, number>) : {};
+  } catch {
+    return undefined;
+  }
+}
+
 /** A session whose terminal can be shown: run in the tmux of Forchetta, and not ended. */
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
@@ -105,6 +122,11 @@ export class Store {
   onNotify: (message: Extract<ServerMessage, { type: 'notify' }>) => void = () => {};
   /** Agents that arrived after the first list: their box enters with an animation, once. */
   readonly entering = new Set<string>();
+  /**
+   * The results you saw, by session (localStorage, for this window only). A session whose turn ended or that stopped on
+   * an error after it shows a dot until you click its box or open its pane; with its pane open you see it come.
+   */
+  private seen = loadSeen();
   private readonly listeners = new Set<() => void>();
 
   subscribe(listener: () => void): () => void {
@@ -124,6 +146,10 @@ export class Store {
     }
     if (message.type === 'today') {
       this.set({ today: message.today });
+      return;
+    }
+    if (message.type === 'limits') {
+      this.set({ limits: message.limits });
       return;
     }
     if (message.type === 'claudeUpdate') {
@@ -228,6 +254,7 @@ export class Store {
         for (const agent of message.agents) agents.set(agent.id, agent);
         extra.settings = message.settings;
         extra.today = message.today;
+        extra.limits = message.limits;
         extra.claudeUpdate = message.claudeUpdate;
         extra.prompts = message.prompts ?? [];
         extra.crews = message.crews ?? [];
@@ -245,6 +272,7 @@ export class Store {
     }
     // A pane whose agent went away closes; one whose session ended stays, showing its last screen.
     extra.panes = prunePanes(this.state.panes, (id) => agents.has(id));
+    this.noteSeen(agents, message.type === 'hello', extra.panes.open);
     this.set({ ...extra, agents, ready: true });
     if (this.pendingOpen.some((id) => agents.has(id))) {
       const waiting = this.pendingOpen;
@@ -261,8 +289,68 @@ export class Store {
     if (visible !== this.state.visible) this.set({ visible });
   }
 
+  /** Whether a session has a result you have not seen: a turn that ended, or an error, since you last looked. */
+  unseen(agent: Agent): boolean {
+    const at = resultAt(agent);
+    return at !== undefined && this.seen !== undefined && at > (this.seen[agent.id] ?? 0);
+  }
+
+  /** You looked at a session: a click on its box. */
+  markSeen(id: string): void {
+    const agent = this.state.agents.get(id);
+    const at = agent ? resultAt(agent) : undefined;
+    if (at === undefined || !this.seen || (this.seen[id] ?? 0) >= at) return;
+    this.seen = { ...this.seen, [id]: at };
+    this.saveSeen();
+    this.set({});
+  }
+
+  /**
+   * The first time ever, every result there is counts as seen: nothing new to look at yet. Then the results of the
+   * open panes are seen as they come, and the sessions that went away are forgotten.
+   */
+  private noteSeen(agents: ReadonlyMap<string, Agent>, hello: boolean, open: readonly string[]): void {
+    let next = this.seen;
+    if (next === undefined) {
+      if (!hello) return;
+      next = {};
+      for (const agent of agents.values()) {
+        const at = resultAt(agent);
+        if (at !== undefined) next[agent.id] = at;
+      }
+    }
+    let changed = next !== this.seen;
+    for (const id of open) {
+      const agent = agents.get(id);
+      const at = agent ? resultAt(agent) : undefined;
+      if (at !== undefined && this.state.visible && (next[id] ?? 0) < at) {
+        next = { ...next, [id]: at };
+        changed = true;
+      }
+    }
+    for (const id of Object.keys(next)) {
+      if (!agents.has(id)) {
+        const { [id]: _gone, ...rest } = next;
+        next = rest;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    this.seen = next;
+    this.saveSeen();
+  }
+
+  private saveSeen(): void {
+    try {
+      localStorage.setItem(SEEN_KEY, JSON.stringify(this.seen ?? {}));
+    } catch {
+      // Storage off: the dots last as long as this page.
+    }
+  }
+
   /** A click on a box. Sessions outside the tmux of Forchetta, and ended ones, have no terminal to show. */
   open(id: string): void {
+    this.markSeen(id);
     if (!canOpen(this.state.agents.get(id))) return;
     this.set({ panes: openPane(this.state.panes, id, Date.now(), this.state.settings.replace) });
   }

@@ -208,7 +208,7 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
   );
 }
 
-export function TeamPanel({ crews, store, onClose }: { crews: readonly CrewSummary[]; store: Store; onClose: () => void }) {
+export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly CrewSummary[]; store: Store; onClose: () => void; onNew: () => void }) {
   const [crewId, setCrewId] = useState(crews.at(-1)?.id);
   const crew = crews.find((candidate) => candidate.id === crewId) ?? crews.at(-1);
   const [to, setTo] = useState<string[]>([]);
@@ -272,6 +272,9 @@ export function TeamPanel({ crews, store, onClose }: { crews: readonly CrewSumma
             {candidate.name}
           </button>
         ))}
+        <button type="button" class="chip" title="Start a team of Claude Code sessions that work together: a lead and its members" onClick={onNew}>
+          + new team
+        </button>
         <span class="team-hint thread-count">{thread ? `${thread.length} ${thread.length === 1 ? 'request' : 'requests'}` : ''}</span>
         <button type="button" class={`quiet${editing ? ' on' : ''}`} title="Members, → / ⇄, template" onClick={() => setEditing(!editing)}>
           edit team

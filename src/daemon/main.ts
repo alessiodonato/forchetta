@@ -1,8 +1,8 @@
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { contextWindowOf, detectArricurdai, loadConfig, resolveTool } from '../shared/config.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
 import { listPanes, Tmux } from '../shared/tmux.ts';
@@ -15,7 +15,9 @@ import { SelectionReader } from './selection.ts';
 import { Commander } from './commands.ts';
 import { Attention } from './attention.ts';
 import { Conflicts, writtenFile } from './conflicts.ts';
-import { Guard, hookOutput } from './guard.ts';
+import { Guard, hookOutput, otherName, parseStatus } from './guard.ts';
+import { changedNote, Coherence } from './coherence.ts';
+import { Servers } from './servers.ts';
 import { changesOf } from './diffs.ts';
 import { editOf, Patches } from './patches.ts';
 import { runRecall } from './recall.ts';
@@ -36,6 +38,7 @@ import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
 import type { Agent } from './state.ts';
 import { displayName, type GuardHold } from '../shared/agent.ts';
 import { haikuComplete, Summarizer } from './summarizer.ts';
+import { Limits } from './limits.ts';
 import { Terminals } from './terminals.ts';
 
 // forchetta-daemon: one process, driven by events. It never ends a Claude process or a tmux session: when it
@@ -111,6 +114,13 @@ function main(): void {
   const attention = new Attention({ notify: (notice) => hub?.notify(notice), stallMs: config.stallMin * 60_000 });
   const conflicts = new Conflicts();
   let guard: Guard | undefined;
+  // What each session read and what the others changed since (daemon/coherence.ts), for the notes of the guard.
+  const coherence = new Coherence();
+  /** Runs a program for the guard: quickly, its output also when it exits with an error. */
+  const runQuick = (file: string, args: string[]): Promise<string | undefined> =>
+    new Promise((done) => {
+      execFile(file, args, { encoding: 'utf8', timeout: 700, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(stdout || (error ? undefined : '')));
+    });
   const teams = new Teams(paths.teams, log);
   const crews = new Crews(paths.crews, log);
   const templates = new CrewTemplates(paths.crewTemplates, log);
@@ -182,6 +192,7 @@ function main(): void {
       summarizer?.forget(ids);
       attention.forget(ids);
       for (const id of ids) conflicts.forget(id);
+      coherence.forget(ids);
       teams.forget(ids);
       patches.forget(ids);
     },
@@ -213,7 +224,43 @@ function main(): void {
     enabled: () => config.guard,
     touch: (agent) => registry.touch(agent),
     onFree: (waiter, files, by) => freed(waiter, files, by),
+    addedByOthers: (agentId, file, removed) => coherence.addedByOthers(agentId, file, removed),
+    changedByOthers: (agentId, file) => coherence.changedByOthers(agentId, file),
+    readText: (path) => {
+      try {
+        return statSync(path).size <= 2_000_000 ? readFileSync(path, 'utf8') : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    dirty: async (repo) => {
+      const text = await runQuick('/usr/bin/git', ['-C', repo, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
+      return text === undefined ? undefined : parseStatus(text, repo);
+    },
   });
+  const servers = new Servers({
+    agents: () => registry.agents.values(),
+    repoOf: (dir) => conflicts.repoOf(dir),
+    enabled: () => config.guard.servers,
+    run: runQuick,
+  });
+  /** The note of the files a session read that other sessions changed since; once for each change. */
+  const changedFilesNote = (agent: Agent): string | undefined => {
+    const found = coherence.changedSinceRead(agent.id);
+    if (found.length === 0) return undefined;
+    // Two sessions of one folder with no names of their own are both called after the folder: say which.
+    const nameOf = (id: string): string => {
+      const other = registry.agents.get(id);
+      const name = other ? otherName(other, agent) : undefined;
+      return name && name !== otherName(agent, agent) ? `"${name}"` : 'another session in this folder';
+    };
+    const shown = (file: string): string => {
+      const base = conflicts.repoOf(dirname(file)) ?? agent.cwd;
+      const rel = base ? relative(base, file) : file;
+      return rel && !rel.startsWith('..') ? rel : file;
+    };
+    return changedNote(found, nameOf, shown, Date.now());
+  };
   // The artifacts a session showed before Forchetta saw them come: read once from its transcript, one transcript at
   // a time (they can be tens of MB), when the daemon starts and when a session first sends an event.
   const transcriptsRead = new Set<string>();
@@ -463,6 +510,7 @@ function main(): void {
     log,
   });
 
+  const limits = new Limits();
   const server = createDaemonServer({
     registry,
     token,
@@ -475,11 +523,25 @@ function main(): void {
     recordFile: process.env.FORCHETTA_RECORD === '1' ? paths.payloads : undefined,
     log,
     crew: (route, input) => crewApi(crews, route, input),
-    guard: (agent, payload) => {
-      const decision = guard?.decide(agent, payload);
-      if (!decision) return undefined;
-      log(`guardia: ${decision.decision} per ${agent.team?.label ?? agent.project} (${payload.tool_name})`);
-      return hookOutput(decision);
+    guard: async (agent, payload) => {
+      const name = agent.team?.label ?? agent.project;
+      const first = guard?.decide(agent, payload);
+      const stop = first?.decision ? first : ((await guard?.decideCommit(agent, payload)) ?? (await servers.decide(agent, payload)));
+      if (stop?.decision) {
+        log(`guardia: ${stop.decision} per ${name} (${payload.tool_name})`);
+        return hookOutput(stop);
+      }
+      // Notes that stop nothing: before tests, and the files read that others changed. Those go to the session
+      // itself, not to its subagents: it is the session that keeps what it read.
+      const changed = config.guard.notes && !payload.agent_id ? changedFilesNote(agent) : undefined;
+      const context = [first?.context, changed].filter(Boolean).join('\n\n');
+      if (!context) return undefined;
+      log(`vigile: nota per ${name} (${payload.tool_name}): ${context.split('\n')[0]!.slice(0, 160)}`);
+      return hookOutput({ context });
+    },
+    onRateLimits: (windows, agent) => {
+      const info = limits.take(windows, Date.now(), agent?.usage ? { agentId: agent.id, usd: agent.usage.usd } : undefined);
+      if (info) hub?.setLimits(info);
     },
     onHook: (agent, payload) => {
       quietInterval = QUIET_RECONCILE_MIN_MS;
@@ -500,8 +562,15 @@ function main(): void {
       }
       readArtifacts(agent);
       if (applySubagentHook(agent, payload, Date.now())) registry.touch(agent);
+      // A file the session itself read (not one of its subagents): what it knows of it dates from now.
+      if (payload.hook_event_name === 'PostToolUse' && payload.tool_name === 'Read' && !payload.agent_id) {
+        const raw = (payload.tool_input as { file_path?: unknown } | undefined)?.file_path;
+        const base = agent.cwd ?? payload.cwd;
+        if (typeof raw === 'string' && (isAbsolute(raw) || base)) coherence.read(agent.id, isAbsolute(raw) ? resolve(raw) : resolve(base!, raw));
+      }
       const file = writtenFile(payload, agent.cwd);
       if (file) {
+        coherence.wrote(agent.id, file, edit && edit.file === file ? edit : undefined);
         guard?.wrote(agent, file);
         const notice = notices.get(agent.id);
         if (notice?.paths.has(file)) {

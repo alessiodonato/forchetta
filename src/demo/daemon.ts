@@ -208,6 +208,9 @@ export class DemoDaemon {
       },
       onInsert: (agentId, text) => this.commander.insert(agentId, text),
     });
+    // The limits of the Claude plan in the top line, as a status line with a subscription would give them.
+    const now = Date.now();
+    this.hub.setLimits({ at: now, fiveHour: { percent: 23, resetsAt: now + 3 * 3_600_000 + 40 * 60_000 }, sevenDay: { percent: 41, resetsAt: now + 4 * 86_400_000 } });
 
     routeSockets((url, socket) => this.connect(url, socket));
   }
@@ -305,7 +308,7 @@ export class DemoDaemon {
       const agent = this.registry.agents.get(claude.id);
       if (!agent) return undefined;
       const decision = this.guard.decide(agent, { hook_event_name: 'PreToolUse', session_id: claude.sessionId, cwd: claude.cwd, tool_name: tool, tool_input: input });
-      return decision && (decision.decision === 'deny' || decision.decision === 'ask') ? { decision: decision.decision, reason: decision.reason } : undefined;
+      return decision?.decision ? { decision: decision.decision, reason: decision.reason ?? '' } : undefined;
     },
     permission: (claude, payload) => this.permission(claude, payload),
     status: (claude) => {

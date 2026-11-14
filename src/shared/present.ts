@@ -1,4 +1,4 @@
-import type { Agent, CacheInfo, Conflict, ContextInfo, Subagent } from './agent.ts';
+import type { Agent, CacheInfo, Conflict, ContextInfo, Subagent, UsageLimits } from './agent.ts';
 
 // How an agent reads, in English, for `forchetta ls` and for the boxes of the app. No Node module here.
 
@@ -140,6 +140,142 @@ export function nextChange(agent: Agent, now: number): number | undefined {
 export function usdText(usd: number): string {
   if (usd > 0 && usd < 0.01) return '<$0.01';
   return `$${usd.toLocaleString('en-US', { minimumFractionDigits: usd >= 1000 ? 0 : 2, maximumFractionDigits: usd >= 1000 ? 0 : 2 })}`;
+}
+
+/** A limit of the Claude plan in the top line: its words, how loud, and the whole story for the tooltip. */
+export interface LimitPart {
+  text: string;
+  level: 'calm' | 'warn' | 'out';
+  title: string;
+}
+
+/** After this long with no status line the pace is old news: someone stopped, or every session is idle. */
+export const LIMITS_PACE_FRESH_MS = 15 * 60_000;
+
+const hourText = (at: number): string => new Date(at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+const dayText = (at: number): string => new Date(at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+
+/**
+ * The limits for the top line: "5h 62%", "5h 62% · out ≈3:20 PM" when at this pace it runs out before the reset,
+ * "5h used up · back 4:40 PM"; then "week 31%". A window whose reset has passed says nothing: a new one began.
+ */
+export function limitParts(limits: UsageLimits | undefined, now: number, nameOf: (agentId: string) => string | undefined = () => undefined): LimitPart[] {
+  const parts: LimitPart[] = [];
+  const five = limits?.fiveHour;
+  if (limits && five && five.resetsAt > now) {
+    const reset = hourText(five.resetsAt);
+    const fresh = now - limits.at < LIMITS_PACE_FRESH_MS;
+    const runsOut = fresh && five.runsOutAt !== undefined && five.runsOutAt > now ? five.runsOutAt : undefined;
+    if (five.percent >= 100) {
+      parts.push({ text: `5h used up · back ${reset}`, level: 'out', title: `The 5-hour limit of your Claude plan is used up: sessions stop until ${reset}.` });
+    } else {
+      const pace = runsOut === undefined ? '' : ` At the pace of the last half hour it runs out at about ${hourText(runsOut)}, ${ago(five.resetsAt - runsOut)} before the reset.`;
+      const named = (five.sessions ?? []).map((session) => ({ name: nameOf(session.agentId), percent: session.percent })).filter((session) => session.name);
+      const who = named.length >= 2 ? `\nWhat the sessions spent in this window, an estimate from their cost: ${named.map((session) => `${session.name} ${session.percent}%`).join(', ')}.` : '';
+      parts.push({
+        text: runsOut === undefined ? `5h ${five.percent}%` : `5h ${five.percent}% · out ≈${hourText(runsOut)}`,
+        level: runsOut !== undefined || five.percent >= 90 ? 'warn' : 'calm',
+        title: `5-hour limit of your Claude plan: ${five.percent}% used, it resets at ${reset}.${pace}${who}`,
+      });
+    }
+  }
+  const week = limits?.sevenDay;
+  if (week && week.resetsAt > now) {
+    const reset = dayText(week.resetsAt);
+    if (week.percent >= 100) {
+      parts.push({ text: `week used up · back ${reset}`, level: 'out', title: `The weekly limit of your Claude plan is used up: sessions stop until ${reset}.` });
+    } else {
+      parts.push({ text: `week ${week.percent}%`, level: week.percent >= 90 ? 'warn' : 'calm', title: `Weekly limit of your Claude plan: ${week.percent}% used, it resets ${reset}.` });
+    }
+  }
+  return parts;
+}
+
+/** The result of a session you may not have seen yet: when its last turn ended, or when it stopped on an error. */
+export function resultAt(agent: Agent): number | undefined {
+  if (agent.state === 'idle' && agent.completedAt !== undefined) return agent.completedAt;
+  if (agent.state === 'error') return agent.error?.at;
+  return undefined;
+}
+
+/** The kinds of StopFailure, in words. */
+const ERROR_WORDS: Record<string, string> = {
+  rate_limit: 'rate limit',
+  overloaded: 'API overloaded',
+  server_error: 'server error',
+  authentication_failed: 'not logged in',
+  billing_error: 'billing problem',
+  invalid_request: 'invalid request',
+  max_output_tokens: 'answer too long',
+  unknown: 'unknown error',
+};
+
+/**
+ * The line of a session stopped on an error: what kind, in words. A rate limit when a limit of the plan is used up
+ * says which, and when it comes back: "5-hour limit used up · back 4:40 PM".
+ */
+export function errorLine(agent: Agent, limits: UsageLimits | undefined, now: number): string {
+  const kind = agent.error?.kind ?? 'unknown';
+  if (kind === 'rate_limit' && limits) {
+    const five = limits.fiveHour;
+    const week = limits.sevenDay;
+    if (week && week.percent >= 100 && week.resetsAt > now) return `weekly limit used up · back ${dayText(week.resetsAt)}`;
+    if (five && five.percent >= 100 && five.resetsAt > now) return `5-hour limit used up · back ${hourText(five.resetsAt)}`;
+  }
+  return ERROR_WORDS[kind] ?? kind.replace(/_/g, ' ');
+}
+
+/** The folder of a session, short: ~/Desktop/shop. */
+export function folderText(cwd: string | undefined): string {
+  if (!cwd) return '';
+  return cwd.replace(/^\/Users\/[^/]+(?=\/|$)/, '~');
+}
+
+/** How a session ended, in words; nothing when Claude Code says no more than that it ended. */
+const ENDED_WORDS: Record<string, string> = { prompt_input_exit: 'closed', logout: 'logged out', clear: 'cleared', resume: 'resumed elsewhere' };
+
+/**
+ * The line under the name, for a session that is not at work: it does not say again what the state says. Finished
+ * and when, the folder of one that is starting or ready, why it compacts, the error in words, how it ended.
+ */
+export function restLine(agent: Agent, now: number, limits?: UsageLimits): string | undefined {
+  switch (agent.state) {
+    case 'idle': {
+      if (agent.completedAt === undefined) return folderText(agent.cwd);
+      const ago = agoShort(now - agent.completedAt);
+      return ago === 'now' ? 'finished just now' : `finished ${ago} ago`;
+    }
+    case 'starting':
+      return folderText(agent.cwd);
+    case 'compacting':
+      return agent.compactTrigger === 'auto' ? 'the context was full' : 'as you asked';
+    case 'error':
+      return errorLine(agent, limits, now);
+    case 'ended':
+      return ENDED_WORDS[agent.endReason ?? ''] ?? '';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The time in the corner of a box: how long the turn has gone on while it works, how long it has waited for you,
+ * the time since the last event otherwise; nothing for a finished session, whose line says when.
+ */
+export function cornerTime(agent: Agent, now: number): { text: string; title: string } | undefined {
+  if (!hasEvents(agent) || agent.state === 'ended' || agent.state === 'idle') return undefined;
+  const last = agoShort(now - agent.lastEvent.at);
+  if ((agent.state === 'working' || agent.state === 'compacting') && agent.turnStartedAt !== undefined) {
+    const turn = agoShort(now - agent.turnStartedAt);
+    const lastText = last === 'now' ? 'just now' : `${last} ago`;
+    if (turn === 'now') return { text: 'just started', title: `This turn just started; the last event came ${lastText}` };
+    return { text: `for ${turn}`, title: `At work on this turn for ${turn}; the last event came ${lastText}` };
+  }
+  if (agent.state === 'waiting') {
+    const since = agoShort(now - (agent.waiting?.since ?? agent.lastEvent.at));
+    return { text: since, title: `It has waited for you for ${since}` };
+  }
+  return { text: last, title: 'Time since the last event' };
 }
 
 /** One conflict, in a line: "same file as beta: src/api.ts and 2 more", "same repo as beta (Forchetta)". */

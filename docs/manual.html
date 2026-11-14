@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.4. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.5. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -188,7 +188,7 @@ forchetta setup</pre>
         <p>Forchetta shows every session, but it can type into a session, and open its terminal, only when the session runs in its own tmux. Start a session there in one of two ways:</p>
         <ul>
           <li>in a terminal, with <code>forchetta run claude</code>, which takes the same arguments as <code>claude</code> (<code>forchetta run claude --continue</code>);</li>
-          <li>in the app, with <span class="ui">new session</span> or <span class="ui">new team</span>.</li>
+          <li>in the app, with <span class="ui">new session</span> or <span class="ui">new team</span> (<span class="ui">teams</span> once you have one).</li>
         </ul>
         <p>A session started with plain <code>claude</code> is <strong>read only</strong>: its box shows what it does, and you can answer its permissions, but Forchetta cannot send it commands. Hover its box to read why.</p>
         <p>To go through Forchetta every time you type <code>claude</code>, add an alias to <code>~/.zshrc</code>. <code>forchetta run</code> uses the full path of <code>claude</code>, so there is no loop; <code>command claude</code> runs the original once.</p>
@@ -208,11 +208,11 @@ forchetta setup</pre>
         <h2>The window</h2>
         <p>One box per session. It shows up when the session starts, fades when it ends, and goes away 10 minutes later. Each box shows:</p>
         <ul>
-          <li>the project (or the name you gave it) and the state;</li>
-          <li>the current action, <code>Edit src/api.ts</code> or <code>Bash npm test</code> for example, or what the session is asking you;</li>
+          <li>the project (or the name you gave it) and the state, with a dot when the session finished, or stopped on an error, since you last looked: a click on its box, or its open pane, marks it seen;</li>
+          <li>the current action, <code>Edit src/api.ts</code> or <code>Bash npm test</code> for example, or what the session is asking you; when it is not at work, what the state does not say already: <span class="ui">finished 12 min ago</span>, the error in words (<span class="ui">5-hour limit used up · back 4:40 PM</span>), its folder while it starts;</li>
           <li>a short summary, from the last request and the last reply;</li>
-          <li>the context, as a bar and in tokens (see <a href="#cost">Context, cache and cost</a>), and the countdown of the prompt cache, with <a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a>;</li>
-          <li>the cost of the session, the time since its last event, and <span class="ui">tmux</span> or <span class="ui">read only</span>.</li>
+          <li>the context, as a bar and as a share of the window (the tokens are in its tooltip; see <a href="#cost">Context, cache and cost</a>), and the prompt cache when it is about to expire, with <a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a>;</li>
+          <li>the cost of the session; while it works, how long its turn has gone on (<span class="ui">for 12 min</span>), and while it waits, for how long; <span class="ui">read only</span> for a session outside the tmux of Forchetta.</li>
         </ul>
 
         <h3>The states</h3>
@@ -221,8 +221,8 @@ forchetta setup</pre>
           <tbody>
             <tr><td><strong>working</strong></td><td>the border pulses slowly</td></tr>
             <tr><td><strong>waiting</strong> for you</td><td>amber, with a breath: a permission, a question, a plan to approve</td></tr>
-            <tr><td><strong>turn finished</strong></td><td>green for a moment, with a check</td></tr>
-            <tr><td><strong>error</strong></td><td>red, with a single shake</td></tr>
+            <tr><td><strong>turn finished</strong></td><td>green for a moment, with a check; a green dot stays until you look</td></tr>
+            <tr><td><strong>error</strong></td><td>red, with a single shake, and a red dot until you look</td></tr>
             <tr><td><strong>compacting</strong></td><td>the context bar squeezes</td></tr>
           </tbody>
         </table></div>
@@ -368,7 +368,7 @@ forchetta setup</pre>
           <img src="img/team.png" width="2400" height="1418" loading="lazy" alt="The panel of the team checkout: the thread of requests, answers and a question, then the field to write a new request.">
           <figcaption>The thread of the team, and the field to write to it.</figcaption>
         </figure>
-        <p><span class="ui">team</span>, at the top, appears when there is at least one team. It shows the thread of the team, oldest first:</p>
+        <p><span class="ui">teams</span>, at the top, takes the place of <span class="ui">new team</span> when there is at least one team; <span class="ui">+ new team</span> is inside. It shows the thread of the team, oldest first:</p>
         <ul>
           <li>each request, with who sent it, to whom, and how it goes for each one: in the queue, working, done;</li>
           <li>the answers, and where they went: <span class="ui">delivered to lead</span>, <span class="ui">collected by lead (waiting for it)</span>, <span class="ui">for you</span>, or <span class="ui">not sent back</span> (a member that executes only, or one that asked a question instead);</li>
@@ -408,7 +408,7 @@ forchetta setup</pre>
           <img src="img/guard.png" width="2800" height="1572" loading="lazy" alt="Two panes: retries runs its tests and holds src/api.ts, rate-limit waits; in the terminal of rate-limit, the edit stopped by the guard with its reason, and the answer of Claude: it will wait for the file.">
           <figcaption>rate-limit tried to edit src/api.ts while retries changes it: the guard stopped it, and Claude waits for the file.</figcaption>
         </figure>
-        <p>Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. The guard stops that before it happens, for every session, also those started with plain <code>claude</code>.</p>
+        <p>Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. The guard stops that before it happens, for every session, also those started with plain <code>claude</code>. And it tells each session what the others did, when it matters: a file it read that another one changed, tests that fail on the work in progress of another one, lines of another one it is about to take away, a commit that would take their changes, a dev server already running.</p>
         <h3>A file held</h3>
         <p>A session holds a file it wrote in the turn it is working on now, until the turn ends. When another session tries to edit that file, the edit does not go, and Claude is told why: another session is changing the file; work on something else, or end the turn and wait. Claude Code shows it as <span class="ui">PreToolUse:Edit hook error</span>, with the reason.</p>
         <ul>
@@ -417,14 +417,32 @@ forchetta setup</pre>
         </ul>
         <h3>Free again</h3>
         <p>When the turn that held the file ends, the session that waited gets a new prompt, typed only when it is ready, like a command of the box: <span class="ui">Forchetta: src/api.ts is free now ("billing-api" ended its turn). You can go on.</span> If it wrote the file in the meantime, the prompt is not sent. A session started with plain <code>claude</code> cannot be typed into: you get a notification instead.</p>
+        <h3>What the others changed</h3>
+        <p>Forchetta remembers which files each session read. When another session changes one of them, what the first one knows of it is out of date: it may go on writing code against a function that was renamed. With the result of its next <code>Edit</code>, <code>Write</code> or Bash command, Claude is told which files changed since it read them, by whom, and the lines taken away and added, once for each change:</p>
+        <pre><code>Forchetta: other Claude Code sessions on this Mac changed files you read earlier. What you read of them is out of date:
+- src/api.ts, by "retries" 3 min ago:
+    -export async function fetchUser(id: string): Promise&lt;User&gt; {
+    +export async function getUser(id: string, options: { retries?: number } = {}): Promise&lt;User&gt; {
+Read them again before you write code that relies on them.</code></pre>
+        <p>It stops nothing: the note comes with the result of the tool. Worktrees learn of such a change only when they are merged; in one folder, the session adapts at once.</p>
+        <h3>Before tests</h3>
+        <p>Before a command that runs tests, a build, a type check or a linter (<code>npm test</code>, <code>pnpm build</code>, <code>vitest</code>, <code>tsc</code>, <code>pytest</code>, <code>go test</code>, <code>cargo check</code>, <code>make</code>…), if other sessions in the same working tree are in the middle of a turn, Claude is told which files they are changing: errors there are probably their work in progress, not something to fix. Said again for the same files only after 15 minutes.</p>
+        <h3>Lines of another session</h3>
+        <p>An edit that takes away lines another session added in the last hour (a line changed, with most of its words still there, does not count) is stopped once, with those lines, so that a session does not undo the work of another one without knowing. If it means it, the same edit again goes through.</p>
         <h3>git</h3>
         <p>Before a Bash command with a git that changes the files of its folder (<code>checkout</code>, <code>switch</code>, <code>restore</code>, <code>reset --hard</code>, <code>stash</code>, <code>clean</code>, <code>rebase</code>, <code>pull</code>, <code>merge</code>, <code>cherry-pick</code>, <code>revert</code>, <code>am</code>), when another live session works in the same working tree, Claude Code asks you first, with the reason in the dialog. You can answer from the box too.</p>
+        <p>A <code>git add -A</code>, <code>git add .</code>, <code>git add</code> of a folder or <code>git commit -a</code> that would take files another live session changed in the last hour is stopped once. Claude reads whose they are, the files that have changes of both, and its own files to add instead: <code>git add src/billing.ts src/iban.ts</code>. One commit per piece of work, as if the sessions were in separate folders. The same command again goes through, for when you asked to commit everything.</p>
+        <h3>One dev server</h3>
+        <p>Before a command that starts a dev server (<code>npm run dev</code>, <code>pnpm dev</code>, <code>vite</code>, <code>next dev</code>, <code>rails s</code>, <code>manage.py runserver</code>…), if a server is already listening in that folder, Claude is told its address and who started it, once: <span class="ui">a dev server of this folder is already running: http://localhost:5173 (node 4242, started by "retries", another Claude Code session)</span>. It reloads by itself when any session changes a file, so they all use it. The same command again goes through, for a second server on another port.</p>
+        <p>Before <code>kill</code>, <code>pkill</code>, <code>killall</code> or the kill of a port (<code>lsof -ti:3000 | xargs kill</code>, <code>kill-port</code>, <code>fuser -k</code>) that would stop a process another Claude Code session started, or that session itself, Claude Code asks you first.</p>
         <h3>Limits</h3>
         <ul>
           <li>Only the files written with <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code> and <code>NotebookEdit</code> are held; what a Bash command writes is not seen. Two worktrees are two folders: a member of a team in its own worktree is never stopped.</li>
           <li>Between turns, a file written by a subagent in the background stays held for two minutes after its last write.</li>
           <li>The git command is read as a plain shell line (<code>&amp;&amp;</code>, <code>;</code>, <code>|</code>, quotes, <code>cd</code>, <code>git -C</code>); what cannot be read goes through.</li>
-          <li>Claude waits about 30 ms for the guard, only before these tools. With the daemon off, nothing is stopped and nothing waits.</li>
+          <li>The notes come with the result of the next <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code>, <code>NotebookEdit</code> or Bash command, not before it; the files read count for the session itself, not for its subagents.</li>
+          <li>Tests, builds and dev servers are told by the name of the command; a script with another name is not seen. A server started in the background of a shell that ended has no session as its parent: it counts as started outside Claude Code.</li>
+          <li>Claude waits about 30 ms for the guard, only before these tools; a git add of a whole folder adds one <code>git status</code>, and a dev server or a kill one look at the processes (<code>lsof</code>, <code>ps</code>), about 200 ms. With the daemon off, nothing is stopped and nothing waits.</li>
           <li>The guard keeps what is held in the memory of the daemon: after a restart, nothing is held until the next writes.</li>
           <li>To turn it off, see <a href="#config">Configuration</a>.</li>
         </ul>
@@ -478,7 +496,8 @@ forchetta setup</pre>
           <li><strong>The cost of each session</strong>, in its box, is the one Claude Code computes for <code>/cost</code>. It reaches Forchetta through your status line, which <code>forchetta hooks install</code> wraps without changing what it shows.</li>
           <li><strong>The context</strong> of each session comes from your status line too: the tokens the next prompt sends again and the share of the window they fill, the same numbers Claude Code gives (2.1.6 or later). Before the first answer, and after <code>/compact</code> until the next one, there is none yet. Without them, the context comes from <a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a>, if you use it, with the window from the <a href="#config">configuration</a>: then the percentage is an estimate, marked <code>≈</code>.</li>
           <li><strong>The prompt cache</strong> comes from arricurdAI: the countdown of each session, and the <span class="ui">guard</span> badge when arricurdAI will stop the next prompt.</li>
-          <li><strong>The total of today</strong>, at the top, counts every call of every session since midnight, at API prices (with arricurdAI).</li>
+          <li><strong>The limits of your plan</strong>, at the top, with a Claude subscription: <span class="ui">5h 62% · week 31%</span>, from the status line of any session. Amber when, at the pace of the last half hour, the 5-hour window runs out before it resets (<span class="ui">5h 62% · out ≈3:20 PM</span>); red when it is used up. Its tooltip says when each one resets and, with two sessions or more, what each one spent in the window: an estimate from their cost at API prices, not a figure of Anthropic.</li>
+          <li><strong>The total of today</strong>, at the top, counts every call of every session since midnight, at API prices (with arricurdAI). With the limits of a plan it goes in their tooltip: what counts then is how much of them is left.</li>
         </ul>
       </section>
 
@@ -538,8 +557,10 @@ forchetta setup</pre>
             <tr><td><code>endedRetentionMin</code></td><td><code>10</code></td><td>How long an ended session stays in the window.</td></tr>
             <tr><td><code>contextWindows</code></td><td>1M; 200k for Haiku 4.5, Sonnet 4.6, Opus 4.6</td><td>The window of each model, for the percentage of the context when it comes from arricurdAI. A key matches a model id or its beginning; <code>"*"</code> is the rest.</td></tr>
             <tr><td><code>arricurdai</code></td><td>found by itself</td><td>The command of arricurdAI, as a list: <code>["/path/to/arricurdai"]</code>.</td></tr>
-            <tr><td><code>guard.files</code></td><td><code>true</code></td><td>The guard stops a session from editing a file another one is changing in its turn (see <a href="#guard">The guard</a>).</td></tr>
-            <tr><td><code>guard.git</code></td><td><code>true</code></td><td>Claude Code asks you before a git command that would change the files under another session.</td></tr>
+            <tr><td><code>guard.files</code></td><td><code>true</code></td><td>The guard stops a session from editing a file another one is changing in its turn, and once from taking away lines another one added (see <a href="#guard">The guard</a>).</td></tr>
+            <tr><td><code>guard.git</code></td><td><code>true</code></td><td>Claude Code asks you before a git command that would change the files under another session; a <code>git add -A</code> that would take its changes is stopped once.</td></tr>
+            <tr><td><code>guard.notes</code></td><td><code>true</code></td><td>Claude is told which files it read were changed by another session, and before tests which files the others are in the middle of.</td></tr>
+            <tr><td><code>guard.servers</code></td><td><code>true</code></td><td>A session is pointed to the dev server already running in its folder, and Claude Code asks you before a kill of a process another session started.</td></tr>
             <tr><td><code>summaries.haiku</code></td><td><code>false</code></td><td>The summaries by Haiku (see <a href="#search">above</a>).</td></tr>
             <tr><td><code>port</code></td><td><code>47821</code></td><td>The port of the daemon, on <code>127.0.0.1</code> only.</td></tr>
           </tbody>

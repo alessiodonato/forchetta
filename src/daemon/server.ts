@@ -9,6 +9,7 @@ import type { Agent, HookPayload } from './state.ts';
 import { serveStatic } from './static.ts';
 import { artifactOf } from '../shared/artifacts.ts';
 import { subagentResultOf } from './subagents.ts';
+import { type RateLimits, rateLimitsOf } from './limits.ts';
 
 // The HTTP side of the daemon, on 127.0.0.1 only.
 //
@@ -52,8 +53,10 @@ export interface ServerOptions {
   recordFile?: string;
   onShutdown: () => void;
   onHook?: (agent: Agent, payload: HookPayload) => void;
+  /** The limits of the Claude plan, from an input of the status line that carries them (daemon/limits.ts). */
+  onRateLimits?: (limits: RateLimits, agent?: Agent) => void;
   /** The guard: what to answer before a tool that writes files or runs a command; undefined lets it go. */
-  guard?: (agent: Agent, payload: HookPayload) => object | undefined;
+  guard?: (agent: Agent, payload: HookPayload) => object | undefined | Promise<object | undefined>;
   /** The routes of the MCP server of a team: /api/crew/<route>, POST with JSON. */
   crew?: (route: string, input: Record<string, unknown>) => Promise<{ status: number; body: unknown }>;
   log: (message: string) => void;
@@ -279,7 +282,7 @@ export function createDaemonServer(options: ServerOptions): Server {
       try {
         const payload = body ? slimPayload(JSON.parse(body.toString('utf8'))) : undefined;
         const agent = payload ? registry.lookup(payload, hookMeta(req.headers)) : undefined;
-        if (payload && agent) decision = options.guard?.(agent, payload);
+        if (payload && agent) decision = await options.guard?.(agent, payload);
       } catch (error) {
         // A broken input, or a fault of the guard: the tool goes on as usual.
         log(`guardia: ${String(error)}`);
@@ -295,7 +298,9 @@ export function createDaemonServer(options: ServerOptions): Server {
       const body = await readBody(req);
       send(res, 200);
       const status = body ? statusUsage(body) : undefined;
-      if (status) registry.status(status.sessionId, hookMeta(req.headers), status);
+      const agent = status ? registry.status(status.sessionId, hookMeta(req.headers), status) : undefined;
+      const limits = body && options.onRateLimits ? rateLimitsOf(body) : undefined;
+      if (limits) options.onRateLimits?.(limits, agent);
       return;
     }
 

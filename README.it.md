@@ -44,6 +44,14 @@ Il modo solito di far lavorare più agenti in parallelo è un worktree git per o
 - quando il turno che teneva il file finisce, la sessione in attesa viene avvisata che il file è libero, e riparte da sola;
 - un comando git che cambierebbe i file sotto a un'altra sessione (`checkout`, `reset --hard`, `stash`, `pull`…) ti chiede prima conferma.
 
+E dice a ogni sessione cosa hanno fatto le altre, proprio quando serve:
+
+- **un file che ha letto è cambiato**: chi l'ha cambiato, e le righe. Con i worktree lo scopri al merge; qui la sessione si adatta subito;
+- **prima dei test o di una build**: quali file le altre stanno cambiando a metà, così i loro errori non vengono presi per bug suoi;
+- **righe aggiunte da un'altra sessione** che sta per togliere: fermata una volta, così nessun lavoro viene annullato senza saperlo;
+- **un `git add -A`** che si porterebbe dietro le modifiche di un'altra sessione: fermato una volta, con i suoi file da aggiungere al posto;
+- **un dev server già acceso** nella cartella: il suo indirizzo, invece di un secondo; un kill di un processo di un'altra sessione ti chiede prima conferma.
+
 Vale per tutte le sessioni, anche per quelle avviate con `claude` normale. **let it through**, nel box, lo scavalca. [Il vigile nel manuale](https://forchetta.dev/manual.html#guard).
 
 ### Funziona con il `claude` che usi già
@@ -56,7 +64,8 @@ Avvia una sessione con `forchetta run claude`, o dall'app, e Forchetta può anch
 
 <img src="docs/img/overview.png" alt="La finestra di Forchetta: dodici sessioni, ognuna in un box con stato, cosa sta facendo, riassunto, contesto e costo. Due ti aspettano, in ambra." width="100%">
 
-- Un box aggiornato in tempo reale per ogni sessione: lo stato, cosa sta facendo, un breve riassunto, il contesto e il costo. Ambra quando aspetta te, verde quando ha finito, rosso per un errore.
+- Un box aggiornato in tempo reale per ogni sessione: lo stato, cosa sta facendo, un breve riassunto, il contesto e il costo. Ambra quando aspetta te, verde quando ha finito, rosso per un errore, e un pallino su un risultato che non hai ancora guardato.
+- I limiti del tuo piano in alto (`5h 62% · week 31%`), e quando finirà quello di 5 ore a questo ritmo.
 - Rispondi ai permessi dal box, una volta o "always".
 - Una notifica quando una sessione ti aspetta, sembra bloccata o finisce con un errore.
 - Fino a quattro terminali veri affiancati.
@@ -73,6 +82,7 @@ Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è
 | **Claude Desktop** | L'app di Anthropic, con le sessioni in parallelo nella barra laterale | Lavora con la CLI `claude` che usi già nei tuoi terminali, con i tuoi hook e le tue impostazioni. |
 | **Agent teams** (sperimentali in Claude Code) | Una sessione capo che avvia i compagni e divide con loro una lista di compiti | I team si preparano in un pannello e si salvano come modelli: ruolo, modello, permessi e worktree per ogni membro. Il capo puoi essere tu. |
 | **Conductor** e app per Mac simili | App che fanno girare più agenti, ognuno in uno spazio di lavoro isolato | Forchetta non ospita le tue sessioni: vede quelle che avvii ovunque, e le lascia lavorare nella stessa cartella senza danni. |
+| **Orca**, **Paseo** | App open source per desktop e telefono che fanno girare molti tipi di agenti, ognuno nel suo worktree git | Nessun worktree da preparare: le sessioni lavorano nella stessa cartella, e il vigile le tiene lontane dai file delle altre. Funziona con il `claude` che già usi, in qualsiasi terminale. |
 | **cmux**, **Claude Squad** | Terminali e gestori di sessioni per molti tipi di agenti | Fatta solo per Claude Code, attraverso i suoi hook: il vigile, permessi dal box, contesto e costo per sessione, subagenti. |
 
 Non si escludono a vicenda: le sessioni avviate in qualsiasi terminale compaiono in Forchetta.
@@ -88,7 +98,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.9.4. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.9.5. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 

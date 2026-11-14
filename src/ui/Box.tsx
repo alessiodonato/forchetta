@@ -1,6 +1,6 @@
 import { memo } from 'preact/compat';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { type Agent, displayName, STATE_LABEL, type ToolFamily } from '../shared/agent.ts';
+import { type Agent, displayName, STATE_LABEL, type ToolFamily, type UsageLimits } from '../shared/agent.ts';
 import {
   agoShort,
   CACHE_SOON_MS,
@@ -10,8 +10,9 @@ import {
   conflictsTitle,
   conflictText,
   controlLabel,
-  hasEvents,
+  cornerTime,
   percentText,
+  restLine,
   shownSubagents,
   stalledFor,
   stallText,
@@ -41,7 +42,11 @@ interface Line {
   tone?: 'muted' | 'accent' | 'error';
 }
 
-function actionLine(agent: Agent): Line {
+/**
+ * The line under the name: what it does now while it works or waits; otherwise something the state above does not
+ * already say (when it finished, the folder, the error in words).
+ */
+function actionLine(agent: Agent, now: number, limits: UsageLimits | undefined): Line {
   switch (agent.state) {
     case 'working': {
       const action = agent.action;
@@ -50,16 +55,12 @@ function actionLine(agent: Agent): Line {
     }
     case 'waiting':
       return { text: waitingText(agent), tone: 'accent' };
-    case 'idle':
-      return { text: agent.completedAt ? 'turn finished' : 'ready', tone: 'muted' };
-    case 'starting':
-      return { text: 'starting…', tone: 'muted' };
-    case 'compacting':
-      return { text: agent.compactTrigger === 'auto' ? 'compacting, automatically' : 'compacting, as you asked' };
     case 'error':
-      return { text: `error · ${agent.error?.kind ?? '?'}`, tone: 'error' };
-    case 'ended':
-      return { text: `ended · ${agent.endReason ?? '?'}`, tone: 'muted' };
+      return { text: restLine(agent, now, limits) ?? '', tone: 'error' };
+    case 'compacting':
+      return { text: restLine(agent, now) ?? '' };
+    default:
+      return { text: restLine(agent, now) ?? '', tone: 'muted' };
   }
 }
 
@@ -85,7 +86,7 @@ function ContextBar({ agent }: { agent: Agent }) {
           <i class={agent.state === 'compacting' ? 'squeeze' : undefined} />
         </div>
       </div>
-      <span class="pct">{context ? `${percentText(context)} · ${shortTokens(context.tokens)}` : '—'}</span>
+      <span class="pct">{context ? percentText(context) : '—'}</span>
     </div>
   );
 }
@@ -110,18 +111,23 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
   ]
     .filter(Boolean)
     .join('\n');
+  const time = cornerTime(agent, now);
+  // The cache only when it counts: about to expire, or expired on a context that arricurdAI will stop.
+  const stopped = cache !== undefined && left <= 0 && cache.guardWillStop === true;
   return (
     <footer class="meta">
-      <span class="usage" title={usageTitle}>
-        {usage ? `${usage.usd >= 0.01 ? '≈ ' : ''}${usdText(usage.usd)}` : '—'}
-        {today && today.tokens > 0 ? ` · today ${shortTokens(today.tokens)} tok` : ''}
-      </span>
-      {cache && (
-        <span class={`cache-left${soon ? ' soon' : left <= 0 ? ' faded' : ''}`} title={cacheTitle}>
-          {left <= 0 ? 'expired' : cacheText(cache, now)}
+      {(usage || (today && today.tokens > 0)) && (
+        <span class="usage" title={usageTitle}>
+          {usage ? `${usage.usd >= 0.01 ? '≈ ' : ''}${usdText(usage.usd)}` : ''}
+          {today && today.tokens > 0 ? `${usage ? ' · ' : ''}today ${shortTokens(today.tokens)} tok` : ''}
         </span>
       )}
-      {cache && left <= 0 && cache.guardWillStop && (
+      {cache && (soon || stopped) && (
+        <span class={`cache-left${soon ? ' soon' : ' faded'}`} title={cacheTitle}>
+          {left <= 0 ? 'cache expired' : cacheText(cache, now)}
+        </span>
+      )}
+      {stopped && (
         <span class="tag" title="arricurdAI will stop the next prompt: the cache expired on a large context">
           guard
         </span>
@@ -132,12 +138,13 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
         {shownSubagents(agent, now).length === 0 && <SubagentsButton agent={agent} store={store} />}
         <FilesButton agent={agent} store={store} />
         <ArtifactsButton agent={agent} />
-        {hasEvents(agent) && agent.state !== 'ended' && (
-          <span class="ago" title="Time since the last event">
-            {agoShort(now - agent.lastEvent.at)}
+        {time && (
+          <span class="ago" title={time.title}>
+            {time.text}
           </span>
         )}
-        <span class={`tag control-${agent.control.kind}`}>{controlLabel(agent)}</span>
+        {/* In the tmux of Forchetta is the usual case: only the others say so. */}
+        {agent.control.kind !== 'tmux' && agent.state !== 'ended' && <span class={`tag control-${agent.control.kind}`}>{controlLabel(agent)}</span>}
       </span>
     </footer>
   );
@@ -164,14 +171,18 @@ interface BoxProps {
   now: number;
   entering: boolean;
   onEntered: (id: string) => void;
-  /** A click opens the terminal of the session; only sessions in the tmux of Forchetta have one. */
+  /** A click opens the terminal of the session; only sessions in the tmux of Forchetta have one. It counts as seen. */
   onOpen: (id: string) => void;
+  /** It finished, or stopped on an error, since you last looked: a dot until you click it. */
+  unseen: boolean;
+  /** The limits of the plan, for a session stopped on a rate limit: which one, and when it comes back. */
+  limits?: UsageLimits;
   store: Store;
   /** In a team of agents: the request it works on, or the ones the lead waits on (shared/crew.ts, crewLineOf). */
   crewLine?: string;
 }
 
-function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: BoxProps) {
+function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, unseen, limits }: BoxProps) {
   const [commanding, setCommanding] = useState(false);
   const [editingTeam, setEditingTeam] = useState(false);
   const ref = useRef<HTMLElement>(null);
@@ -193,7 +204,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: B
   const since = useMotionAnchor(ref, agent.state);
   const openable = canOpen(agent);
 
-  const line = actionLine(agent);
+  const line = actionLine(agent, now, limits);
   const summary = summaryText(agent);
   const completed = agent.state === 'idle' && agent.completedAt !== undefined && now - agent.completedAt < COMPLETED_MS;
 
@@ -207,7 +218,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: B
       data-completed={completed ? '' : undefined}
       data-openable={openable ? '' : undefined}
       title={openable ? 'Open the terminal of the session' : agent.state === 'ended' ? undefined : 'Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.'}
-      onClick={openable ? () => onOpen(agent.id) : undefined}
+      onClick={() => onOpen(agent.id)}
     >
       <div class="aura" aria-hidden="true" />
       {completed && (
@@ -241,6 +252,11 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: B
         {roleText(agent) && (
           <span class="role" title={roleText(agent)}>
             {roleText(agent)}
+          </span>
+        )}
+        {unseen && (
+          <span class="unseen" title={agent.state === 'error' ? 'It stopped on an error since you last looked' : 'It finished since you last looked: click to mark it seen'}>
+            ●
           </span>
         )}
         <span class="state">{STATE_LABEL[agent.state]}</span>
@@ -304,7 +320,8 @@ function clockKey(agent: Agent, now: number): string {
   const left = agent.cache ? agent.cache.expiresAt - now : 0;
   const soon = agent.cache !== undefined && left > 0 && left < CACHE_SOON_MS;
   return [
-    hasEvents(agent) ? agoShort(now - agent.lastEvent.at) : '',
+    cornerTime(agent, now)?.text ?? '',
+    restLine(agent, now) ?? '',
     agent.cache ? cacheText(agent.cache, now) : '',
     completed,
     soon,
@@ -322,6 +339,8 @@ export const Box = memo(
   (before, after) =>
     before.agent === after.agent &&
     before.crewLine === after.crewLine &&
+    before.unseen === after.unseen &&
+    before.limits === after.limits &&
     before.entering === after.entering &&
     before.onOpen === after.onOpen &&
     clockKey(before.agent, before.now) === clockKey(after.agent, after.now),

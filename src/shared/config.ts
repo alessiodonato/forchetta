@@ -35,9 +35,12 @@ export interface Config {
   hotkey: string;
   /**
    * The guard (daemon/guard.ts): files stops a session from editing a file that another session is changing in its
-   * turn; git asks before a git command that would change the files under another session.
+   * turn, and once from taking away lines another session added; git asks before a git command that would change
+   * the files under another session, and stops once a git add -A that would take its changes; notes tell Claude
+   * which files it read were changed by another session, and before tests which files others are halfway through;
+   * servers points a session to the dev server already running, and asks before a kill of another session's process.
    */
-  guard: { files: boolean; git: boolean };
+  guard: { files: boolean; git: boolean; notes: boolean; servers: boolean };
 }
 
 /** Native 1M window for the current models; 200k for those that compact at 200k without extended context. */
@@ -58,7 +61,7 @@ export const DEFAULT_CONFIG: Config = {
   reconcileIntervalMin: 5,
   stallMin: 10,
   hotkey: 'ctrl+alt+f',
-  guard: { files: true, git: true },
+  guard: { files: true, git: true, notes: true, servers: true },
 };
 
 const positive = (value: unknown, fallback: number): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback);
@@ -104,7 +107,7 @@ export function loadConfig(file = paths.config): Config {
     stallMin: positive(raw.stallMin, DEFAULT_CONFIG.stallMin),
     hotkey: typeof raw.hotkey === 'string' ? raw.hotkey : DEFAULT_CONFIG.hotkey,
     // On unless turned off: only false counts.
-    guard: { files: guard.files !== false, git: guard.git !== false },
+    guard: { files: guard.files !== false, git: guard.git !== false, notes: guard.notes !== false, servers: guard.servers !== false },
   };
 }
 

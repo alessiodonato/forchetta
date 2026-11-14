@@ -57,7 +57,9 @@ export function newAgent(init: Partial<Agent> & Pick<Agent, 'id' | 'control'>, n
 /** One tool call, by tool and input: a PermissionRequest and the PostToolUse of the same call have the same key. */
 export const keyOf = (tool: string | undefined, input: unknown): string => `${tool ?? ''}\u0000${JSON.stringify(input ?? null)}`;
 
-function startWork(agent: Agent): void {
+function startWork(agent: Agent, now: number): void {
+  // A turn begins: not when it was already on (a tool call in it, a prompt added while it works).
+  if (agent.state !== 'working' && agent.state !== 'waiting' && agent.state !== 'compacting') agent.turnStartedAt = now;
   agent.state = 'working';
   agent.waiting = undefined;
   agent.error = undefined;
@@ -144,7 +146,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
       // A command or a shell line: no turn of the model starts here. A command that becomes a prompt shows
       // up with its first tool call or with Stop.
       if (prompt.startsWith('/') || prompt.startsWith('!')) break;
-      startWork(agent);
+      startWork(agent, now);
       agent.action = undefined;
       agent.summary = { text: prompt ? `Working on: ${clip(prompt, 100)}` : 'Working', source: 'eventi', at: now };
       agent.lastPrompt = prompt ? clip(prompt, 600) : undefined;
@@ -171,7 +173,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
       agent.recentActions = [...(agent.recentActions ?? []), label].slice(-RECENT_ACTIONS);
       // A subagent that works while the main agent waits for you, or after its turn ended, changes the
       // action shown, not the state.
-      if (!fromSubagent || agent.state === 'starting' || agent.state === 'working' || agent.state === 'error') startWork(agent);
+      if (!fromSubagent || agent.state === 'starting' || agent.state === 'working' || agent.state === 'error') startWork(agent, now);
       const task = activeTask(tool, payload.tool_input);
       if (task) agent.summary = { text: clip(task, 140), source: 'eventi', at: now };
       break;
@@ -203,7 +205,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
         if (!sameCall && !answered) break;
       }
       if (fromSubagent && agent.state === 'idle') break;
-      if (agent.state !== 'compacting') startWork(agent);
+      if (agent.state !== 'compacting') startWork(agent, now);
       break;
     }
 
@@ -224,7 +226,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
           break;
         case 'elicitation_complete':
         case 'elicitation_response':
-          if (agent.state === 'waiting' && agent.waiting?.kind === 'dialogo') startWork(agent);
+          if (agent.state === 'waiting' && agent.waiting?.kind === 'dialogo') startWork(agent, now);
           break;
         case 'idle_prompt':
           // Claude finished a while ago: a turn that ended without Stop (an interrupt) ends here.
@@ -327,7 +329,7 @@ export function applyStatus(agent: Agent, entry: AgentsEntry, now: number, quiet
       }
       break;
     case 'busy':
-      if (agent.state === 'starting' || ((agent.state === 'idle' || agent.state === 'waiting' || agent.state === 'error') && quiet)) startWork(agent);
+      if (agent.state === 'starting' || ((agent.state === 'idle' || agent.state === 'waiting' || agent.state === 'error') && quiet)) startWork(agent, now);
       break;
     case 'waiting':
       if (agent.state !== 'waiting' && (agent.state === 'starting' || quiet)) {

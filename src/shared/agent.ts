@@ -129,6 +129,28 @@ export interface TodayInfo {
   unpricedCalls: number;
 }
 
+/** One window of the limits of the Claude plan: the share used so far, and when it starts again from zero. */
+export interface UsageWindow {
+  /** 0-100. */
+  percent: number;
+  resetsAt: number;
+  /** At the pace of the last half hour it reaches 100% then: only when that comes before the reset. */
+  runsOutAt?: number;
+  /**
+   * The 5-hour window: what each session spent in it, as a share of what they all spent, the most first. An estimate
+   * from their cost at API prices, which weighs the models as the limit does roughly; not a figure of Anthropic.
+   */
+  sessions?: Array<{ agentId: string; percent: number }>;
+}
+
+/** The limits of the Claude plan, from the status line of any session (daemon/limits.ts), for the top line. */
+export interface UsageLimits {
+  /** When a status line last said them. */
+  at: number;
+  fiveHour?: UsageWindow;
+  sevenDay?: UsageWindow;
+}
+
 /** The updates of Claude Code, for the top line of the app (daemon/claude-update.ts). */
 export interface ClaudeUpdateInfo {
   /** The last automatic update failed: when, from which version, and how Claude Code calls it (install_failed…). */
@@ -367,6 +389,8 @@ export interface Agent {
   error?: { kind: string; message?: string; at: number };
   /** When the last turn ended: the box draws its check once. */
   completedAt?: number;
+  /** When the turn it is on, or its last one, began: the prompt, or its first tool call after a pause. */
+  turnStartedAt?: number;
   compactTrigger?: string;
   beforeCompact?: AgentState;
   /** A SessionEnd with reason clear or resume: the SessionStart of the same process follows. */

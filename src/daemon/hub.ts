@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
-import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo } from '../shared/agent.ts';
+import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate } from '../shared/crew.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 
@@ -13,7 +13,7 @@ import type { QuickPrompt } from '../shared/prompts.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[] }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits }
   /** What you selected with the mouse in a pane, for the window where you did it. */
   | { type: 'selection'; now: number; agentId: string; text: string }
   /** How a question or a text from the menu of a selection went: queued, put in the prompt, or why not. */
@@ -38,6 +38,8 @@ export type ServerMessage =
   | { type: 'crewRequested'; now: number; ok: boolean; crewId: string; n?: number; error?: string }
   /** What every session cost since midnight, read again from arricurdAI. */
   | { type: 'today'; now: number; today: TodayInfo }
+  /** The limits of the Claude plan, when a status line says something new about them. */
+  | { type: 'limits'; now: number; limits: UsageLimits }
   | { type: 'agents'; now: number; agents: Agent[] }
   | { type: 'removed'; now: number; ids: string[] }
   /** What `arricurdai recall` found, for the window that asked. */
@@ -166,6 +168,7 @@ export class Hub {
   private flushing = false;
   private watched = false;
   private today: TodayInfo | undefined;
+  private limits: UsageLimits | undefined;
 
   constructor(private readonly options: HubOptions) {}
 
@@ -195,6 +198,7 @@ export class Hub {
       templates: this.options.templates?.(),
       claudeUpdate: this.options.claudeUpdate?.(),
       prompts: this.options.prompts?.(),
+      limits: this.limits,
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -387,6 +391,11 @@ export class Hub {
     if (JSON.stringify(today) === JSON.stringify(this.today)) return;
     this.today = today;
     this.broadcast({ type: 'today', now: Date.now(), today });
+  }
+
+  setLimits(limits: UsageLimits): void {
+    this.limits = limits;
+    this.broadcast({ type: 'limits', now: Date.now(), limits });
   }
 
   setClaudeUpdate(update: ClaudeUpdateInfo): void {
