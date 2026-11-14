@@ -29,7 +29,7 @@ import { FilesButton } from './Files.tsx';
 import { SubagentRows, SubagentsButton } from './Subagents.tsx';
 import { PermissionOutcomeLine, PermissionPrompt, visibleOutcome } from './Permission.tsx';
 import { GuardLines } from './Guard.tsx';
-import { roleText, TeamEditor } from './Team.tsx';
+import { ColorDot, roleText, TeamEditor } from './Team.tsx';
 import { canOpen, type Store } from './store.ts';
 
 // One box per session. Its data-state drives the colors and the animations in the CSS; the few one-off
@@ -217,6 +217,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: B
       )}
       <header class="head">
         <h2 class="project" title={agent.cwd}>
+          <ColorDot agent={agent} />
           {displayName(agent)}
         </h2>
         {agent.team?.label && (
@@ -227,8 +228,8 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine }: B
         <button
           type="button"
           class="team-edit"
-          title="Name, group and role"
-          aria-label="Name, group and role"
+          title="Name, color, group and role"
+          aria-label="Name, color, group and role"
           onClick={(event) => {
             event.stopPropagation();
             setEditingTeam(!editingTeam);

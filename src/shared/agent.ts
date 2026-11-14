@@ -252,6 +252,8 @@ export type SubagentStep =
 export interface TeamInfo {
   /** A name of your choice, shown in place of the folder. */
   label?: string;
+  /** A color of your choice: a dot before the name, to tell the session apart at a glance. */
+  color?: SessionColor;
   group?: string;
   role?: string;
   /** The head of its group: it sits above the others in the chart. */
@@ -264,6 +266,24 @@ export interface TeamInfo {
 
 export const TEAM_TEXT_MAX = 40;
 
+/**
+ * The colors a session can wear: the dot before its name, and a tint in the background of its terminal
+ * (ui/terminal-theme.ts). None is amber, green, red or Claude orange: those say a state, or what you can act on,
+ * and a dot of them next to a name would read as one.
+ */
+export const SESSION_COLOR_HEX = {
+  blue: '#5b9cf5',
+  cyan: '#4ec4d9',
+  violet: '#a48af2',
+  magenta: '#d77ad6',
+  pink: '#f283b0',
+  white: '#e8e5de',
+} as const;
+export type SessionColor = keyof typeof SESSION_COLOR_HEX;
+export const SESSION_COLORS = Object.keys(SESSION_COLOR_HEX) as SessionColor[];
+
+const isSessionColor = (value: unknown): value is SessionColor => (SESSION_COLORS as readonly unknown[]).includes(value);
+
 /** The fields as the box sends them: trimmed, cut, and left out when empty. Undefined when nothing is left. */
 export function cleanTeam(input: unknown): TeamInfo | undefined {
   if (!input || typeof input !== 'object') return undefined;
@@ -273,7 +293,13 @@ export function cleanTeam(input: unknown): TeamInfo | undefined {
     const trimmed = value.replace(/\s+/g, ' ').trim().slice(0, TEAM_TEXT_MAX);
     return trimmed || undefined;
   };
-  const team: TeamInfo = { label: text(raw.label), group: text(raw.group), role: text(raw.role), lead: raw.lead === true && text(raw.group) !== undefined ? true : undefined };
+  const team: TeamInfo = {
+    label: text(raw.label),
+    color: isSessionColor(raw.color) ? raw.color : undefined,
+    group: text(raw.group),
+    role: text(raw.role),
+    lead: raw.lead === true && text(raw.group) !== undefined ? true : undefined,
+  };
   for (const key of Object.keys(team) as (keyof TeamInfo)[]) if (team[key] === undefined) delete team[key];
   return Object.keys(team).length > 0 ? team : undefined;
 }

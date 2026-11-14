@@ -23,6 +23,12 @@ describe('team fields', () => {
     expect(cleanTeam(null)).toBeUndefined();
   });
 
+  it('a color is one of the palette, or none', () => {
+    expect(cleanTeam({ label: '', color: 'cyan', group: '' })).toEqual({ color: 'cyan' });
+    expect(cleanTeam({ label: 'Rita', color: 'red' })).toEqual({ label: 'Rita' });
+    expect(cleanTeam({ color: '#ff0000' })).toBeUndefined();
+  });
+
   it('name and role as the box shows them', () => {
     const a = { ...agent('a1'), team: { label: 'Rita', role: 'revisione', lead: true, group: 'g' } };
     expect(displayName(a)).toBe('Rita');
@@ -37,14 +43,14 @@ describe('teams remembered for the folder', () => {
     const file = join(temp.dir, 'teams.json');
     const teams = new Teams(file);
     const first = agent('a1', '/p/app');
-    teams.set(first, { label: 'Rita', group: 'backend', role: 'revisione', lead: false });
-    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ '/p/app': { label: 'Rita', group: 'backend', role: 'revisione' } });
+    teams.set(first, { label: 'Rita', color: 'violet', group: 'backend', role: 'revisione', lead: false });
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ '/p/app': { label: 'Rita', color: 'violet', group: 'backend', role: 'revisione' } });
 
     // The next day: a new daemon, a new process in the same folder.
     const again = new Teams(file);
     const second = agent('a2', '/p/app');
     expect(again.apply(second)).toBe(true);
-    expect(second.team).toEqual({ label: 'Rita', group: 'backend', role: 'revisione' });
+    expect(second.team).toEqual({ label: 'Rita', color: 'violet', group: 'backend', role: 'revisione' });
     expect(again.apply(second)).toBe(false);
 
     again.set(second, null);
@@ -52,6 +58,15 @@ describe('teams remembered for the folder', () => {
     const third = agent('a3', '/p/app');
     expect(again.apply(third)).toBe(false);
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({});
+  });
+
+  it('a member of a team of agents takes a color and keeps its team, and nothing goes to the folder', () => {
+    const file = join(temp.dir, 'crew-teams.json');
+    const teams = new Teams(file);
+    const member = { ...agent('a1', '/p/crew'), team: { label: 'tester', crew: 'c1', talk: 'twoway' as const } };
+    teams.set(member, { label: 'tester', color: 'pink', group: '', role: '', lead: false });
+    expect(member.team).toEqual({ label: 'tester', color: 'pink', crew: 'c1', talk: 'twoway' });
+    expect(() => readFileSync(file, 'utf8')).toThrow();
   });
 
   it('a session with a team of its own keeps it', () => {

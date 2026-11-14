@@ -7,7 +7,9 @@ import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
 import { SubagentsButton } from './Subagents.tsx';
 import { SelectionMenu } from './SelectionMenu.tsx';
+import { ColorDot } from './Team.tsx';
 import type { Store } from './store.ts';
+import { terminalTheme } from './terminal-theme.ts';
 import { type TerminalStatus, TerminalView } from './TerminalView.tsx';
 
 // A pane of the work area: a header with the session and its state, and its terminal. The ✕ closes the pane
@@ -33,10 +35,18 @@ export function Pane({ agent, area, focusKey, now, store, onClose, onUse }: Prop
   useEffect(() => {
     if (inserted !== undefined) (body.current?.querySelector('.xterm-helper-textarea') as HTMLElement | null)?.focus();
   }, [inserted]);
+  // The color of the session tints its terminal, and the pane around it.
+  const color = agent.team?.color;
   return (
-    <section class="pane" data-id={agent.id} data-state={agent.state} style={{ gridArea: area }}>
+    <section
+      class="pane"
+      data-id={agent.id}
+      data-state={agent.state}
+      style={{ gridArea: area, ...(color ? { '--terminal': terminalTheme(color).background } : {}) }}
+    >
       <header class="pane-head">
         <span class="pane-project" title={agent.cwd}>
+          <ColorDot agent={agent} />
           {displayName(agent)}
         </span>
         <span class="pane-state">{STATE_LABEL[agent.state]}</span>
@@ -77,6 +87,7 @@ export function Pane({ agent, area, focusKey, now, store, onClose, onUse }: Prop
       <div class="pane-body" ref={body}>
         <TerminalView
           agentId={agent.id}
+          color={color}
           focusKey={focusKey}
           onUse={() => {
             onUse(agent.id);

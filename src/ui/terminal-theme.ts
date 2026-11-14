@@ -1,4 +1,5 @@
 import type { ITheme } from '@xterm/xterm';
+import { SESSION_COLOR_HEX, type SessionColor } from '../shared/agent.ts';
 
 // The colors of the terminal of a pane.
 //
@@ -99,3 +100,28 @@ export const TERMINAL_THEME: ITheme = {
   brightWhite: '#f8f7f3',
   extendedAnsi: extendedAnsi(),
 };
+
+/** How much of the color of a session goes into the background of its terminal: enough to tell it, little enough to read on. */
+export const SESSION_TINT = 0.14;
+
+/** A color with a part of another, both as #rrggbb. */
+export function tint(base: string, color: string, amount = SESSION_TINT): string {
+  const rgb = (value: string): number[] => [1, 3, 5].map((at) => Number.parseInt(value.slice(at, at + 2), 16));
+  const from = rgb(base);
+  const to = rgb(color);
+  return `#${from.map((channel, at) => hex(Math.round(channel + (to[at]! - channel) * amount))).join('')}`;
+}
+
+/**
+ * The theme of the terminal of a session. With a color, its background is tinted with it, and so are the
+ * neutrals Claude Code paints as backgrounds of their own on it (235, the background itself; 237 and 238, your
+ * messages; black): untinted, they would show as gray patches.
+ */
+export function terminalTheme(color?: SessionColor): ITheme {
+  if (!color) return TERMINAL_THEME;
+  const tinted = (value: string): string => tint(value, SESSION_COLOR_HEX[color]);
+  const ansi = [...extendedAnsi()];
+  for (const index of [235, 237, 238]) ansi[index - 16] = tinted(ansi[index - 16]!);
+  const background = tinted(TERMINAL_THEME.background!);
+  return { ...TERMINAL_THEME, background, cursorAccent: background, black: tinted(TERMINAL_THEME.black!), extendedAnsi: ansi };
+}

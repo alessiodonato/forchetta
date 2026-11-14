@@ -1,4 +1,4 @@
-import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo } from '../shared/agent.ts';
+import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SessionColor, SubagentStep, TodayInfo } from '../shared/agent.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Talk } from '../shared/crew.ts';
@@ -367,7 +367,7 @@ export class Store {
   }
 
   /** Name, group and role of a session; undefined takes them away. */
-  setTeam(agentId: string, team: { label: string; group: string; role: string; lead: boolean } | undefined): void {
+  setTeam(agentId: string, team: { label: string; color?: SessionColor; group: string; role: string; lead: boolean } | undefined): void {
     this.send({ type: 'team', agentId, team: team ?? null });
   }
 

@@ -2172,6 +2172,48 @@ html[data-hidden] *::after {
   color: #fff;
 }
 
+/* The color you gave a session: a dot before its name, in the box, the column and the pane. The colors are in
+   SESSION_COLOR_HEX (shared/agent.ts), set here as --session-color; none of them is amber, green, red or Claude
+   orange, which say a state or what you can act on. */
+.session-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--session-color);
+  vertical-align: 1px;
+}
+
+.color-swatch {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px dashed var(--line-strong);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.color-swatch[data-color] {
+  border: 0;
+  background: var(--session-color);
+}
+
+.color-swatch[aria-checked='true'] {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 3.5px var(--text-2);
+}
+
+.color-swatch:focus-visible {
+  outline: 1px solid var(--claude);
+  outline-offset: 3px;
+}
+
 .view-switch {
   display: inline-flex;
   border: 1px solid var(--line-strong);

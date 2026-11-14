@@ -7,6 +7,7 @@ import { heldBackText } from './Guard.tsx';
 import { PermissionButtons } from './Permission.tsx';
 import { runningSubagentsTag } from './Subagents.tsx';
 import { canOpen, type Store } from './store.ts';
+import { ColorDot } from './Team.tsx';
 
 // With panes open, the boxes become a column on the left: project, state, one line, time. They keep their state
 // colors and animations (the amber breath shows here too). A click opens or activates the pane of the session.
@@ -57,6 +58,7 @@ function CompactBoxView({ agent, now, open, onOpen, store }: Props) {
       <span class="aura" aria-hidden="true" />
       <span class="compact-head">
         <span class="project" title={agent.team?.label ? agent.project : undefined}>
+          <ColorDot agent={agent} />
           {displayName(agent)}
         </span>
         <span class="state">{STATE_LABEL[agent.state]}</span>

@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { type Agent, TEAM_TEXT_MAX } from '../shared/agent.ts';
+import { type Agent, SESSION_COLOR_HEX, SESSION_COLORS, type SessionColor, TEAM_TEXT_MAX } from '../shared/agent.ts';
 import type { CrewSummary } from '../shared/crew.ts';
 import type { Store } from './store.ts';
 
-// Names, groups and roles: a team of agents seen as a chart. The box sets them (TeamEditor); the daemon keeps
-// them, also for the folder of the session (daemon/teams.ts). The chart shows each group with its heads above
-// and the others below.
+// Names, colors, groups and roles: a team of agents seen as a chart. The box sets them (TeamEditor); the daemon
+// keeps them, also for the folder of the session (daemon/teams.ts). The chart shows each group with its heads
+// above and the others below.
+
+/** The dot of the color you gave a session, before its name; nothing when it has none. */
+export function ColorDot({ agent }: { agent: Pick<Agent, 'team'> }) {
+  const color = agent.team?.color;
+  return color ? <span class="session-dot" style={{ '--session-color': SESSION_COLOR_HEX[color] }} aria-hidden="true" /> : null;
+}
 
 /**
  * "lead · revisione", "lead", "revisione": the role in the head of a box, "lead" first so that a long role cut short
@@ -52,6 +58,7 @@ const stop = (event: Event): void => event.stopPropagation();
 
 export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; agents: readonly Agent[]; store: Store; onClose: () => void }) {
   const [label, setLabel] = useState(agent.team?.label ?? '');
+  const [color, setColor] = useState<SessionColor | undefined>(agent.team?.color);
   const [group, setGroup] = useState(agent.team?.group ?? '');
   const [role, setRole] = useState(agent.team?.role ?? '');
   const [lead, setLead] = useState(agent.team?.lead === true);
@@ -62,7 +69,7 @@ export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; ag
   const listId = `team-${agent.id}`;
 
   const save = (): void => {
-    store.setTeam(agent.id, { label, group, role, lead });
+    store.setTeam(agent.id, { label, color, group, role, lead });
     onClose();
   };
   const onKey = (event: KeyboardEvent): void => {
@@ -91,6 +98,28 @@ export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; ag
   return (
     <div class="team-editor" onClick={stop} onMouseDown={stop}>
       {field('Name', label, setLabel, agent.project, undefined, first)}
+      <div class="team-field" role="radiogroup" aria-label="Color">
+        <span>Color</span>
+        {[undefined, ...SESSION_COLORS].map((option) => (
+          <button
+            key={option ?? 'none'}
+            type="button"
+            role="radio"
+            class="color-swatch"
+            data-color={option}
+            style={option ? { '--session-color': SESSION_COLOR_HEX[option] } : undefined}
+            aria-checked={color === option}
+            title={option ?? 'no color'}
+            aria-label={option ?? 'no color'}
+            onClick={() => setColor(option)}
+            onKeyDown={(event) => {
+              // Enter and space choose the color, as a click; only Escape closes.
+              event.stopPropagation();
+              if (event.key === 'Escape') onClose();
+            }}
+          />
+        ))}
+      </div>
       {field('Group', group, setGroup, 'none', `${listId}-groups`)}
       {field('Role', role, setRole, 'none', `${listId}-roles`)}
       <datalist id={`${listId}-groups`}>
