@@ -9,6 +9,9 @@ import {
   type HookPayload,
   markEnded,
   newAgent,
+  type PromptUndo,
+  promptUndo,
+  startsTurn,
   stateFromStatus,
 } from './state.ts';
 import { forgetEndedSubagents } from './subagents.ts';
@@ -51,12 +54,16 @@ export interface RegistryOptions {
 /** How long the hooks of a session must be quiet before `claude agents --json` may correct its state. */
 export const QUIET_MS = 20_000;
 const SWITCH_WINDOW_MS = 30_000;
+/** The longest prompt kept to be put back after a /clear or /compact of the box (Commander). */
+const REFUSED_MAX = 4000;
 
 export class Registry {
   readonly agents = new Map<string, Agent>();
   private readonly now: () => number;
   private readonly settleMs: number;
   private readonly timers = new Set<NodeJS.Timeout>();
+  /** The last prompt of each agent, and the box as it was before it: undone if a hook refuses the prompt. */
+  private readonly prompts = new Map<string, { at: number; text: string; undo: PromptUndo }>();
 
   constructor(private readonly options: RegistryOptions = {}) {
     this.now = options.now ?? Date.now;
@@ -141,6 +148,7 @@ export class Registry {
     }
     if (meta.pid && (!agent.pid || meta.agentId)) agent.pid = meta.pid;
     if (meta.pane && agent.control.kind === 'tmux') agent.control.paneId = meta.pane;
+    if (startsTurn(payload) && agent.state !== 'ended') this.prompts.set(agent.id, { at: now, text: (payload.prompt ?? '').trim(), undo: promptUndo(agent) });
     applyHook(agent, payload, now);
     if (!agent.pid) this.options.onUnknownPid?.();
     if (agent.state === 'starting') this.settleLater(agent);
@@ -315,6 +323,22 @@ export class Registry {
     return agent;
   }
 
+  /**
+   * A hook refused the prompt that came at `at` (daemon/prompt-ending.ts): no turn started. The box goes back to
+   * what it was, and keeps the prompt, which Claude Code put back into the input box. Only while no other event
+   * came since: then the prompt did go through.
+   */
+  refusePrompt(agentId: string, at: number, reason?: string): boolean {
+    const agent = this.agents.get(agentId);
+    const prompt = this.prompts.get(agentId);
+    if (!agent || !prompt || prompt.at !== at || agent.state === 'ended' || agent.lastEvent.name !== 'UserPromptSubmit' || agent.lastEvent.at !== at) return false;
+    this.prompts.delete(agentId);
+    Object.assign(agent, prompt.undo);
+    agent.refusedPrompt = prompt.text.length <= REFUSED_MAX ? { text: prompt.text, at: this.now(), ...(reason ? { reason } : {}) } : undefined;
+    this.changed(agent);
+    return true;
+  }
+
   /** Something outside the hooks changed an agent (its commands): save it and tell the windows. */
   touch(agent: Agent): void {
     this.changed(agent);
@@ -354,6 +378,7 @@ export class Registry {
     for (const [id, agent] of this.agents) {
       if (agent.state === 'ended' && agent.endedAt !== undefined && now - agent.endedAt > retentionMs) {
         this.agents.delete(id);
+        this.prompts.delete(id);
         removed.push(id);
       }
     }

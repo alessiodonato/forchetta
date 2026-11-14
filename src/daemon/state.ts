@@ -66,6 +66,27 @@ function startWork(agent: Agent, now: number): void {
   agent.completedAt = undefined;
 }
 
+/** A prompt that starts a turn of the model: not a command, nor a shell line. */
+export const startsTurn = (payload: Pick<HookPayload, 'hook_event_name' | 'prompt'>): boolean => {
+  const prompt = (payload.prompt ?? '').trim();
+  return payload.hook_event_name === 'UserPromptSubmit' && !prompt.startsWith('/') && !prompt.startsWith('!');
+};
+
+/** What a prompt changes of a box: kept to undo it, when a hook refuses the prompt (daemon/prompt-ending.ts). */
+export type PromptUndo = Pick<Agent, 'state' | 'turnStartedAt' | 'waiting' | 'error' | 'completedAt' | 'action' | 'summary' | 'lastPrompt' | 'recentActions'>;
+
+export const promptUndo = (agent: Agent): PromptUndo => ({
+  state: agent.state,
+  turnStartedAt: agent.turnStartedAt,
+  waiting: agent.waiting,
+  error: agent.error,
+  completedAt: agent.completedAt,
+  action: agent.action,
+  summary: agent.summary,
+  lastPrompt: agent.lastPrompt,
+  recentActions: agent.recentActions,
+});
+
 function leaveCompaction(agent: Agent): void {
   agent.state = agent.beforeCompact === 'working' ? 'working' : 'idle';
   agent.beforeCompact = undefined;
@@ -119,6 +140,7 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
       }
       if (payload.model) agent.model = payload.model;
       agent.pendingSwitchAt = undefined;
+      agent.refusedPrompt = undefined;
       if (payload.source === 'compact') {
         if (agent.state === 'compacting') leaveCompaction(agent);
       } else if ((payload.source === 'clear' || payload.source === 'resume') && switched) {
@@ -143,9 +165,10 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
 
     case 'UserPromptSubmit': {
       const prompt = (payload.prompt ?? '').trim();
+      agent.refusedPrompt = undefined;
       // A command or a shell line: no turn of the model starts here. A command that becomes a prompt shows
       // up with its first tool call or with Stop.
-      if (prompt.startsWith('/') || prompt.startsWith('!')) break;
+      if (!startsTurn(payload)) break;
       startWork(agent, now);
       agent.action = undefined;
       agent.summary = { text: prompt ? `Working on: ${clip(prompt, 100)}` : 'Working', source: 'eventi', at: now };

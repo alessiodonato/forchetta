@@ -32,10 +32,11 @@ import { Registry } from './registry.ts';
 import { createDaemonServer } from './server.ts';
 import { addArtifact, mergeArtifacts } from '../shared/artifacts.ts';
 import { artifactsInTranscript } from './transcript-artifacts.ts';
+import { promptEndingIn, transcriptTail } from './prompt-ending.ts';
 import { anySubagentActive, applySubagentHook, checkSubagents, readSubagentThread } from './subagents.ts';
 import { subagentKey } from '../shared/present.ts';
 import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
-import type { Agent } from './state.ts';
+import { type Agent, startsTurn } from './state.ts';
 import { displayName, type GuardHold } from '../shared/agent.ts';
 import { haikuComplete, Summarizer } from './summarizer.ts';
 import { Limits } from './limits.ts';
@@ -55,6 +56,8 @@ const SWEEP_MS = 60_000;
 const SCROLL_CHECK_MS = 1_000;
 /** How often the meta.json of the subagents at work are read: the end of one in the background shows only there. */
 const SUBAGENT_CHECK_MS = 5_000;
+/** After a prompt, while nothing else comes, when to look whether a hook refused it (daemon/prompt-ending.ts). */
+const REFUSAL_CHECKS_MS = [1_000, 3_000, 8_000];
 
 /** Events after which context and cache change: arricurdAI is read again soon. */
 const CONTEXT_EVENTS = new Set(['Stop', 'StopFailure', 'PostCompact', 'SessionStart']);
@@ -279,6 +282,23 @@ function main(): void {
         // No transcript (yet), or one that cannot be read: the hooks bring the next ones.
       }
     });
+  };
+  // A prompt that a hook refused started no turn: the box goes back to what it was, and the commands of the box
+  // do not wait for a turn that never comes. Claude Code says so only in the transcript, about half a second later.
+  const checkRefused = async (agent: Agent, at: number, prompt: string): Promise<void> => {
+    if (agent.lastEvent.name !== 'UserPromptSubmit' || agent.lastEvent.at !== at || !agent.transcriptPath) return;
+    try {
+      // A little before the hook: the refusal can be written before the hook of Forchetta reaches the daemon.
+      const ending = promptEndingIn(await transcriptTail(agent.transcriptPath), at - 1_500, prompt);
+      if (ending && registry.refusePrompt(agent.id, at, ending.reason)) {
+        log(`prompt di ${agent.team?.label ?? agent.project} rifiutato da un hook (${ending.kind}): nessun turno`);
+      }
+    } catch {
+      // No transcript to read: the reconciliation with claude agents corrects the state when the hooks are quiet.
+    }
+  };
+  const watchPrompt = (agent: Agent, at: number, prompt: string): void => {
+    for (const delay of REFUSAL_CHECKS_MS) setTimeout(() => void checkRefused(agent, at, prompt), delay).unref();
   };
   try {
     if (existsSync(paths.state)) {
@@ -561,6 +581,7 @@ function main(): void {
         registry.touch(agent);
       }
       readArtifacts(agent);
+      if (startsTurn(payload) && !payload.agent_id) watchPrompt(agent, agent.lastEvent.at, payload.prompt ?? '');
       if (applySubagentHook(agent, payload, Date.now())) registry.touch(agent);
       // A file the session itself read (not one of its subagents): what it knows of it dates from now.
       if (payload.hook_event_name === 'PostToolUse' && payload.tool_name === 'Read' && !payload.agent_id) {

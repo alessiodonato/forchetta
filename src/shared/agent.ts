@@ -403,6 +403,11 @@ export interface Agent {
   lastPrompt?: string;
   recentActions?: string[];
   lastReply?: string;
+  /**
+   * The last prompt a hook refused (arricurdAI, when the cache expired): it started no turn, and Claude Code put it
+   * back into the input box. A /clear or /compact of the box makes room for it and puts it back after.
+   */
+  refusedPrompt?: { text: string; reason?: string; at: number };
   /** The commands of the box: those waiting, the one sent, the last ones done. */
   commands?: QueuedCommand[];
   team?: TeamInfo;

@@ -19,7 +19,9 @@ import type { HookPayload } from './state.ts';
 //   - the pane is not scrolled back (tmux copy mode, the wheel in a pane): there every key goes to tmux, "/" starts
 //     a search and Enter copies the selection to the clipboard;
 //   - the input box is on screen and empty: a draft of yours is never touched, an open answer of /btw is not
-//     closed for you;
+//     closed for you. One text is not a draft: the prompt a hook refused (arricurdAI, when the cache expired),
+//     which Claude Code put back into the box. A /clear or /compact takes it out (Ctrl+U, Backspace between lines)
+//     and puts it back once done, not sent;
 //   - after typing, the box must show exactly the command, or Enter is not pressed.
 //
 // Then a hook confirms it: PostCompact for /compact (PreCompact only says it started: Claude Code may still give
@@ -70,6 +72,10 @@ export const MAX_REQUEST = 20_000;
 /** A compaction that started may take minutes on a large context. */
 const COMPACTION_MS = 10 * 60_000;
 const MAX_QUESTION_BYTES = 1000;
+/** After a key that changes the input box, a moment for Claude Code to draw it again. */
+const KEY_SETTLE_MS = 300;
+/** When to try to put back the prompt a /clear or /compact made room for: the box comes back after the command. */
+const PUT_BACK_WAITS_MS = [1500, 3000, 6000];
 const KEEP_DONE = 3;
 const WAITING: CommandStatus[] = ['in-coda', 'bloccato'];
 const DONE: CommandStatus[] = ['confermato', 'non-confermato', 'fallito'];
@@ -131,6 +137,8 @@ function waitReason(agent: Agent): string {
 export class Commander {
   private readonly inflight = new Map<string, { command: QueuedCommand; deadline: number }>();
   private readonly dispatching = new Set<string>();
+  /** The refused prompt each command took out of the input box, by command id: it goes back after the command. */
+  private readonly putBacks = new Map<string, string>();
   private readonly timer: ReturnType<typeof setInterval>;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -369,7 +377,74 @@ export class Commander {
     this.prune(agent);
     this.options.registry.touch(agent);
     this.changed(agent, command);
+    const text = this.putBacks.get(command.id);
+    if (text !== undefined) {
+      // The prompt goes back before the next command of the queue.
+      this.putBacks.delete(command.id);
+      void this.putBack(agent.id, text).finally(() => this.kick(agent.id, this.options.settleMs ?? 800));
+      return;
+    }
     if (agent.state === 'idle' && this.next(agent)) this.kick(agent.id, this.options.settleMs ?? 800);
+  }
+
+  /** The prompt a hook refused, when the input box shows exactly it: a /clear or /compact may take it out. */
+  private refusedIn(agent: Agent, command: QueuedCommand, typed: string): string | undefined {
+    const refused = agent.refusedPrompt;
+    if (!refused || (command.kind !== 'clear' && command.kind !== 'compact')) return undefined;
+    return sameText(typed, refused.text) ? refused.text : undefined;
+  }
+
+  /** Empties the input box: Ctrl+U takes out a line, Backspace joins it to the one above. */
+  private async emptyPrompt(pane: string, text: string): Promise<boolean> {
+    const { tmux } = this.options;
+    for (let round = 0; round <= text.split('\n').length + 1; round++) {
+      await tmux.run('send-keys', ['-t', pane, 'C-u']);
+      await this.sleep(KEY_SETTLE_MS);
+      const box = readPromptBox(await this.capture(pane, true));
+      if (!box.found) return false;
+      if (!box.typed) return true;
+      await tmux.run('send-keys', ['-t', pane, 'BSpace']);
+      await this.sleep(KEY_SETTLE_MS);
+    }
+    return false;
+  }
+
+  /**
+   * The refused prompt back into the input box, once the command that took it out is done: not sent. Only into an
+   * empty box of the same claude process, never into a dialog or a pane scrolled back.
+   */
+  private async putBack(agentId: string, text: string): Promise<void> {
+    const { tmux } = this.options;
+    for (const wait of PUT_BACK_WAITS_MS) {
+      await this.sleep(wait);
+      const agent = this.options.registry.agents.get(agentId);
+      if (!agent || agent.state === 'ended' || agent.control.kind !== 'tmux' || !agent.control.paneId || !agent.pid) return;
+      if (this.dispatching.has(agentId)) continue;
+      const pane = agent.control.paneId;
+      this.dispatching.add(agentId);
+      try {
+        const identity = await tmux.run('display-message', ['-p', '-t', pane, '#{session_name}\t#{pane_pid}']);
+        const [paneSession, panePid] = identity.stdout.trim().split('\t');
+        if (identity.code !== 0 || paneSession !== agent.control.session || Number(panePid) !== agent.pid) return;
+        const mode = await tmux.run('display-message', ['-p', '-t', pane, '#{pane_in_mode}']);
+        if (mode.code === 0 && mode.stdout.trim() === '1') continue;
+        const box = readPromptBox(await this.capture(pane, true));
+        if (!box.found) continue;
+        if (box.typed) {
+          this.options.log(`prompt rifiutato non rimesso in ${agent.project}: nel prompt c'è già del testo`);
+          return;
+        }
+        await this.paste(pane, text);
+        this.options.log(`prompt rifiutato rimesso nel prompt di ${agent.project} (non inviato)`);
+        return;
+      } catch (error) {
+        this.options.log(`prompt rifiutato non rimesso in ${agent.project}: ${String(error)}`);
+        return;
+      } finally {
+        this.dispatching.delete(agentId);
+      }
+    }
+    this.options.log(`prompt rifiutato non rimesso: il riquadro del prompt non è tornato`);
   }
 
   /** Keeps the commands waiting or sent, and the last few done. */
@@ -384,6 +459,7 @@ export class Commander {
   private abandon(agent: Agent): void {
     let changed = false;
     for (const command of agent.commands ?? []) {
+      this.putBacks.delete(command.id);
       if (WAITING.includes(command.status) || command.status === 'inviato') {
         command.status = command.status === 'inviato' ? 'non-confermato' : 'annullato';
         command.reason = 'session ended';
@@ -459,10 +535,11 @@ export class Commander {
       if (mode.code === 0 && mode.stdout.trim() === '1') {
         return this.note(agent, command, 'bloccato', 'the terminal is scrolled back (tmux copy mode): scroll to the end, or press q in it');
       }
-      // The input box is on screen, and empty.
+      // The input box is on screen, and empty; or it shows the prompt a hook refused, which a /clear or /compact takes out.
       const box = readPromptBox(await this.capture(pane, true));
       if (!box.found) return this.note(agent, command, 'bloccato', 'a dialog or the answer of /btw is open in the terminal: close it with Esc');
-      if (box.typed) return this.note(agent, command, 'bloccato', 'there is text in the prompt: it stays as it is');
+      const refused = box.typed ? this.refusedIn(agent, command, box.typed) : undefined;
+      if (box.typed && refused === undefined) return this.note(agent, command, 'bloccato', 'there is text in the prompt: it stays as it is');
       // A state that changed while checking: the next round decides again.
       if (agent.state !== 'idle') return this.note(agent, command, 'in-coda', waitReason(agent));
 
@@ -472,6 +549,12 @@ export class Commander {
         } catch (error) {
           return this.finish(agent, command, 'fallito', `arricurdAI did not write the note of the session: ${String(error)}`);
         }
+      }
+
+      if (refused !== undefined) {
+        this.putBacks.set(command.id, refused);
+        if (!(await this.emptyPrompt(pane, refused))) return this.finish(agent, command, 'fallito', 'the prompt refused by a hook did not go out of the input box: check the terminal');
+        this.options.log(`prompt rifiutato tolto dal prompt di ${agent.project}: torna dopo ${commandText(command)}`);
       }
 
       const text = commandText(command);

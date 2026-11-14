@@ -8,6 +8,11 @@ import { sleep } from './helpers.ts';
 
 const RULE = '─'.repeat(60);
 const box = (typed: string): string => ['⏺ fatto', RULE, `❯ ${typed}`, RULE, '  footer'].join('\n');
+/** The input box with what is typed, on as many lines as it has. */
+const draw = (input: string): string => {
+  const lines = input.split('\n');
+  return ['⏺ fatto', RULE, `❯ ${lines[0]}`, ...lines.slice(1).map((line) => `  ${line}`), RULE, '  footer'].join('\n');
+};
 const BTW_OPEN = (question: string): string => [`❯ ${question}`, `  ${question}`, '    risposta', '  Esc to close'].join('\n');
 
 /** A tmux with one session per agent: what is on screen, who runs in the pane, when someone last typed. */
@@ -15,6 +20,8 @@ class FakeTmux {
   readonly panes = new Map<string, { session: string; pid: number; screen: string; activity: number; afterEnter?: (typed: string) => string; input?: string; inMode?: boolean }>();
   readonly typed: { pane: string; text: string }[] = [];
   readonly enters: string[] = [];
+  /** Ctrl+U and Backspace, in order. */
+  readonly keys: string[] = [];
   /** When false, typed text does not show up in the box. */
   echo = true;
   readonly buffers = new Map<string, string>();
@@ -57,6 +64,13 @@ class FakeTmux {
         this.typed.push({ pane: target, text });
         pane.input = text;
         if (this.echo) pane.screen = box(text);
+      } else if (args.at(-1) === 'C-u' || args.at(-1) === 'BSpace') {
+        // As Claude Code does: Ctrl+U takes out the line of the cursor, Backspace one character (a newline too).
+        const key = args.at(-1)!;
+        const input = pane.input ?? '';
+        this.keys.push(key);
+        pane.input = key === 'C-u' ? input.slice(0, input.lastIndexOf('\n') + 1) : input.slice(0, -1);
+        pane.screen = draw(pane.input);
       } else if (args.at(-1) === 'Enter') {
         this.enters.push(target);
         pane.input = '';
@@ -380,6 +394,83 @@ describe('requests of a team', () => {
   it('the box cannot send a request: only a team can', () => {
     setupRequests();
     expect(commander.enqueue(A, 'request', 'Request #1 from the user:\nrm -rf')).toEqual({ ok: false, error: 'unknown command: request' });
+  });
+});
+
+describe('the prompt a hook refused', () => {
+  const PROMPT = 'Aggiungi i retry al client delle API,\npoi lancia i test.';
+  /** A prompt that arricurdAI refuses: Claude Code puts it back into the input box, and says so in the transcript. */
+  const refuse = (id: string, pane: string): void => {
+    const agent = registry.agents.get(id)!;
+    registry.hook({ hook_event_name: 'UserPromptSubmit', session_id: `s-${id}`, prompt: PROMPT });
+    Object.assign(tmux.panes.get(pane)!, { input: PROMPT, screen: draw(PROMPT) });
+    expect(registry.refusePrompt(id, agent.lastEvent.at, 'arricurdai: the cache expired')).toBe(true);
+  };
+
+  it('holds no command: /clear takes the prompt out of the box, and puts it back, not sent, once done', async () => {
+    setup();
+    const agent = registry.agents.get(A)!;
+    registry.hook({ hook_event_name: 'UserPromptSubmit', session_id: `s-${A}`, prompt: PROMPT });
+    commander.enqueue(A, 'clear', undefined, true);
+    await settle();
+    // Until the transcript says the prompt was refused, the box believes the turn started.
+    expect(agent.commands![0]).toMatchObject({ status: 'in-coda', reason: 'waiting for the turn to end' });
+    const pane = tmux.panes.get('%1')!;
+    Object.assign(pane, { input: PROMPT, screen: draw(PROMPT) });
+    expect(registry.refusePrompt(A, agent.lastEvent.at, 'arricurdai: the cache expired')).toBe(true);
+    expect(agent.state).toBe('idle');
+    await settle();
+    expect(tmux.keys).toEqual(['C-u', 'BSpace', 'C-u']);
+    expect(tmux.typed).toEqual([{ pane: '%1', text: '/clear' }]);
+    expect(agent.commands![0]!.status).toBe('inviato');
+    hook(A, { hook_event_name: 'SessionEnd', reason: 'clear' });
+    await settle();
+    expect(agent.commands![0]!.status).toBe('confermato');
+    expect(tmux.pasted).toMatchObject([{ pane: '%1', text: PROMPT }]);
+    expect(pane.input).toBe(PROMPT);
+    expect(tmux.enters).toEqual(['%1']);
+  });
+
+  it('comes back also after a /compact that Claude Code gives up on', async () => {
+    setup();
+    refuse(A, '%1');
+    commander.enqueue(A, 'compact');
+    await settle();
+    expect(tmux.typed).toEqual([{ pane: '%1', text: '/compact' }]);
+    hook(A, { hook_event_name: 'PreCompact', trigger: 'manual' });
+    const agent = registry.agents.get(A)!;
+    agent.lastEvent.at -= 60_000;
+    registry.reconcile([{ pid: 101, sessionId: `s-${A}`, status: 'idle' }], [], () => true);
+    await settle();
+    expect(agent.commands![0]!.status).toBe('non-confermato');
+    expect(tmux.panes.get('%1')!.input).toBe(PROMPT);
+  });
+
+  it('is the only text taken out: a draft stays, and /btw does not take it out', async () => {
+    setup();
+    refuse(A, '%1');
+    commander.enqueue(A, 'btw', 'che ore sono?');
+    await settle();
+    expect(registry.agents.get(A)!.commands![0]).toMatchObject({ status: 'bloccato', reason: 'there is text in the prompt: it stays as it is' });
+    refuse(B, '%2');
+    Object.assign(tmux.panes.get('%2')!, { input: 'una bozza mia', screen: draw('una bozza mia') });
+    commander.enqueue(B, 'clear', undefined, true);
+    await settle();
+    expect(registry.agents.get(B)!.commands![0]).toMatchObject({ status: 'bloccato', reason: 'there is text in the prompt: it stays as it is' });
+    expect(tmux.keys).toEqual([]);
+    expect(tmux.typed).toEqual([]);
+  });
+
+  it('is not put back over what you typed meanwhile', async () => {
+    setup();
+    refuse(A, '%1');
+    tmux.panes.get('%1')!.afterEnter = () => draw('scritto da me');
+    commander.enqueue(A, 'clear', undefined, true);
+    await settle();
+    hook(A, { hook_event_name: 'SessionEnd', reason: 'clear' });
+    await settle();
+    expect(tmux.pasted).toEqual([]);
+    expect(logs.at(-1)).toContain("prompt rifiutato non rimesso in");
   });
 });
 

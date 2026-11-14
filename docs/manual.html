@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.5. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.6. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -281,11 +281,12 @@ forchetta setup</pre>
         <ul>
           <li>the session waits for a new prompt: never into a dialog, where a key could answer for you;</li>
           <li>nobody typed in the session in the last 10 seconds;</li>
-          <li>the prompt is empty: a draft of yours blocks it until you send or delete it;</li>
+          <li>the prompt is empty: a draft of yours blocks it until you send or delete it. One text is not a draft: the prompt a hook refused (arricurdAI does when the cache expired), which Claude Code puts back in the prompt. <code>/clear</code> and <code>/compact</code> take it out, run, and put it back, not sent;</li>
           <li>the terminal is not scrolled back in copy mode;</li>
           <li>the pane still belongs to the same Claude process.</li>
         </ul>
         <p>A command still in the queue can be cancelled from the box. <code>/compact</code> is confirmed by its hook; <code>/clear</code> by the end and the start of the conversation.</p>
+        <p>A prompt a hook refused starts no turn. Claude Code tells the hooks of the prompt all the same, and says it was refused only in the transcript: Forchetta reads it there within a few seconds, and the box goes back to what it was.</p>
         <h3>One command to several sessions</h3>
         <p>With at least two sessions you can act on, <span class="ui">command to several</span> appears at the top. Choose <code>/compact</code>, <code>/clear</code> or <code>/btw</code>, then the sessions: one by one, <span class="ui">context ≥ 80%</span>, all or none. Each one gets its command as if it came from its own box, with the same queue and the same checks.</p>
       </section>
