@@ -78,6 +78,8 @@ export interface ServersOptions {
   enabled: () => boolean;
   /** Runs a program and gives its output, also when it exits with an error; undefined when it cannot run. */
   run: (file: string, args: string[]) => Promise<string | undefined>;
+  /** The pid of the daemon: it listens too, and in a clone of Forchetta it works in the folder, but it is no dev server. */
+  self?: number;
   now?: () => number;
 }
 
@@ -108,6 +110,7 @@ export class Servers {
     const cwds = parseCwds((await this.options.run('/usr/sbin/lsof', ['-a', '-p', [...listening.keys()].join(','), '-d', 'cwd', '-Fn'])) ?? '');
     // A server of this folder: it works inside the working tree, in the folder of the command, above it or under it.
     const servers = [...listening].filter(([pid]) => {
+      if (pid === (this.options.self ?? process.pid)) return false;
       const where = cwds.get(pid);
       return where !== undefined && inside(where, scope) && (inside(where, dir) || inside(dir, where));
     });

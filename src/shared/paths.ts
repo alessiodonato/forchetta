@@ -63,6 +63,8 @@ export interface Paths {
   crewMcp: string;
   /** The templates of teams you saved. */
   crewTemplates: string;
+  /** What the guard did, counted by day (daemon/guard-stats.ts). */
+  guardStats: string;
   /** The MCP server of the tools of a team (mcp/team.ts). */
   teamMcpJs: string;
   patches: string;
@@ -98,6 +100,7 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     crews: join(varDir, 'crews'),
     crewMcp: join(varDir, 'crews', 'mcp'),
     crewTemplates: join(varDir, 'crew-templates.json'),
+    guardStats: join(varDir, 'guard-stats.json'),
     patches: join(varDir, 'patches'),
     claudeUpdate: join(varDir, 'claude-update.json'),
     prompts: join(varDir, 'prompts.json'),

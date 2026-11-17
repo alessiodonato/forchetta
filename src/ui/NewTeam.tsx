@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
-import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, ROLE_MAX, type Talk } from '../shared/crew.ts';
+import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, ROLE_MAX, type Talk } from '../shared/crew.ts';
 import { shell } from './connection.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import type { Store } from './store.ts';
 
 // A new team of agents (shared/crew.ts): a name, a folder, a lead (Claude or you) and its members. For each member
 // a name, what it does in a sentence, and how it talks with the lead: → it executes, ⇄ it also answers. Model,
-// permissions and worktree wait behind "more". The daemon starts every session in the tmux of Forchetta.
+// permissions, worktree, its files and whether it reviews wait behind "more". The daemon starts every session in the
+// tmux of Forchetta.
 
 interface MemberDraft {
   key: number;
@@ -19,6 +20,10 @@ interface MemberDraft {
   mode: string;
   /** Undefined: the choice of the team. */
   worktree?: boolean;
+  /** Its files, as written: "src/ui/, docs/"; empty for none. */
+  paths: string;
+  /** It reviews: it approves commits, and the lead merges only those. */
+  reviews?: boolean;
   more: boolean;
 }
 
@@ -29,7 +34,14 @@ const TALK_TITLE: Record<Talk, string> = {
 };
 
 let nextKey = 0;
-const member = (name: string): MemberDraft => ({ key: ++nextKey, name, role: '', model: '', mode: '', more: false });
+const member = (name: string): MemberDraft => ({ key: ++nextKey, name, role: '', model: '', mode: '', paths: '', more: false });
+
+/** The files of a member as the daemon gets them: the list as written, which it checks. */
+const pathsOf = (text: string): string[] =>
+  text
+    .split(/[,\n]/)
+    .map((path) => path.trim())
+    .filter(Boolean);
 
 /** The members of a template as rows of the panel. */
 export const draftsOf = (template: Pick<CrewTemplate, 'members'>): MemberDraft[] =>
@@ -40,7 +52,9 @@ export const draftsOf = (template: Pick<CrewTemplate, 'members'>): MemberDraft[]
     model: spec.model ?? '',
     mode: spec.mode ?? '',
     ...(spec.worktree !== undefined ? { worktree: spec.worktree } : {}),
-    more: Boolean(spec.model || spec.mode || spec.worktree !== undefined),
+    paths: spec.paths ? pathsText(spec.paths) : '',
+    ...(spec.reviews ? { reviews: true } : {}),
+    more: Boolean(spec.model || spec.mode || spec.worktree !== undefined || spec.paths || spec.reviews),
   }));
 
 /** The spec the daemon checks, from what the panel holds. */
@@ -54,7 +68,7 @@ export function specOf(input: {
   leadMode: string;
   talk: Talk;
   worktrees?: boolean;
-  members: readonly Pick<MemberDraft, 'name' | 'role' | 'talk' | 'model' | 'mode' | 'worktree'>[];
+  members: readonly (Pick<MemberDraft, 'name' | 'role' | 'talk' | 'model' | 'mode' | 'worktree' | 'reviews'> & { paths?: string })[];
 }): CrewSpec {
   return {
     name: input.name.trim(),
@@ -72,6 +86,8 @@ export function specOf(input: {
       ...(draft.model ? { model: draft.model } : {}),
       ...(draft.mode ? { mode: draft.mode } : {}),
       ...(draft.worktree !== undefined ? { worktree: draft.worktree } : {}),
+      ...(draft.paths && pathsOf(draft.paths).length > 0 ? { paths: pathsOf(draft.paths) } : {}),
+      ...(draft.reviews ? { reviews: true } : {}),
     })),
   };
 }
@@ -296,7 +312,7 @@ export function NewTeamPanel({ agents, store, onClose }: { agents: readonly Agen
               >
                 {TALK_TEXT[effective]}
               </button>
-              <button type="button" class={`quiet${draft.more ? ' on' : ''}`} title="Model, permissions, worktree" onClick={() => change(draft.key, { more: !draft.more })}>
+              <button type="button" class={`quiet${draft.more ? ' on' : ''}`} title="Model, permissions, worktree, its files, review" onClick={() => change(draft.key, { more: !draft.more })}>
                 more
               </button>
               <button type="button" class="quiet" title="Remove this member" disabled={members.length === 1} onClick={() => setMembers((current) => current.filter((other) => other.key !== draft.key))}>
@@ -312,6 +328,29 @@ export function NewTeamPanel({ agents, store, onClose }: { agents: readonly Agen
                   <input type="checkbox" checked={draft.worktree ?? worktrees} onChange={() => change(draft.key, { worktree: !(draft.worktree ?? worktrees) })} />
                   own worktree
                 </label>
+                <label
+                  class="spawn-option"
+                  title="It reviews the work of the others: it approves a commit, or asks for changes, with a tool of the team. The lead merges a branch only up to what it approved: before a git merge of anything else, Forchetta asks you."
+                >
+                  <input type="checkbox" checked={draft.reviews === true} onChange={() => change(draft.key, { reviews: !draft.reviews })} />
+                  reviews
+                </label>
+              </div>
+            )}
+            {draft.more && (
+              <div class="broadcast-row">
+                <span class="broadcast-label" />
+                <input
+                  class="command-input mono member-files"
+                  type="text"
+                  value={draft.paths}
+                  maxLength={PATHS_MAX * (PATH_MAX + 2)}
+                  placeholder="Its files (optional): src/ui/, *.css — it changes only these, and the others stay off them"
+                  spellcheck={false}
+                  aria-label={`Files of ${draft.name || `member ${index + 1}`}`}
+                  title="Relative to the folder of the team: folders (src/ui/), files, or patterns (*.test.ts, docs/**). The guard stops its edits of other files, and the edits of the other members here. Empty: any file no other member has."
+                  onInput={(event) => change(draft.key, { paths: (event.target as HTMLInputElement).value })}
+                />
               </div>
             )}
           </div>

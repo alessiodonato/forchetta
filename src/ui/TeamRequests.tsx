@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { type CrewSummary, type DeliveryStatus, MEMBER_NAME_MAX, ROLE_MAX, type Talk, type ThreadEntry, threadOf } from '../shared/crew.ts';
+import { type CrewSummary, type DeliveryStatus, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, ROLE_MAX, type Talk, type ThreadEntry, threadOf } from '../shared/crew.ts';
 import { MODELS } from './NewSession.tsx';
 import type { Store } from './store.ts';
 
 // The panel of a team of agents, as a conversation: above, the thread of the team in the order things happened
-// (requests, questions, answers, each with where it stands), from the file of the team, so it is the same after
+// (requests, questions, answers, each with where it stands, and the verdicts of the members that review), from the
+// file of the team, so it is the same after
 // a restart of the app or of the daemon; below, a request from you to some of its members, to all of them, or to
 // its Claude lead. The daemon numbers the requests, puts them in the queue of each session and pastes them when
 // the session is ready (daemon/crews.ts, daemon/commands.ts).
@@ -45,12 +46,15 @@ export function entryHead(entry: ThreadEntry): string {
       return `${entry.from} → ${who(entry.to)} · question on #${entry.n}`;
     case 'answer':
       return entry.status === 'kept' ? `${entry.from} · finished #${entry.n}` : `${entry.from} → ${who(entry.to)} · answer to #${entry.n}`;
+    case 'review':
+      return `${entry.from} · reviewed ${entry.short}${entry.subject ? ` ${entry.subject}` : ''}`;
   }
 }
 
 /** Where an answer or a question stands on its way. */
 export function entryTag(entry: ThreadEntry): string | undefined {
   if (entry.kind === 'request') return undefined;
+  if (entry.kind === 'review') return entry.verdict === 'approved' ? 'approved' : 'changes asked';
   const to = who(entry.to);
   switch (entry.status) {
     case 'shown':
@@ -76,12 +80,28 @@ function Entry({ entry }: { entry: ThreadEntry }) {
   const [open, setOpen] = useState(false);
   const tag = entryTag(entry);
   return (
-    <li class="thread-entry" data-kind={entry.kind} data-status={entry.kind === 'request' ? undefined : entry.status}>
+    <li
+      class="thread-entry"
+      data-kind={entry.kind}
+      data-status={entry.kind === 'request' || entry.kind === 'review' ? undefined : entry.status}
+      data-verdict={entry.kind === 'review' ? entry.verdict : undefined}
+    >
       <div class="thread-head">
         <span class="thread-who">{entryHead(entry)}</span>
         {entry.kind === 'request' && <span class="thread-n">#{entry.n}</span>}
         {tag && (
-          <span class="thread-tag" title={entry.kind === 'answer' && entry.status === 'kept' ? 'It executes only, or it asked a question: the answer comes with the next request' : undefined}>
+          <span
+            class="thread-tag"
+            title={
+              entry.kind === 'answer' && entry.status === 'kept'
+                ? 'It executes only, or it asked a question: the answer comes with the next request'
+                : entry.kind === 'review'
+                  ? entry.verdict === 'approved'
+                    ? 'The lead can merge the branch up to this commit: Forchetta asks you before a merge of anything after it'
+                    : 'The reviewer asked for changes on this commit'
+                  : undefined
+            }
+          >
             {tag}
           </span>
         )}
@@ -106,8 +126,43 @@ function Entry({ entry }: { entry: ThreadEntry }) {
 }
 
 /**
- * The members of a team, to change: → / ⇄ of each (from its next request), take one out (its session goes on), add
- * one (a new session), and keep the team as a template.
+ * The files of a member, to change: written as a list ("src/ui/, docs/"), sent when you leave the field or press
+ * Enter. The guard follows them at once; the member learns them with its next request.
+ */
+function MemberFiles({ crewId, name, paths, busy, store }: { crewId: string; name: string; paths?: string[]; busy: boolean; store: Store }) {
+  const saved = pathsText(paths ?? []);
+  const [value, setValue] = useState(saved);
+  useEffect(() => setValue(saved), [saved]);
+  const send = (): void => {
+    if (value.trim() === saved) return;
+    store.editCrew(crewId, { action: 'paths', name, paths: value });
+  };
+  return (
+    <input
+      class="command-input mono member-files"
+      type="text"
+      value={value}
+      disabled={busy}
+      maxLength={PATHS_MAX * (PATH_MAX + 2)}
+      placeholder="files: any no one else has"
+      spellcheck={false}
+      aria-label={`Files of ${name}`}
+      title="The files it works on, relative to the folder of the team: folders (src/ui/), files, or patterns (*.test.ts). The guard stops its edits elsewhere, and the edits of the other members here. Empty: any file no other member has."
+      onInput={(event) => setValue((event.target as HTMLInputElement).value)}
+      onBlur={send}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          send();
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * The members of a team, to change: → / ⇄ of each (from its next request), its files, take one out (its session
+ * goes on), add one (a new session), and keep the team as a template.
  */
 function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
   const [removing, setRemoving] = useState<string | undefined>(undefined);
@@ -131,13 +186,18 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
       ? `Saved as the template "${crew.name}": "new team" can start it again.`
       : edit?.ok && edit.action === 'talk'
         ? 'It counts from its next request, which tells it.'
-        : 'A member taken away keeps its session: end it with /exit when you like.');
+        : edit?.ok && edit.action === 'paths'
+          ? 'The guard follows its new files at once; the member learns them with its next request.'
+          : 'A member taken away keeps its session: end it with /exit when you like.');
   return (
     <div class="edit-team">
       {members.map((member) => (
         <div key={member.name} class="broadcast-row">
           <span class="broadcast-label" />
-          <span class="edit-member-name">{member.name}</span>
+          <span class="edit-member-name" title={member.reviews ? 'It reviews: the lead merges only the commits it approved' : undefined}>
+            {member.name}
+            {member.reviews ? <span class="team-hint"> · reviews</span> : null}
+          </span>
           <button
             type="button"
             class="talk-toggle chosen"
@@ -148,6 +208,7 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
           >
             {member.talk === 'twoway' ? '⇄ answers' : '→ executes'}
           </button>
+          <MemberFiles crewId={crew.id} name={member.name} paths={member.paths} busy={busy} store={store} />
           {removing === member.name ? (
             <>
               <span class="team-hint">its requests in the queue are cancelled</span>
@@ -221,7 +282,8 @@ export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly Cr
   const state = store.state.crewRequest;
   const busy = state?.busy === true && state.crewId === crew?.id;
   const thread = store.state.crewThread?.crewId === crew?.id ? store.state.crewThread?.requests : undefined;
-  const entries = thread ? threadOf(thread) : [];
+  const reviews = store.state.crewThread?.crewId === crew?.id ? store.state.crewThread?.reviews : undefined;
+  const entries = thread ? threadOf(thread, reviews) : [];
 
   useEffect(() => {
     if (!crew) return;
@@ -293,7 +355,7 @@ export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly Cr
           }}
         >
           {entries.map((entry) => (
-            <Entry key={`${entry.kind}-${entry.n}-${entry.kind === 'request' ? '' : entry.from}-${entry.at}`} entry={entry} />
+            <Entry key={`${entry.kind}-${entry.n}-${entry.kind === 'request' ? '' : entry.from}-${entry.kind === 'review' ? entry.short : ''}-${entry.at}`} entry={entry} />
           ))}
         </ol>
       )}

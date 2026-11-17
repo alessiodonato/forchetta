@@ -57,6 +57,20 @@ describe('reading the processes', () => {
   });
 });
 
+describe('the daemon itself', () => {
+  it('is no dev server of the folder, also when it runs from a clone of Forchetta in that folder', async () => {
+    const servers = new Servers({
+      agents: () => [],
+      repoOf: (dir) => (dir.startsWith(REPO) ? REPO : undefined),
+      enabled: () => true,
+      self: 9999,
+      run: async (file, args) => (file.endsWith('ps') ? ' 9999     1 forchetta-daemon' : args.includes('cwd') ? ['p9999', 'fcwd', `n${REPO}`].join('\n') : ['p9999', 'f20', 'n127.0.0.1:47821'].join('\n')),
+    });
+    const agent = newAgent({ id: 'a', cwd: REPO, control: { kind: 'tmux', session: 'fk-a' }, state: 'working' }, 0);
+    expect(await servers.decide(agent, { hook_event_name: 'PreToolUse', session_id: 'a', tool_name: 'Bash', tool_input: { command: 'pnpm dev' } })).toBeUndefined();
+  });
+});
+
 describe('a second dev server', () => {
   it('is stopped once, with the address of the one running and who started it', async () => {
     const t = setup();

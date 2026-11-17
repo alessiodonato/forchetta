@@ -11,6 +11,7 @@ import { NewSessionPanel } from './NewSession.tsx';
 import { NewTeamPanel } from './NewTeam.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
 import { crewLineOf } from '../shared/crew.ts';
+import { guardTotal, type GuardStatsInfo, statsTitle } from '../shared/guard-stats.ts';
 import { PromptsPanel } from './PromptsPanel.tsx';
 import { RecallPanel } from './Recall.tsx';
 import { hasGroups, OrgChart } from './Team.tsx';
@@ -20,7 +21,12 @@ import { Workspace } from './Workspace.tsx';
 
 function useStore(store: Store): UiState {
   const [state, setState] = useState(store.state);
-  useEffect(() => store.subscribe(() => setState(store.state)), [store]);
+  useEffect(() => {
+    const unsubscribe = store.subscribe(() => setState(store.state));
+    // What changed between the first render and now (the daemon of the demo answers at once): not lost.
+    setState(store.state);
+    return unsubscribe;
+  }, [store]);
   return state;
 }
 
@@ -89,7 +95,7 @@ function todayTitle(today: TodayInfo): string {
   return `Every session since ${since}: ${today.calls.toLocaleString('en-US')} calls, ${today.tokens.toLocaleString('en-US')} tokens, at API prices${unpriced} (data from arricurdAI)`;
 }
 
-function counts(agents: readonly Agent[], today: TodayInfo | undefined, limits: UsageLimits | undefined) {
+function counts(agents: readonly Agent[], today: TodayInfo | undefined, limits: UsageLimits | undefined, guardStats: GuardStatsInfo | undefined) {
   const live = agents.filter((agent) => agent.state !== 'ended').length;
   const waiting = agents.filter((agent) => agent.state === 'waiting').length;
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
@@ -99,8 +105,15 @@ function counts(agents: readonly Agent[], today: TodayInfo | undefined, limits: 
   });
   // With the limits of a plan, what counts is how much of them is left: the cost at API prices goes in their tooltip.
   const todayLine = today ? `today ≈ ${usdText(today.usd)} · ${shortTokens(today.tokens)} tokens` : undefined;
+  // What the guard did this week: shown once it did something, the details in its tooltip.
+  const guarded = guardStats ? guardTotal(guardStats.counts) : 0;
   return (
     <p class="counts">
+      {guardStats && guarded > 0 && (
+        <span class="guard-count" title={statsTitle(guardStats)}>
+          guard {guarded} this week ·{' '}
+        </span>
+      )}
       {today && parts.length === 0 && (
         <span class="today" title={todayTitle(today)}>
           {todayLine} ·{' '}
@@ -181,7 +194,7 @@ export function App({ store }: { store: Store }) {
         <h1>Forchetta</h1>
         <div class="top-right">
           {state.ready && <ClaudeUpdateNotice info={state.claudeUpdate} store={store} />}
-          {state.ready && counts(agents, state.today, state.limits)}
+          {state.ready && counts(agents, state.today, state.limits, state.guardStats)}
           {state.ready && grouped && !working && (
             <span class="view-switch" role="group" aria-label="View">
               <button type="button" class={view === 'grid' ? 'on' : undefined} onClick={() => chooseView('grid')}>

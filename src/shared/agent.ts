@@ -186,6 +186,30 @@ export interface GuardHold {
   since: number;
   /** You let it through from the box: its next write goes. */
   letThrough?: boolean;
+  /**
+   * Stopped because the file is outside its files in its team of agents (shared/crew.ts), not because another
+   * session is changing it: `with` and `withName` are the member whose files they are, when one has them.
+   */
+  lane?: boolean;
+}
+
+/**
+ * A session going in circles (daemon/loops.ts): in the turn it is on, the same tool call failed in the same way
+ * several times in a row.
+ */
+export interface LoopInfo {
+  tool: string;
+  /** The call as the box shows it: the command, the file. */
+  label: string;
+  /** The first line of the error, cut. */
+  error: string;
+  /** The failures so far, the same each time. */
+  count: number;
+  /** The first of them: one episode. */
+  since: number;
+  at: number;
+  /** The type of the subagent that runs it, when it is not the main agent. */
+  subagent?: string;
 }
 
 /** One change a session made to a file, as Claude Code reported it (daemon/patches.ts). */
@@ -425,6 +449,8 @@ export interface Agent {
   heldBack?: GuardHold[];
   /** Files of its turn that the guard kept other sessions from writing. */
   holding?: GuardHold[];
+  /** It runs the same failing call again and again in this turn (daemon/loops.ts). */
+  loop?: LoopInfo;
   /** The permission dialog that the box can answer now. */
   permission?: PermissionAsk;
   permissionOutcome?: PermissionOutcome;

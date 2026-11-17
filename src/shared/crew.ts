@@ -19,9 +19,34 @@ export interface CrewMemberSpec {
   mode?: string;
   /** A git worktree of its own, so that it does not touch the files of the others; undefined: the choice of the team. */
   worktree?: boolean;
+  /**
+   * The files it works on, relative to the folder of the team: folders ("src/ui/"), files, or patterns ("*.test.ts",
+   * "docs/**"). The guard stops its edits elsewhere, and the edits of the other members here. None: any file no
+   * other member has.
+   */
+  paths?: string[];
+  /** Its files changed after it started: the next request tells it, since its system prompt says the old ones. */
+  pathsNote?: boolean;
+  /** It reviews the work of the others: it records its verdicts with the tool review, and the lead merges only what it approved. */
+  reviews?: boolean;
 }
 
-export type CrewLeadSpec = { kind: 'you' } | ({ kind: 'claude' } & Omit<CrewMemberSpec, 'talk'>);
+export type CrewLeadSpec = { kind: 'you' } | ({ kind: 'claude' } & Omit<CrewMemberSpec, 'talk' | 'paths' | 'pathsNote' | 'reviews'>);
+
+/** A verdict of a member that reviews, on one commit (the tool review): what it covers is that commit and those before it. */
+export interface ReviewRecord {
+  /** The full hash of the commit. */
+  sha: string;
+  short: string;
+  /** The first line of its message. */
+  subject?: string;
+  /** The member that reviewed it. */
+  by: string;
+  verdict: 'approved' | 'changes';
+  /** What it found, or what to fix. */
+  note?: string;
+  at: number;
+}
 
 export interface CrewSpec {
   name: string;
@@ -86,6 +111,8 @@ export interface Crew extends CrewSpec {
    * hello (its trust dialog answered).
    */
   waitingTrust?: string;
+  /** The verdicts of its members that review, oldest first: the last ones only. */
+  reviews?: ReviewRecord[];
 }
 
 /** What the page shows of a crew. */
@@ -94,8 +121,8 @@ export interface CrewSummary {
   name: string;
   /** The name of the lead when it is a Claude session; undefined when the lead is you. */
   lead?: string;
-  /** Who can get a request: the lead when it is Claude, then the members. */
-  recipients?: { name: string; agentId?: string; talk?: Talk; lead?: boolean }[];
+  /** Who can get a request: the lead when it is Claude, then the members, with their files and whether they review. */
+  recipients?: { name: string; agentId?: string; talk?: Talk; lead?: boolean; paths?: string[]; reviews?: boolean }[];
   /** The last requests, the newest last. */
   requests?: CrewRequest[];
 }
@@ -109,11 +136,88 @@ export const TEAM_MCP = 'forchetta';
 /** At most this many deliveries open at once in a team: a lead does not spend the plan before you see it. */
 export const MAX_OPEN_DELIVERIES = 20;
 
-export type TeamTool = 'team' | 'send_request' | 'wait_for_answers' | 'ask_lead';
+export type TeamTool = 'team' | 'send_request' | 'wait_for_answers' | 'ask_lead' | 'review';
 
-/** The tools of the team a session gets: the Claude lead sends requests, a member that answers can ask; a member → gets none. */
-export const teamToolsFor = (crew: Pick<CrewSpec, 'talk'>, member: Pick<CrewMemberSpec, 'talk'> | 'lead'): TeamTool[] =>
-  member === 'lead' ? ['team', 'send_request', 'wait_for_answers'] : effectiveTalk(crew, member) === 'twoway' ? ['team', 'ask_lead'] : [];
+/**
+ * The tools of the team a session gets: the Claude lead sends requests, a member that answers can ask, a member that
+ * reviews records its verdicts; a member → that does not review gets none.
+ */
+export function teamToolsFor(crew: Pick<CrewSpec, 'talk'>, member: Pick<CrewMemberSpec, 'talk' | 'reviews'> | 'lead'): TeamTool[] {
+  if (member === 'lead') return ['team', 'send_request', 'wait_for_answers'];
+  const answers = effectiveTalk(crew, member) === 'twoway';
+  if (member.reviews) return answers ? ['team', 'ask_lead', 'review'] : ['team', 'review'];
+  return answers ? ['team', 'ask_lead'] : [];
+}
+
+/** The verdicts a team keeps. */
+export const KEPT_REVIEWS = 100;
+export const REVIEW_NOTE_MAX = 4000;
+
+// ── the files of a member ───────────────────────────────────────────────────────────────────────────────────
+
+export const PATHS_MAX = 12;
+export const PATH_MAX = 200;
+
+/**
+ * The files of a member as the panel sends them (a list, or one text with commas or new lines), checked: relative to
+ * the folder of the team, without "./" in front, never above it. Undefined for none.
+ */
+export function cleanPaths(raw: unknown): { paths?: string[] } | { error: string } {
+  const items = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/[,\n]/) : [];
+  const out: string[] = [];
+  for (const item of items) {
+    if (typeof item !== 'string') continue;
+    let path = item.trim().replace(/\\/g, '/').replace(/\/{2,}/g, '/');
+    while (path.startsWith('./')) path = path.slice(2);
+    if (!path || path === '.') continue;
+    if (path.length > PATH_MAX) return { error: `the path "${path.slice(0, 40)}…" is too long` };
+    if (path.startsWith('/') || path.startsWith('~')) return { error: `"${path}": write the files relative to the folder of the team` };
+    if (path.split('/').includes('..')) return { error: `"${path}": the files must be inside the folder of the team` };
+    if (!out.includes(path)) out.push(path);
+  }
+  if (out.length > PATHS_MAX) return { error: `${PATHS_MAX} paths at most for a member` };
+  return out.length > 0 ? { paths: out } : {};
+}
+
+/** A pattern with * or ? as a regular expression on a whole path: ** crosses folders, * and ? do not. */
+function globRegExp(pattern: string): RegExp {
+  let out = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i]!;
+    if (char === '*' && pattern[i + 1] === '*') {
+      // "**/" is any number of folders, none too; "**" at the end is anything.
+      if (pattern[i + 2] === '/') {
+        out += '(?:.*/)?';
+        i += 2;
+      } else {
+        out += '.*';
+        i += 1;
+      }
+    } else if (char === '*') out += '[^/]*';
+    else if (char === '?') out += '[^/]';
+    else out += char.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${out}$`);
+}
+
+/**
+ * Whether a path, relative to the folder of the team, is covered by one entry of the files of a member: a folder
+ * covers what is under it, a file itself, a pattern what it matches (with no "/" in it, at any depth: "*.css").
+ */
+export function pathMatches(rel: string, entry: string): boolean {
+  if (/[*?]/.test(entry)) {
+    const target = entry.replace(/\/$/, '');
+    return target.includes('/') ? globRegExp(target).test(rel) : globRegExp(target).test(rel.split('/').at(-1) ?? rel);
+  }
+  const base = entry.replace(/\/+$/, '');
+  return rel === base || rel.startsWith(`${base}/`);
+}
+
+/** Whether a path is among the files of a member. */
+export const ownsPath = (paths: readonly string[] | undefined, rel: string): boolean => (paths ?? []).some((entry) => pathMatches(rel, entry));
+
+/** "src/ui/, docs/": the files of a member, in a line. */
+export const pathsText = (paths: readonly string[]): string => paths.join(', ');
 
 export const CREW_MAX_MEMBERS = 6;
 export const CREW_NAME_MAX = 40;
@@ -212,11 +316,15 @@ export function cleanCrewSpec(input: unknown): { spec: CrewSpec } | { error: str
     if (typeof memberNameOrError !== 'string') return memberNameOrError;
     const choices = cleanChoices(member);
     if ('error' in choices) return { error: `${memberNameOrError}: ${choices.error}` };
+    const files = cleanPaths(member.paths);
+    if ('error' in files) return { error: `${memberNameOrError}: ${files.error}` };
     members.push({
       name: memberNameOrError,
       role: block(member.role, ROLE_MAX) || DEFAULT_MEMBER_ROLE,
       ...(member.talk === 'oneway' || member.talk === 'twoway' ? { talk: member.talk } : {}),
       ...choices,
+      ...(files.paths ? { paths: files.paths } : {}),
+      ...(member.reviews === true ? { reviews: true } : {}),
     });
   }
   return { spec: { name, cwd, lead, talk, ...(worktrees ? { worktrees } : {}), members } };
@@ -226,10 +334,22 @@ export function cleanCrewSpec(input: unknown): { spec: CrewSpec } | { error: str
 export const leadName = (crew: Pick<CrewSpec, 'lead'>): string => (crew.lead.kind === 'claude' ? crew.lead.name : 'the user');
 
 const memberLine = (crew: CrewSpec, member: CrewMemberSpec): string =>
-  `- ${member.name} (${effectiveTalk(crew, member) === 'twoway' ? 'answers you' : 'executes only, no answer'}${effectiveWorktree(crew, member) ? ', own worktree' : ''}): ${member.role.replace(/\s+/g, ' ')}`;
+  `- ${member.name} (${effectiveTalk(crew, member) === 'twoway' ? 'answers you' : 'executes only, no answer'}${effectiveWorktree(crew, member) ? ', own worktree' : ''}${member.reviews ? ', reviews' : ''}): ${member.role.replace(/\s+/g, ' ')}${member.paths ? ` — files: ${pathsText(member.paths)}` : ''}`;
 
 const WORKTREE_LEAD =
   'A member with "own worktree" works in a git worktree of its own (a copy of the repository, on a branch of its own): you and the others do not see its changes until it commits them and they are merged. Ask it to commit its work at the end of each request. When its work is good, merge its branch into the folder of the team with git, or tell the user it is ready; the tool team shows the folder and the branch of each member.';
+
+const FILES_LEAD =
+  'A member with "files" works only on those files (relative to the folder of the team), and the others stay off them: Forchetta stops its edits of other files, and the edits of the other members there. Give each one requests within its files; a change across them is yours to split between them.';
+
+const REVIEW_LEAD =
+  'A member that "reviews" checks the commits of the others and records a verdict with the tool review: approved, or changes to make, on one commit and those before it. Merge a branch only up to the last commit it approved: before a git merge of commits it did not approve, Forchetta asks the user. The tool team shows the last verdicts.';
+
+/** The line the next request brings to a member whose files changed: its system prompt still says the old ones. */
+export const pathsNote = (paths: readonly string[] | undefined): string =>
+  paths && paths.length > 0
+    ? `(Your files in the team changed: from now on change only ${pathsText(paths)}.)`
+    : '(Your files in the team changed: from now on you may change any file that no other member has.)';
 
 /** The system prompt of the lead, when it is a Claude session: who it is, and its team. */
 export function leadPrompt(crew: CrewSpec): string {
@@ -247,9 +367,15 @@ export function leadPrompt(crew: CrewSpec): string {
     'The tool team shows every member, what it does and what it is working on; the team can change while you work (a member added or taken away), and the tool team always shows it as it is now. Send requests that can run at the same time to different members.',
     'When you need the answers of the requests you sent before you can go on, call the tool wait_for_answers: it waits (up to 10 minutes) and gives you all of them at once, in this same turn. Otherwise end your turn: answers that arrive later, or while you do not wait, reach you as new prompts.',
     ...(crew.members.some((member) => effectiveWorktree(crew, member)) ? [WORKTREE_LEAD] : []),
+    ...(crew.members.some((member) => member.paths) ? [FILES_LEAD] : []),
+    ...(crew.members.some((member) => member.reviews) ? [REVIEW_LEAD] : []),
     'The user sees every session of the team in Forchetta and can also write to the members.'
   ].join('\n');
 }
+
+/** What a member that reviews is told: how to record its verdicts, and what they are for. */
+const REVIEW_MEMBER =
+  'You review. When you have checked a commit, record your verdict with the tool review of the server "forchetta": the hash of the commit, "approve" or "changes", and a note with what you found or what to fix. An approval covers that commit and those before it: the lead merges only what you approved, and Forchetta asks the user before a merge of anything else. Review the exact commit you approve: one made after it is not covered.';
 
 /** The system prompt of a member: who it is, who its lead is, how requests reach it and whether it answers. */
 export function memberPrompt(crew: CrewSpec, member: CrewMemberSpec): string {
@@ -272,7 +398,17 @@ export function memberPrompt(crew: CrewSpec, member: CrewMemberSpec): string {
       : [
           'You share the folder with other sessions. If Forchetta stops you from editing a file because another session is changing it, do not insist: work on another part of the request, or end your turn saying which file you are waiting for. You will be told when it is free.',
         ]),
-    ...(others.length > 0 ? ['', 'The other members of the team:', ...others.map((other) => `- ${other.name}: ${other.role.replace(/\s+/g, ' ')}`)] : []),
+    ...(member.paths
+      ? [
+          `Your files in the team, relative to its folder: ${pathsText(member.paths)}. Change only those: Forchetta stops your edits of any other file. When a request needs a change elsewhere, do your part and end your turn saying what is needed there.`,
+        ]
+      : others.some((other) => other.paths)
+        ? ['The files of the other members are theirs (they are listed below): Forchetta stops your edits there. When a request needs a change in them, do your part and end your turn saying what is needed there.']
+        : []),
+    ...(member.reviews ? [REVIEW_MEMBER] : []),
+    ...(others.length > 0
+      ? ['', 'The other members of the team:', ...others.map((other) => `- ${other.name}: ${other.role.replace(/\s+/g, ' ')}${other.paths ? ` — files: ${pathsText(other.paths)}` : ''}`)]
+      : []),
   ].join('\n');
 }
 
@@ -285,13 +421,24 @@ export function memberPrompt(crew: CrewSpec, member: CrewMemberSpec): string {
 export type ThreadEntry =
   | { kind: 'request'; at: number; n: number; from: string; text: string; deliveries: Delivery[] }
   | { kind: 'question'; at: number; n: number; from: string; to: string; text: string; status: NonNullable<Delivery['questions']>[number]['status'] }
-  | { kind: 'answer'; at: number; n: number; from: string; to: string; text?: string; status: 'shown' | 'kept' | 'queued' | 'sent' | 'delivered' | 'failed' | 'held'; byWait?: boolean };
+  | { kind: 'answer'; at: number; n: number; from: string; to: string; text?: string; status: 'shown' | 'kept' | 'queued' | 'sent' | 'delivered' | 'failed' | 'held'; byWait?: boolean }
+  /** A verdict of a member that reviews (the tool review): the commit, and its note. */
+  | { kind: 'review'; at: number; n: number; from: string; short: string; subject?: string; verdict: ReviewRecord['verdict']; text?: string };
 
-const ORDER: Record<ThreadEntry['kind'], number> = { request: 0, question: 1, answer: 2 };
+const ORDER: Record<ThreadEntry['kind'], number> = { request: 0, question: 1, answer: 2, review: 3 };
 
-/** The thread of a team, oldest first, from its requests. */
-export function threadOf(requests: readonly CrewRequest[]): ThreadEntry[] {
-  const entries: ThreadEntry[] = [];
+/** The thread of a team, oldest first, from its requests and the verdicts of its reviewers. */
+export function threadOf(requests: readonly CrewRequest[], reviews: readonly ReviewRecord[] = []): ThreadEntry[] {
+  const entries: ThreadEntry[] = reviews.map((review) => ({
+    kind: 'review' as const,
+    at: review.at,
+    n: 0,
+    from: review.by,
+    short: review.short,
+    ...(review.subject ? { subject: review.subject } : {}),
+    verdict: review.verdict,
+    ...(review.note ? { text: review.note } : {}),
+  }));
   for (const request of requests) {
     entries.push({ kind: 'request', at: request.createdAt, n: request.n, from: request.from, text: request.text, deliveries: request.deliveries });
     for (const delivery of request.deliveries) {
@@ -366,12 +513,20 @@ export const BUILTIN_TEMPLATES: readonly CrewTemplate[] = [
   {
     name: 'developer + reviewer',
     builtin: true,
-    lead: { kind: 'claude', name: 'lead', role: 'Split the goal into small steps: the developer writes each one, the reviewer checks it; send the fixes back until the reviewer is happy, then merge the branch of the developer.' },
+    lead: {
+      kind: 'claude',
+      name: 'lead',
+      role: 'Split the goal into small steps: the developer writes each one, the reviewer checks it; send the fixes back until the reviewer approves, then merge the branch of the developer up to what it approved.',
+    },
     talk: 'twoway',
     worktrees: true,
     members: [
       { name: 'developer', role: 'Write the code you are asked for, in small steps, with a test for each step, and commit it.' },
-      { name: 'reviewer', role: 'Review the commits of the developer on its branch (git log and git diff against the main branch): bugs, risks, missing tests. Do not change the code yourself: report what to fix.' },
+      {
+        name: 'reviewer',
+        role: 'Review the commits of the developer on its branch (git log and git diff against the main branch): bugs, risks, missing tests. Do not change the code yourself: approve the commit you checked, or say what to fix.',
+        reviews: true,
+      },
     ],
   },
   {
@@ -403,7 +558,7 @@ export function cleanTemplate(input: unknown): { template: CrewTemplate } | { er
   const checked = cleanCrewSpec({ ...((input ?? {}) as object), cwd: '/' });
   if ('error' in checked) return checked;
   const { cwd: _cwd, ...rest } = checked.spec;
-  return { template: { ...rest, members: rest.members.map(({ talkNote: _note, ...member }) => member) } };
+  return { template: { ...rest, members: rest.members.map(({ talkNote: _note, pathsNote: _paths, ...member }) => member) } };
 }
 
 /** A team as a template: what is needed to start it again, without its folder, its sessions and its requests. */
@@ -412,5 +567,5 @@ export const templateOf = (spec: CrewSpec, name = spec.name): CrewTemplate => ({
   lead: spec.lead,
   talk: spec.talk,
   ...(spec.worktrees ? { worktrees: true } : {}),
-  members: spec.members.map(({ talkNote: _note, ...member }) => member),
+  members: spec.members.map(({ talkNote: _note, pathsNote: _paths, ...member }) => member),
 });

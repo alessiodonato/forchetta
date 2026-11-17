@@ -2,7 +2,8 @@ import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SessionColor, Su
 import { resultAt } from '../shared/present.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
-import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Talk } from '../shared/crew.ts';
+import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, ReviewRecord, Talk } from '../shared/crew.ts';
+import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import { cleanSelection } from '../shared/selection.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
@@ -23,6 +24,8 @@ export interface UiState {
   today?: TodayInfo;
   /** The limits of the Claude plan, from the status line of any session. */
   limits?: UsageLimits;
+  /** What the guard did in the last days (daemon/guard-stats.ts). */
+  guardStats?: GuardStatsInfo;
   /** A failed automatic update of Claude Code, and the `claude update` started from the top line. */
   claudeUpdate?: ClaudeUpdateInfo;
   /** The panel of the changes of a session: list undefined while the daemon reads them. */
@@ -54,7 +57,7 @@ export interface UiState {
   /** The last change of a team or of the templates asked from a panel, and how it went. */
   crewEdit?: { action: string; busy: boolean; ok?: boolean; error?: string; at: number };
   /** The whole thread of the team the panel shows: asked again each time the teams change. */
-  crewThread?: { crewId: string; requests?: CrewRequest[] };
+  crewThread?: { crewId: string; requests?: CrewRequest[]; reviews?: ReviewRecord[] };
   /** The last request sent from the panel of a team: its number once it is in the queues, or why not. */
   crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
 }
@@ -148,6 +151,10 @@ export class Store {
       this.set({ today: message.today });
       return;
     }
+    if (message.type === 'guardStats') {
+      this.set({ guardStats: message.stats });
+      return;
+    }
     if (message.type === 'limits') {
       this.set({ limits: message.limits });
       return;
@@ -212,7 +219,7 @@ export class Store {
       return;
     }
     if (message.type === 'crewThread') {
-      if (this.state.crewThread?.crewId === message.crewId) this.set({ crewThread: { crewId: message.crewId, requests: message.requests } });
+      if (this.state.crewThread?.crewId === message.crewId) this.set({ crewThread: { crewId: message.crewId, requests: message.requests, ...(message.reviews ? { reviews: message.reviews } : {}) } });
       return;
     }
     if (message.type === 'crewRequested') {
@@ -255,6 +262,7 @@ export class Store {
         extra.settings = message.settings;
         extra.today = message.today;
         extra.limits = message.limits;
+        extra.guardStats = message.guardStats;
         extra.claudeUpdate = message.claudeUpdate;
         extra.prompts = message.prompts ?? [];
         extra.crews = message.crews ?? [];
@@ -423,7 +431,10 @@ export class Store {
   }
 
   /** A change of a team: a member added, taken away, or its → / ⇄. */
-  editCrew(crewId: string, change: { action: 'add'; member: CrewMemberSpec } | { action: 'remove'; name: string } | { action: 'talk'; name: string; talk: Talk }): void {
+  editCrew(
+    crewId: string,
+    change: { action: 'add'; member: CrewMemberSpec } | { action: 'remove'; name: string } | { action: 'talk'; name: string; talk: Talk } | { action: 'paths'; name: string; paths: string },
+  ): void {
     this.set({ crewEdit: { action: change.action, busy: true, at: Date.now() } });
     this.send({ type: 'editCrew', crewId, ...change });
   }

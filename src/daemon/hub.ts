@@ -3,7 +3,8 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
-import type { CrewRequest, CrewSummary, CrewTemplate } from '../shared/crew.ts';
+import type { GuardStatsInfo } from '../shared/guard-stats.ts';
+import type { CrewRequest, CrewSummary, CrewTemplate, ReviewRecord } from '../shared/crew.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
@@ -13,7 +14,7 @@ import type { QuickPrompt } from '../shared/prompts.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo }
   /** What you selected with the mouse in a pane, for the window where you did it. */
   | { type: 'selection'; now: number; agentId: string; text: string }
   /** How a question or a text from the menu of a selection went: queued, put in the prompt, or why not. */
@@ -33,13 +34,15 @@ export type ServerMessage =
   /** How the start of a team went, for the window that asked. */
   | { type: 'crewCreated'; now: number; ok: boolean; crewId?: string; agentIds?: string[]; error?: string }
   /** The whole thread of a team, for the window that shows it. */
-  | { type: 'crewThread'; now: number; crewId: string; requests: CrewRequest[] }
+  | { type: 'crewThread'; now: number; crewId: string; requests: CrewRequest[]; reviews?: ReviewRecord[] }
   /** How a request to a team went, for the window that asked: its number, or why it did not go. */
   | { type: 'crewRequested'; now: number; ok: boolean; crewId: string; n?: number; error?: string }
   /** What every session cost since midnight, read again from arricurdAI. */
   | { type: 'today'; now: number; today: TodayInfo }
   /** The limits of the Claude plan, when a status line says something new about them. */
   | { type: 'limits'; now: number; limits: UsageLimits }
+  /** What the guard did in the last days (daemon/guard-stats.ts), when a count changes. */
+  | { type: 'guardStats'; now: number; stats: GuardStatsInfo }
   | { type: 'agents'; now: number; agents: Agent[] }
   | { type: 'removed'; now: number; ids: string[] }
   /** What `arricurdai recall` found, for the window that asked. */
@@ -51,7 +54,7 @@ export type ServerMessage =
   /** The transcript of a subagent, for the window that asked: its steps, or why there are none. */
   | { type: 'subagent'; now: number; agentId: string; key: string; steps: SubagentStep[]; model?: string; skipped?: number; note?: string }
   /** A session waits for you, seems stuck or ended with an error: the app shows a notification of macOS. */
-  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free'; title: string; body: string };
+  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop'; title: string; body: string };
 
 /** What the page needs to know of the configuration. */
 export interface UiSettings {
@@ -89,8 +92,8 @@ export type ClientMessage =
   | { type: 'crewRequest'; crewId: string; to: string[]; text: string }
   /** The whole thread of a team. */
   | { type: 'crewThread'; crewId: string }
-  /** A change of a team: a member added (member), taken away (name), or its → / ⇄ (name, talk). */
-  | { type: 'editCrew'; crewId: string; action: 'add' | 'remove' | 'talk'; name?: string; talk?: string; member?: unknown }
+  /** A change of a team: a member added (member), taken away (name), its → / ⇄ (name, talk), or its files (name, paths). */
+  | { type: 'editCrew'; crewId: string; action: 'add' | 'remove' | 'talk' | 'paths'; name?: string; talk?: string; member?: unknown; paths?: unknown }
   /** A template: from the panel of a new team (template), or from an existing team (crewId, with its name). */
   | { type: 'saveCrewTemplate'; template?: unknown; crewId?: string }
   | { type: 'deleteCrewTemplate'; name: string }
@@ -126,6 +129,8 @@ export interface HubOptions {
   crews?: () => CrewSummary[];
   /** The whole thread of a team. */
   crewThread?: (crewId: string) => CrewRequest[] | undefined;
+  /** The verdicts of the reviewers of a team, with its thread. */
+  crewReviews?: (crewId: string) => ReviewRecord[];
   /** A change of a team. */
   onEditCrew?: (message: Extract<ClientMessage, { type: 'editCrew' }>) => Promise<{ ok: boolean; error?: string }>;
   /** The templates of teams, and saving or deleting one. */
@@ -169,6 +174,7 @@ export class Hub {
   private watched = false;
   private today: TodayInfo | undefined;
   private limits: UsageLimits | undefined;
+  private guardStats: GuardStatsInfo | undefined;
 
   constructor(private readonly options: HubOptions) {}
 
@@ -199,6 +205,7 @@ export class Hub {
       claudeUpdate: this.options.claudeUpdate?.(),
       prompts: this.options.prompts?.(),
       limits: this.limits,
+      guardStats: this.guardStats,
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -264,7 +271,15 @@ export class Hub {
           const result = this.options.onCrewRequest(message.crewId, to, message.text);
           this.send(ws, { type: 'crewRequested', now: Date.now(), crewId: message.crewId, ...result });
         } else if (message.type === 'editCrew' && typeof message.crewId === 'string' && typeof message.action === 'string' && this.options.onEditCrew) {
-          const edit = { type: 'editCrew' as const, crewId: message.crewId, action: message.action as 'add' | 'remove' | 'talk', name: typeof message.name === 'string' ? message.name : undefined, talk: typeof message.talk === 'string' ? message.talk : undefined, member: message.member };
+          const edit = {
+            type: 'editCrew' as const,
+            crewId: message.crewId,
+            action: message.action as 'add' | 'remove' | 'talk' | 'paths',
+            name: typeof message.name === 'string' ? message.name : undefined,
+            talk: typeof message.talk === 'string' ? message.talk : undefined,
+            member: message.member,
+            paths: message.paths,
+          };
           void this.options.onEditCrew(edit).then(
             (result) => this.send(ws, { type: 'crewEdited', now: Date.now(), crewId: edit.crewId, action: edit.action, ...result }),
             (error: unknown) => this.send(ws, { type: 'crewEdited', now: Date.now(), crewId: edit.crewId, action: edit.action, ok: false, error: String(error) }),
@@ -278,7 +293,8 @@ export class Hub {
           if (result.ok) this.broadcast({ type: 'crewTemplates', now: Date.now(), templates: this.options.templates?.() ?? [] });
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
-          if (requests) this.send(ws, { type: 'crewThread', now: Date.now(), crewId: message.crewId, requests });
+          const reviews = this.options.crewReviews?.(message.crewId);
+          if (requests) this.send(ws, { type: 'crewThread', now: Date.now(), crewId: message.crewId, requests, ...(reviews && reviews.length > 0 ? { reviews } : {}) });
         } else if (message.type === 'selection' && typeof message.agentId === 'string' && (message.phase === 'start' || message.phase === 'end') && this.options.onSelection) {
           const agentId = message.agentId;
           void this.options.onSelection(agentId, message.phase).then(
@@ -398,11 +414,17 @@ export class Hub {
     this.broadcast({ type: 'limits', now: Date.now(), limits });
   }
 
+  setGuardStats(stats: GuardStatsInfo): void {
+    if (JSON.stringify(stats) === JSON.stringify(this.guardStats)) return;
+    this.guardStats = stats;
+    this.broadcast({ type: 'guardStats', now: Date.now(), stats });
+  }
+
   setClaudeUpdate(update: ClaudeUpdateInfo): void {
     this.broadcast({ type: 'claudeUpdate', now: Date.now(), update });
   }
 
-  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free'; title: string; body: string }): void {
+  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop'; title: string; body: string }): void {
     this.broadcast({ type: 'notify', now: Date.now(), ...notice });
   }
 

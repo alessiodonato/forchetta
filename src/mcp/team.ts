@@ -61,6 +61,21 @@ export const TOOLS: Record<TeamTool, Tool> = {
       additionalProperties: false,
     },
   },
+  review: {
+    name: 'review',
+    description:
+      'Record your verdict on a commit you reviewed: "approve" when it is good, or "changes" with what to fix. An approval covers that commit and those before it on its branch: the lead merges only what you approved, and Forchetta asks the user before a merge of anything else. A commit made after it is not covered: review it too. Your lead and the user see the verdict.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        commit: { type: 'string', description: 'The hash of the commit you reviewed (the last one you checked on the branch).' },
+        verdict: { type: 'string', enum: ['approve', 'changes'], description: '"approve", or "changes" when something must be fixed first.' },
+        note: { type: 'string', description: 'What you found: for "changes", what to fix, precisely; for "approve", a line on what you checked.' },
+      },
+      required: ['commit', 'verdict', 'note'],
+      additionalProperties: false,
+    },
+  },
 };
 
 /** A route of the daemon (/api/crew/<route>): its JSON answer, also for a refusal. */
@@ -103,6 +118,18 @@ export function createHandler(options: { agent: string; tools: readonly TeamTool
             return ok(result.ok ? text(String(result.text)) : text(result.error ?? 'no answer from Forchetta', true));
           }
           if (name === 'wait_for_answers') return ok(await waitForAnswers(options, input));
+          if (name === 'review') {
+            const result = await options.call('review', { agent: options.agent, commit: input.commit, verdict: input.verdict, note: input.note });
+            if (!result.ok) return ok(text(result.error ?? 'the verdict was not recorded', true));
+            const what = `${String(result.short)}${result.subject ? ` (${String(result.subject)})` : ''}`;
+            return ok(
+              text(
+                result.verdict === 'approved'
+                  ? `Recorded: you approved ${what}. The lead can merge its branch up to it.`
+                  : `Recorded: you asked for changes on ${what}. Say what to fix in your report too; review the new commit when it comes.`,
+              ),
+            );
+          }
           if (name === 'send_request') {
             const to = Array.isArray(input.to) ? input.to : typeof input.to === 'string' ? [input.to] : [];
             const result = await options.call('request', { agent: options.agent, to, text: input.request });

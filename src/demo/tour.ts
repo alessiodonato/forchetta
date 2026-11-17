@@ -195,8 +195,8 @@ export function startTour(daemon: DemoDaemon): void {
     },
     {
       title: 'A team of agents',
-      body: 'Last, a team: a lead and its members, each a Claude Code session. Click **new team**, keep **developer + reviewer** and the folder, and start it.\n\nThen click **team** and write a goal to the lead, like **add a countOrders function**. The lead hands out the work and collects the answers.',
-      target: () => byText('header.top .broadcast-toggle', (store()?.state.crews.length ?? 0) > 0 ? 'team' : 'new team'),
+      body: 'Last, a team: a lead and its members, each a Claude Code session. Click **new team**, keep **developer + reviewer** and the folder, and start it.\n\nThen click **teams** and write a goal to the lead, like **add a countOrders function**. The lead hands out the work and collects the answers.',
+      target: () => byText('header.top .broadcast-toggle', (store()?.state.crews.length ?? 0) > 0 ? 'teams' : 'new team'),
       done: () => {
         const crew = store()?.state.crews[0];
         if (!crew || (crew.requests?.length ?? 0) < 2) return false;
@@ -319,6 +319,9 @@ export function startTour(daemon: DemoDaemon): void {
       target?.classList.remove('tour-target');
       point?.classList.add('tour-target');
       target = point ?? undefined;
+    } else if (point && !point.classList.contains('tour-target')) {
+      // The page drew the element again and wrote its classes: the mark goes back on.
+      point.classList.add('tour-target');
     }
     if (step.done() !== wasDone) render();
   }, 500);

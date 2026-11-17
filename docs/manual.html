@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.6. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.7. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -336,7 +336,7 @@ forchetta setup</pre>
           <li>Optionally, <span class="ui">Start from</span> a template: <em>developer + reviewer</em>, <em>feature squad</em> (frontend, backend, tester), <em>research + writing</em>, or one you saved.</li>
           <li>Give the team a <strong>name</strong> (it becomes its group in the org chart) and a <strong>folder</strong>.</li>
           <li>Choose the <strong>lead</strong>: <span class="ui">Claude</span>, with a name, a role, a model and a permission mode, or <span class="ui">you</span>.</li>
-          <li>Add the <strong>members</strong>, up to 6: a name and, in one sentence, what each one does. <span class="ui">more</span> holds the model, the permissions and the worktree of a member.</li>
+          <li>Add the <strong>members</strong>, up to 6: a name and, in one sentence, what each one does. <span class="ui">more</span> holds the model, the permissions and the worktree of a member, <a href="#team-files">its files</a>, and whether it <a href="#team-reviews">reviews</a>.</li>
           <li>For each member, choose how it talks with the lead (below), and whether the members work in their own worktree.</li>
           <li><span class="ui">Create team</span>, or <kbd>⌘</kbd><kbd>↩</kbd>.</li>
         </ol>
@@ -358,8 +358,9 @@ forchetta setup</pre>
           <tbody>
             <tr><td><code>send_request</code></td><td>lead</td><td>Gives work to one member, to some or to all. The request gets a number and reaches each member as a new prompt, “Request #3 from lead:”, as soon as its session is free; until then it waits in its queue.</td></tr>
             <tr><td><code>wait_for_answers</code></td><td>lead</td><td>Waits for the answers of its requests, up to 10 minutes, and returns them all at once, in the same turn. Answers that come later arrive as prompts.</td></tr>
-            <tr><td><code>team</code></td><td>lead, ⇄ members</td><td>Shows the members, what each one does, what it is working on, and the folder and branch of each.</td></tr>
+            <tr><td><code>team</code></td><td>lead, ⇄ members, reviewers</td><td>Shows the members, what each one does, its files, what it is working on, the folder and branch of each, and the last verdicts of the reviewers.</td></tr>
             <tr><td><code>ask_lead</code></td><td>⇄ members</td><td>Asks the lead about the current request, as “Question from reviewer about request #3:”. The answer comes back as a new request.</td></tr>
+            <tr><td><code>review</code></td><td>members that review</td><td>Records a verdict on one commit: <code>approve</code>, or <code>changes</code> with what to fix (see <a href="#team-reviews">A member that reviews</a>).</td></tr>
           </tbody>
         </table></div>
         <p>Requests are delivered like the <a href="#commands">commands of the box</a>: with the same queue and the same checks. A long one shows in the terminal of the member as <code>[Pasted text #1 +N lines]</code>, as when you paste it yourself. When you are the lead, the answers and the questions come to you.</p>
@@ -373,7 +374,8 @@ forchetta setup</pre>
         <ul>
           <li>each request, with who sent it, to whom, and how it goes for each one: in the queue, working, done;</li>
           <li>the answers, and where they went: <span class="ui">delivered to lead</span>, <span class="ui">collected by lead (waiting for it)</span>, <span class="ui">for you</span>, or <span class="ui">not sent back</span> (a member that executes only, or one that asked a question instead);</li>
-          <li>the questions of the members.</li>
+          <li>the questions of the members;</li>
+          <li>the verdicts of the members that review, with the commit and the note: <span class="ui">approved</span> in green, <span class="ui">changes asked</span> in amber.</li>
         </ul>
         <p>Below the thread, write a request yourself, to the lead, to one member or to all; it arrives as “Request #n from the user:”. In the grid and in the org chart, the box of each session says what it works on (<span class="ui">#4 from lead: Write the tests…</span>), and the box of a Claude lead says which requests it still waits for.</p>
 
@@ -381,11 +383,25 @@ forchetta setup</pre>
         <p><span class="ui">edit team</span>, in the team panel:</p>
         <ul>
           <li><strong>→ / ⇄</strong> of a member: it applies from its next request, which tells the member.</li>
+          <li><strong>its files</strong>, in the field next to its name: the guard follows them at once, and the member learns them with its next request.</li>
           <li><strong>remove</strong> takes a member out: its requests still in the queue are cancelled and its box leaves the group. Its session goes on; <code>/exit</code> ends it.</li>
           <li><strong>+ member</strong> adds one, started like the others.</li>
           <li><strong>Save as template</strong> keeps the team as it is now.</li>
         </ul>
         <p>A Claude lead learns of every change with its next prompt.</p>
+
+        <h3 id="team-files">The files of each member</h3>
+        <p>Under <span class="ui">more</span>, a member can have <strong>files</strong> of its own, relative to the folder of the team: folders (<code>src/ui/</code>), files (<code>README.md</code>), or patterns (<code>*.test.ts</code>, <code>docs/**</code>; a pattern with no <code>/</code> matches at any depth). Then:</p>
+        <ul>
+          <li>the member changes only those: the guard stops its edits of any other file;</li>
+          <li>the other members stay off them: the guard stops their edits there, also of a member with no files of its own;</li>
+          <li>a file in the files of two members belongs to both; a file in no one's files is free for the members with none, and for the lead.</li>
+        </ul>
+        <p>Claude reads whose file it is and what to do: <span class="ui">Forchetta: src/server/api.ts is outside your files in the team "squad" (src/ui/): it is one of the files of backend (src/server/). Don't change it, and don't try again: do the part of your request that is in your files, then end your turn saying what is needed in src/server/api.ts (for backend).</span> Its box shows <span class="ui">‖ src/server/api.ts belongs to backend</span>; <span class="ui">let it through</span> lets it write that file anyway until the end of the turn in which it writes it, and tells it that it can go on. The lead knows every member's files from its system prompt, and splits the work by them. It counts in a worktree too: there the folder of the team is the same place under the root of the worktree, so a member that touches the files of another one does not meet them again at the merge.</p>
+
+        <h3 id="team-reviews">A member that reviews</h3>
+        <p>A member with <span class="ui">reviews</span> checked, under <span class="ui">more</span> (the reviewer of <em>developer + reviewer</em> has it), records its verdict on a commit with the tool <code>review</code>: <code>approve</code>, or <code>changes</code> with what to fix. An approval covers that commit and those before it on its branch.</p>
+        <p>Before a <code>git merge</code> of the branch of a member, by any session of the team, the guard looks at the commits it would bring in. If an approval covers them all, the merge goes. If not, Claude Code asks you first, with those commits, the last approval and, when there is one, the changes the reviewer asked: <span class="ui">"git merge worktree-developer" would bring in commits of developer that reviewer, who reviews in the team "pair", has not approved: 1220532 api 3. The last approval is of 804c390 (api 2).</span> A commit made after the approval is not covered: the reviewer has to see it too. The verdicts show in the thread of the team.</p>
 
         <h3>Worktrees and merging</h3>
         <p>With <span class="ui">members in own worktree</span>, on by default, Claude Code makes a git worktree for each member, in <code>.claude/worktrees/</code> of the repository, on a branch of its own. The members never touch each other's files. Each member commits its work at the end of each request; the lead stays in the folder of the team and merges the branches with git when the work is good, or tells you it is ready.</p>
@@ -409,7 +425,7 @@ forchetta setup</pre>
           <img src="img/guard.png" width="2800" height="1572" loading="lazy" alt="Two panes: retries runs its tests and holds src/api.ts, rate-limit waits; in the terminal of rate-limit, the edit stopped by the guard with its reason, and the answer of Claude: it will wait for the file.">
           <figcaption>rate-limit tried to edit src/api.ts while retries changes it: the guard stopped it, and Claude waits for the file.</figcaption>
         </figure>
-        <p>Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. The guard stops that before it happens, for every session, also those started with plain <code>claude</code>. And it tells each session what the others did, when it matters: a file it read that another one changed, tests that fail on the work in progress of another one, lines of another one it is about to take away, a commit that would take their changes, a dev server already running.</p>
+        <p>Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. The guard stops that before it happens, for every session, also those started with plain <code>claude</code>. And it tells each session what the others did, when it matters: who is halfway through which files when it arrives, a file it read that another one changed, tests that fail on the work in progress of another one, lines of another one it is about to take away, a commit that would take their changes, a dev server already running. In a <a href="#teams">team of agents</a> it also keeps each member in <a href="#team-files">its files</a>, and asks you before a merge of commits the reviewer did not approve.</p>
         <h3>A file held</h3>
         <p>A session holds a file it wrote in the turn it is working on now, until the turn ends. When another session tries to edit that file, the edit does not go, and Claude is told why: another session is changing the file; work on something else, or end the turn and wait. Claude Code shows it as <span class="ui">PreToolUse:Edit hook error</span>, with the reason.</p>
         <ul>
@@ -418,6 +434,8 @@ forchetta setup</pre>
         </ul>
         <h3>Free again</h3>
         <p>When the turn that held the file ends, the session that waited gets a new prompt, typed only when it is ready, like a command of the box: <span class="ui">Forchetta: src/api.ts is free now ("billing-api" ended its turn). You can go on.</span> If it wrote the file in the meantime, the prompt is not sent. A session started with plain <code>claude</code> cannot be typed into: you get a notification instead.</p>
+        <h3>Who else is here</h3>
+        <p>At the first step of a session (its first edit or command, after a start or a <code>/clear</code>), if other sessions in the same working tree are halfway through a turn, Claude is told who, which files and since when: <span class="ui">Forchetta: other Claude Code sessions are working in this folder right now: "retries" is in the middle of changing src/api.ts and test/api.test.ts (its turn started 4 min ago). Leave those files to them while they work: if your task needs them, start from the rest.</span> So it plans around them from the start, instead of finding out when it is stopped. Once per conversation, to the session itself, not to its subagents.</p>
         <h3>What the others changed</h3>
         <p>Forchetta remembers which files each session read. When another session changes one of them, what the first one knows of it is out of date: it may go on writing code against a function that was renamed. With the result of its next <code>Edit</code>, <code>Write</code> or Bash command, Claude is told which files changed since it read them, by whom, and the lines taken away and added, once for each change:</p>
         <pre><code>Forchetta: other Claude Code sessions on this Mac changed files you read earlier. What you read of them is out of date:
@@ -438,15 +456,18 @@ Read them again before you write code that relies on them.</code></pre>
         <p>Before <code>kill</code>, <code>pkill</code>, <code>killall</code> or the kill of a port (<code>lsof -ti:3000 | xargs kill</code>, <code>kill-port</code>, <code>fuser -k</code>) that would stop a process another Claude Code session started, or that session itself, Claude Code asks you first.</p>
         <h3>Limits</h3>
         <ul>
-          <li>Only the files written with <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code> and <code>NotebookEdit</code> are held; what a Bash command writes is not seen. Two worktrees are two folders: a member of a team in its own worktree is never stopped.</li>
+          <li>Only the files written with <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code> and <code>NotebookEdit</code> are held; what a Bash command writes is not seen. Two worktrees are two folders: a member of a team in its own worktree is never stopped for a file another session is changing; the files of its team still count.</li>
           <li>Between turns, a file written by a subagent in the background stays held for two minutes after its last write.</li>
           <li>The git command is read as a plain shell line (<code>&amp;&amp;</code>, <code>;</code>, <code>|</code>, quotes, <code>cd</code>, <code>git -C</code>); what cannot be read goes through.</li>
           <li>The notes come with the result of the next <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code>, <code>NotebookEdit</code> or Bash command, not before it; the files read count for the session itself, not for its subagents.</li>
           <li>Tests, builds and dev servers are told by the name of the command; a script with another name is not seen. A server started in the background of a shell that ended has no session as its parent: it counts as started outside Claude Code.</li>
           <li>Claude waits about 30 ms for the guard, only before these tools; a git add of a whole folder adds one <code>git status</code>, and a dev server or a kill one look at the processes (<code>lsof</code>, <code>ps</code>), about 200 ms. With the daemon off, nothing is stopped and nothing waits.</li>
           <li>The guard keeps what is held in the memory of the daemon: after a restart, nothing is held until the next writes.</li>
+          <li>A merge is checked against the reviews only for <code>git merge</code> of the branch of a member, in a team with a member that reviews; <code>cherry-pick</code>, <code>rebase</code> and merges made outside Claude Code are not.</li>
           <li>To turn it off, see <a href="#config">Configuration</a>.</li>
         </ul>
+        <h3 id="guard-stats">What it did</h3>
+        <p>Once the guard has done something, the top line says how much in the last 7 days: <span class="ui">guard 14 this week</span>. Its tooltip lists each kind: edits stopped while another session changed the file, the sessions that went on by themselves when it was free, git commands asked, notes before tests, sessions going in circles, the times you let a session through… <code>forchetta stats</code> lists the same in the terminal. Only counts are kept, by day, in <code>guard-stats.json</code>: no file, command or name.</p>
       </section>
 
       <section id="changes">
@@ -486,6 +507,7 @@ Read them again before you write code that relies on them.</code></pre>
           <li><strong>A session waits for you</strong> for at least 5 seconds: a notification, and the count on the Dock icon. A click opens Forchetta on its terminal.</li>
           <li><strong>A session seems stuck</strong>: “working”, but no event for 10 minutes. Its box says so, with the command in progress; so does a notification. Before that, Forchetta asks <code>claude agents --json</code> how the session really is, and a cost going up counts as a sign of life.</li>
           <li><strong>A turn ends with an error</strong>, such as a rate limit: a notification that stays in Notification Center.</li>
+          <li><strong>A session goes in circles</strong>: in its turn, the same call failed in the same way three times in a row, <code>npm test</code> with the same error after each “fix” for example (times and durations in the output do not count). Its box says <span class="ui">↻ npm test: the same error 3 times</span>, with the error in its tooltip, and a notification brings you there: a hint from you usually ends it. The line goes when the call works, fails another way, or the turn ends.</li>
         </ul>
         <p>The fork in the menu bar shows how many sessions wait for you; its menu lists every session, with what it asks or its context and cost, and has <span class="ui">Show Forchetta</span>, <span class="ui">New session…</span> and <span class="ui">Quit Forchetta</span>. It replaces the SwiftBar plugin of arricurdAI, with the same numbers; Forchetta does not touch SwiftBar, so remove the plugin yourself if you like.</p>
         <p><kbd>⌃</kbd><kbd>⌥</kbd><kbd>F</kbd> shows or hides Forchetta from any app. It uses the system hot keys, so it asks for no Accessibility permission. Closing the window hides it: the app stays in the menu bar. <kbd>⌘</kbd><kbd>Q</kbd> quits.</p>
@@ -518,6 +540,7 @@ Read them again before you write code that relies on them.</code></pre>
             <tr><td><code>forchetta run claude [args]</code></td><td>Starts Claude Code in the tmux of Forchetta and attaches this terminal.</td></tr>
             <tr><td><code>forchetta ls</code></td><td>One line per session: state, what it does, context and cache, <code>tmux</code> or read only.</td></tr>
             <tr><td><code>forchetta ls --json</code></td><td>The same as JSON, for scripts: <code>forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'</code></td></tr>
+            <tr><td><code>forchetta stats</code></td><td>What the guard did on this Mac in the last 7 days, by kind. <code>--days N</code> for another span (up to 120), <code>--json</code> for scripts.</td></tr>
             <tr><td><code>forchetta daemon start|stop|status</code></td><td>Manages the local daemon. Stopping it stops no session; <code>status</code> exits with 1 when it is not running.</td></tr>
             <tr><td><code>forchetta hooks install|uninstall</code></td><td>Adds or removes the hooks in <code>~/.claude/settings.json</code>, asking first and keeping a copy. <code>--yes</code>, <code>--diff</code>.</td></tr>
           </tbody>
@@ -558,9 +581,9 @@ Read them again before you write code that relies on them.</code></pre>
             <tr><td><code>endedRetentionMin</code></td><td><code>10</code></td><td>How long an ended session stays in the window.</td></tr>
             <tr><td><code>contextWindows</code></td><td>1M; 200k for Haiku 4.5, Sonnet 4.6, Opus 4.6</td><td>The window of each model, for the percentage of the context when it comes from arricurdAI. A key matches a model id or its beginning; <code>"*"</code> is the rest.</td></tr>
             <tr><td><code>arricurdai</code></td><td>found by itself</td><td>The command of arricurdAI, as a list: <code>["/path/to/arricurdai"]</code>.</td></tr>
-            <tr><td><code>guard.files</code></td><td><code>true</code></td><td>The guard stops a session from editing a file another one is changing in its turn, and once from taking away lines another one added (see <a href="#guard">The guard</a>).</td></tr>
-            <tr><td><code>guard.git</code></td><td><code>true</code></td><td>Claude Code asks you before a git command that would change the files under another session; a <code>git add -A</code> that would take its changes is stopped once.</td></tr>
-            <tr><td><code>guard.notes</code></td><td><code>true</code></td><td>Claude is told which files it read were changed by another session, and before tests which files the others are in the middle of.</td></tr>
+            <tr><td><code>guard.files</code></td><td><code>true</code></td><td>The guard stops a session from editing a file another one is changing in its turn, a member of a team from editing outside its files, and once from taking away lines another one added (see <a href="#guard">The guard</a>).</td></tr>
+            <tr><td><code>guard.git</code></td><td><code>true</code></td><td>Claude Code asks you before a git command that would change the files under another session, and before a merge of commits the reviewer of a team did not approve; a <code>git add -A</code> that would take the changes of another session is stopped once.</td></tr>
+            <tr><td><code>guard.notes</code></td><td><code>true</code></td><td>Claude is told who is halfway through which files when it arrives, which files it read were changed by another session, and before tests which files the others are in the middle of.</td></tr>
             <tr><td><code>guard.servers</code></td><td><code>true</code></td><td>A session is pointed to the dev server already running in its folder, and Claude Code asks you before a kill of a process another session started.</td></tr>
             <tr><td><code>summaries.haiku</code></td><td><code>false</code></td><td>The summaries by Haiku (see <a href="#search">above</a>).</td></tr>
             <tr><td><code>port</code></td><td><code>47821</code></td><td>The port of the daemon, on <code>127.0.0.1</code> only.</td></tr>
@@ -575,7 +598,7 @@ Read them again before you write code that relies on them.</code></pre>
           <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
           <li><code>state.json</code>, the sessions; <code>teams.json</code>, names, groups and roles by folder;</li>
           <li><code>crews/</code>, the teams of agents, one file each; <code>crew-templates.json</code>, your templates;</li>
-          <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>daemon.log</code>.</li>
+          <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>guard-stats.json</code>, how many times a day the guard did each thing; <code>daemon.log</code>.</li>
         </ul>
         <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code> and, after asking, <code>~/.claude/settings.json</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception.</p>
       </section>

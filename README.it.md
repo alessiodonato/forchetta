@@ -46,6 +46,7 @@ Il modo solito di far lavorare più agenti in parallelo è un worktree git per o
 
 E dice a ogni sessione cosa hanno fatto le altre, proprio quando serve:
 
+- **quando arriva**: chi sta cambiando quali file a metà, così si organizza fin dall'inizio;
 - **un file che ha letto è cambiato**: chi l'ha cambiato, e le righe. Con i worktree lo scopri al merge; qui la sessione si adatta subito;
 - **prima dei test o di una build**: quali file le altre stanno cambiando a metà, così i loro errori non vengono presi per bug suoi;
 - **righe aggiunte da un'altra sessione** che sta per togliere: fermata una volta, così nessun lavoro viene annullato senza saperlo;
@@ -67,12 +68,13 @@ Avvia una sessione con `forchetta run claude`, o dall'app, e Forchetta può anch
 - Un box aggiornato in tempo reale per ogni sessione: lo stato, cosa sta facendo, un breve riassunto, il contesto e il costo. Ambra quando aspetta te, verde quando ha finito, rosso per un errore, e un pallino su un risultato che non hai ancora guardato.
 - I limiti del tuo piano in alto (`5h 62% · week 31%`), e quando finirà quello di 5 ore a questo ritmo.
 - Rispondi ai permessi dal box, una volta o "always".
-- Una notifica quando una sessione ti aspetta, sembra bloccata o finisce con un errore.
+- Una notifica quando una sessione ti aspetta, sembra bloccata, gira a vuoto (lo stesso comando che fallisce allo stesso modo, più e più volte) o finisce con un errore.
+- Cosa ha fatto il vigile questa settimana, in alto; `forchetta stats` nel terminale.
 - Fino a quattro terminali veri affiancati.
 
 ### I team, quando servono
 
-Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree. Il capo distribuisce le richieste attraverso un server MCP; i membri rispondono, o gli fanno una domanda quando sono bloccati. Salva il team come modello e riavvialo in un altro progetto. [I team nel manuale](https://forchetta.dev/manual.html#teams).
+Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree. Il capo distribuisce le richieste attraverso un server MCP; i membri rispondono, o gli fanno una domanda quando sono bloccati. Dai a un membro i suoi file, e il vigile lo tiene lì dentro e gli altri fuori. Un membro che fa la revisione approva i commit, e il vigile ti chiede conferma prima del merge di qualcosa che non ha approvato. Salva il team come modello e riavvialo in un altro progetto. [I team nel manuale](https://forchetta.dev/manual.html#teams).
 
 ## Rispetto ad altri strumenti
 
@@ -98,7 +100,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.9.6. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.9.7. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 

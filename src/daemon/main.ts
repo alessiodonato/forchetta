@@ -15,7 +15,9 @@ import { SelectionReader } from './selection.ts';
 import { Commander } from './commands.ts';
 import { Attention } from './attention.ts';
 import { Conflicts, writtenFile } from './conflicts.ts';
-import { Guard, hookOutput, otherName, parseStatus } from './guard.ts';
+import { type GuardDecision, Guard, hookOutput, otherName, parseStatus } from './guard.ts';
+import { GuardStats } from './guard-stats.ts';
+import { Loops } from './loops.ts';
 import { changedNote, Coherence } from './coherence.ts';
 import { Servers } from './servers.ts';
 import { changesOf } from './diffs.ts';
@@ -115,6 +117,10 @@ function main(): void {
   let commander: Commander | undefined;
   let permissions: Permissions | undefined;
   const attention = new Attention({ notify: (notice) => hub?.notify(notice), stallMs: config.stallMin * 60_000 });
+  // What the guard did, by day (var/guard-stats.json): the top line of the app and `forchetta stats`.
+  const guardStats = new GuardStats(paths.guardStats, { onChange: () => hub?.setGuardStats(guardStats.info()), log });
+  // Sessions going in circles: the same call failing the same way, again and again (daemon/loops.ts).
+  const loops = new Loops();
   const conflicts = new Conflicts();
   let guard: Guard | undefined;
   // What each session read and what the others changed since (daemon/coherence.ts), for the notes of the guard.
@@ -129,6 +135,11 @@ function main(): void {
   const templates = new CrewTemplates(paths.crewTemplates, log);
   crews.agent = (agentId) => registry.agents.get(agentId);
   crews.inGit = inGitRepo;
+  // git for the verdicts of the reviewers and the merges: by its full path, briefly, its output or nothing.
+  crews.git = (dir, args) =>
+    new Promise((done) => {
+      execFile('/usr/bin/git', ['-C', dir, ...args], { encoding: 'utf8', timeout: 3000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(error ? undefined : stdout));
+    });
   // The trust of Claude Code, read (never written) from its global configuration. Claude Code trusts a git
   // repository at its root (a folder inside a trusted repository asks nothing; a repository of its own inside a
   // trusted folder asks again, and refuses a worktree until then); outside git, a folder or one above it.
@@ -196,6 +207,7 @@ function main(): void {
       attention.forget(ids);
       for (const id of ids) conflicts.forget(id);
       coherence.forget(ids);
+      loops.forget(ids);
       teams.forget(ids);
       patches.forget(ids);
     },
@@ -227,6 +239,14 @@ function main(): void {
     enabled: () => config.guard,
     touch: (agent) => registry.touch(agent),
     onFree: (waiter, files, by) => freed(waiter, files, by),
+    // The files of the members of a team: their working tree tells where the folder of the team is for them.
+    lane: (agent, file) => crews.laneCheck(agent.id, file, conflicts.repoOf(dirname(file))),
+    onLaneThrough: (agent, _file, shown) => {
+      const text = `Forchetta: the user lets you change ${shown}, outside your files in the team. You can go on.`;
+      if (agent.control.kind === 'tmux') commander?.enqueueFree(agent.id, text);
+      else hub?.notify({ agentId: agent.id, kind: 'free', title: `${displayName(agent)} can go on`, body: `You let it change ${shown}.` });
+    },
+    count: (kind) => guardStats.count(kind),
     addedByOthers: (agentId, file, removed) => coherence.addedByOthers(agentId, file, removed),
     changedByOthers: (agentId, file) => coherence.changedByOthers(agentId, file),
     readText: (path) => {
@@ -247,6 +267,21 @@ function main(): void {
     enabled: () => config.guard.servers,
     run: runQuick,
   });
+  /** A git merge of the branch of a member of a team, with commits its reviewer did not approve: you decide. */
+  const mergeCheck = async (agent: Agent, payload: Parameters<Guard['decide']>[1]): Promise<GuardDecision | undefined> => {
+    const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
+    const cwd = agent.cwd ?? payload.cwd;
+    if (!config.guard.git || payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || typeof command !== 'string' || !cwd || agent.state === 'ended') return undefined;
+    const found = await crews.decideMerge(agent.id, command, cwd);
+    if (found) guardStats.count('merge');
+    return found;
+  };
+  /** A second dev server, or a kill of the process of another session (daemon/servers.ts). */
+  const serverCheck = async (agent: Agent, payload: Parameters<Guard['decide']>[1]): Promise<GuardDecision | undefined> => {
+    const found = await servers.decide(agent, payload);
+    if (found?.decision) guardStats.count(found.decision === 'deny' ? 'server' : 'kill');
+    return found;
+  };
   /** The note of the files a session read that other sessions changed since; once for each change. */
   const changedFilesNote = (agent: Agent): string | undefined => {
     const found = coherence.changedSinceRead(agent.id);
@@ -308,6 +343,8 @@ function main(): void {
       for (const agent of registry.agents.values()) {
         agent.heldBack = undefined;
         agent.holding = undefined;
+        // What went in circles is known from the failures since this daemon started.
+        agent.loop = undefined;
       }
       for (const agent of registry.agents.values()) readArtifacts(agent);
       conflicts.load(saved.writes);
@@ -366,6 +403,7 @@ function main(): void {
     crews: () => crews.summaries(),
     onCrewRequest: (crewId, to, text) => crews.request(crewId, to, text),
     crewThread: (crewId) => crews.thread(crewId),
+    crewReviews: (crewId) => crews.reviewsOf(crewId),
     templates: () => templates.list(),
     onTemplate: (message) => {
       if (message.type === 'deleteCrewTemplate') return templates.delete(message.name);
@@ -394,6 +432,9 @@ function main(): void {
       }
       if (message.action === 'add') {
         return crews.addMember(message.crewId, message.member);
+      }
+      if (message.action === 'paths' && message.name) {
+        return crews.setPaths(message.crewId, message.name, message.paths);
       }
       return { ok: false, error: 'unknown change' };
     },
@@ -442,6 +483,8 @@ function main(): void {
       else poller?.schedule();
     },
   });
+
+  hub.setGuardStats(guardStats.info());
 
   poller = new ArricurdaiPoller({
     watched: () => hub?.isWatched() ?? false,
@@ -546,15 +589,24 @@ function main(): void {
     guard: async (agent, payload) => {
       const name = agent.team?.label ?? agent.project;
       const first = guard?.decide(agent, payload);
-      const stop = first?.decision ? first : ((await guard?.decideCommit(agent, payload)) ?? (await servers.decide(agent, payload)));
+      let stop = first?.decision ? first : ((await guard?.decideCommit(agent, payload)) ?? (await mergeCheck(agent, payload)) ?? (await serverCheck(agent, payload)));
+      // A merge the guard asks about already (another session works in that folder): the dialog also says what the
+      // reviewer has not approved, in the same question.
+      if (stop === first && first?.decision === 'ask') {
+        const merge = await mergeCheck(agent, payload);
+        if (merge?.reason) stop = { decision: 'ask', reason: `${first.reason}\n${merge.reason}` };
+      }
       if (stop?.decision) {
         log(`guardia: ${stop.decision} per ${name} (${payload.tool_name})`);
         return hookOutput(stop);
       }
-      // Notes that stop nothing: before tests, and the files read that others changed. Those go to the session
-      // itself, not to its subagents: it is the session that keeps what it read.
+      // Notes that stop nothing: who else is halfway through what (once, at its first step), before tests, and the
+      // files read that others changed. Those go to the session itself, not to its subagents: it is the session that
+      // keeps what it read.
       const changed = config.guard.notes && !payload.agent_id ? changedFilesNote(agent) : undefined;
-      const context = [first?.context, changed].filter(Boolean).join('\n\n');
+      if (changed) guardStats.count('changed');
+      const arrival = guard?.arrival(agent, payload, Boolean(first?.context));
+      const context = [arrival, first?.context, changed].filter(Boolean).join('\n\n');
       if (!context) return undefined;
       log(`vigile: nota per ${name} (${payload.tool_name}): ${context.split('\n')[0]!.slice(0, 160)}`);
       return hookOutput({ context });
@@ -583,6 +635,14 @@ function main(): void {
       readArtifacts(agent);
       if (startsTurn(payload) && !payload.agent_id) watchPrompt(agent, agent.lastEvent.at, payload.prompt ?? '');
       if (applySubagentHook(agent, payload, Date.now())) registry.touch(agent);
+      const loopBefore = agent.loop?.since;
+      if (loops.hook(agent, payload, Date.now())) {
+        if (agent.loop && agent.loop.since !== loopBefore) {
+          guardStats.count('loop');
+          log(`${agent.team?.label ?? agent.project}: gira a vuoto su ${agent.loop.label} (${agent.loop.count} volte lo stesso errore)`);
+        }
+        registry.touch(agent);
+      }
       // A file the session itself read (not one of its subagents): what it knows of it dates from now.
       if (payload.hook_event_name === 'PostToolUse' && payload.tool_name === 'Read' && !payload.agent_id) {
         const raw = (payload.tool_input as { file_path?: unknown } | undefined)?.file_path;
@@ -668,6 +728,7 @@ function main(): void {
     commander?.stop();
     permissions?.stop();
     attention.stop();
+    guardStats.flush();
     if (conflictsTimer) clearTimeout(conflictsTimer);
     // The open panes are detached: their tmux clients get SIGHUP, the sessions go on.
     terminals.close();
@@ -727,6 +788,8 @@ function main(): void {
         registry.sweep(config.endedRetentionMin * 60_000);
         updateConflicts();
         claudeUpdates.check();
+        // The last days move with the clock: a day that leaves the week leaves the top line too.
+        hub?.setGuardStats(guardStats.info());
       }, SWEEP_MS),
     );
     void reconcile('avvio');

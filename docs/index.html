@@ -697,11 +697,12 @@
           <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another session that tries to edit it is stopped, and Claude is told why.</li>
           <li><b>It goes on by itself:</b> when the turn that held the file ends, the session that waited is told the file is free, and picks up where it stopped.</li>
           <li><b>git that asks first:</b> a <code>git checkout</code>, <code>reset --hard</code> or <code>stash</code> that would change the files under another session asks you before it runs.</li>
+          <li><b>Who else is here:</b> at its first step, a session learns who is halfway through which files in its folder, and plans around them from the start.</li>
           <li><b>What the others changed:</b> a session that read a file another one changed since is told who changed it, with the lines. It adapts at once, instead of at the merge.</li>
           <li><b>Not its bug:</b> before tests or a build, a session learns which files the others are halfway through, and leaves their errors alone.</li>
           <li><b>Nothing undone without knowing:</b> taking away lines another session just added, or a <code>git add -A</code> that would sweep in its changes, is stopped once, with the reason.</li>
           <li><b>One dev server:</b> a session about to start a second one gets the address of the one already running in the folder.</li>
-          <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped.</li>
+          <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped. The top line says what the guard did this week.</li>
         </ul>
       </div>
     </section>
@@ -824,6 +825,8 @@
           <li><b>Real tools, not copy and paste:</b> the lead sends requests and waits for the answers through a small MCP server of Forchetta; a member that is stuck asks the lead a question.</li>
           <li><b>⇄ answers or → executes:</b> for each member, choose whether its final message goes back to the lead or it just does the work.</li>
           <li><b>A worktree each, if you like:</b> every member can work on a branch of its own, and the lead merges the work when it is good.</li>
+          <li><b>Files of its own:</b> give a member its folders, and the guard keeps it in them and the other members out of them.</li>
+          <li><b>A review that counts:</b> a reviewer approves commits with a tool of the team; before a merge of anything it did not approve, the guard asks you.</li>
           <li><b>Templates:</b> developer + reviewer, a feature squad, research + writing, or a team you saved.</li>
         </ul>
       </div>
@@ -836,7 +839,7 @@
     <section class="part text" aria-labelledby="needed-title">
       <h2 id="needed-title">It tells you when you're needed</h2>
       <ul class="list">
-        <li>A notification and a badge on the Dock when a session waits for you, seems stuck, or stops on an error.</li>
+        <li>A notification and a badge on the Dock when a session waits for you, seems stuck, goes in circles on the same error, or stops on an error.</li>
         <li>A warning when two sessions write to the same file, or to the same repository.</li>
         <li>For each session, the files it changed: its own edits one by one, and the diff since the last commit.</li>
         <li>An icon in the menu bar, and a shortcut from anywhere: <code>⌃⌥F</code>.</li>

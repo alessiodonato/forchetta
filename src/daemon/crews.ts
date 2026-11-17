@@ -1,12 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { type Agent, type QueuedCommand, TEAM_TEXT_MAX, type TeamInfo } from '../shared/agent.ts';
 import {
   ANSWER_HEADER,
   BUILTIN_TEMPLATES,
   cleanCrewSpec,
+  cleanPaths,
   cleanTemplate,
+  KEPT_REVIEWS,
+  ownsPath,
+  pathsNote,
+  pathsText,
+  REVIEW_NOTE_MAX,
+  type ReviewRecord,
   type Crew,
   type CrewMemberSpec,
   type CrewTemplate,
@@ -30,6 +37,7 @@ import {
 } from '../shared/crew.ts';
 import { ensurePrivateDir } from '../shared/paths.ts';
 import type { EnqueueResult } from './commands.ts';
+import { gitCommands, type LaneCheck } from './guard.ts';
 import type { SpawnChoices, SpawnExtras, SpawnResult } from './spawn.ts';
 import type { HookPayload } from './state.ts';
 
@@ -44,6 +52,10 @@ import type { HookPayload } from './state.ts';
 // work is done, with its last message. A member that answers (⇄) has that message go back to whoever asked: the
 // Claude lead gets it in its own queue ("Answer from tester to request #3:"), you see it in the panel of the team.
 // A member → gets no tools and sends nothing back.
+//
+// A member can have files of its own (shared/crew.ts): the guard asks laneCheck before each of its edits. A member
+// that reviews records its verdicts with the tool review; before a git merge of the branch of a member, decideMerge
+// finds the commits no approval covers, and the guard asks you.
 
 export interface CreateResult {
   ok: boolean;
@@ -179,6 +191,10 @@ export class Crews {
   enqueue: (agentId: string, text: string, link: { crew: string; n: number }) => EnqueueResult = () => ({ ok: false, error: 'no queue' });
   /** The agent of a session, for what the tool team says of it; set by the daemon. */
   agent: (agentId: string) => Agent | undefined = () => undefined;
+  /** git in a folder: its output, or undefined when it fails. Set by the daemon, for the verdicts and the merges. */
+  git: (dir: string, args: string[]) => Promise<string | undefined> = async () => undefined;
+  /** The root of the git repository of the folder of each team, read once: where its worktrees are. */
+  private readonly roots = new Map<string, string | null>();
 
   constructor(
     private readonly dir: string | undefined,
@@ -211,7 +227,13 @@ export class Crews {
       ...(crew.lead.kind === 'claude' ? { lead: crew.lead.name } : {}),
       recipients: [
         ...(crew.lead.kind === 'claude' ? [{ name: crew.lead.name, agentId: crew.agents.lead, lead: true }] : []),
-        ...crew.members.map((member) => ({ name: member.name, agentId: crew.agents[member.name], talk: effectiveTalk(crew, member) })),
+        ...crew.members.map((member) => ({
+          name: member.name,
+          agentId: crew.agents[member.name],
+          talk: effectiveTalk(crew, member),
+          ...(member.paths ? { paths: member.paths } : {}),
+          ...(member.reviews ? { reviews: true } : {}),
+        })),
       ],
       requests: (crew.requests ?? []).slice(-SHOWN_REQUESTS).map((request) => ({
         ...request,
@@ -228,6 +250,11 @@ export class Crews {
   /** Every request of a team that is kept (the last 200), whole: the thread of the panel. */
   thread(crewId: string): CrewRequest[] | undefined {
     return this.crews.get(crewId)?.requests ?? (this.crews.has(crewId) ? [] : undefined);
+  }
+
+  /** The verdicts of the reviewers of a team, for its thread. */
+  reviewsOf(crewId: string): ReviewRecord[] {
+    return this.crews.get(crewId)?.reviews ?? [];
   }
 
   /**
@@ -309,7 +336,9 @@ export class Crews {
       // A member keeps, for this request, the → / ⇄ it has now; one whose → / ⇄ changed is told so here.
       const talk = member ? effectiveTalk(crew, member) : undefined;
       const toLead = crew.lead.kind === 'claude' && name === crew.lead.name ? this.forLead(crew, `${REQUEST_HEADER(n, from)}\n${body}`) : undefined;
-      const full = toLead?.text ?? `${REQUEST_HEADER(n, from)}\n${body}${member?.talkNote && talk ? `\n\n${talkNote(talk)}` : ''}`;
+      // What changed for it since its system prompt: how it talks, its files.
+      const notes = [member?.talkNote && talk ? talkNote(talk) : '', member?.pathsNote ? pathsNote(member.paths) : ''].filter(Boolean);
+      const full = toLead?.text ?? `${REQUEST_HEADER(n, from)}\n${body}${notes.length > 0 ? `\n\n${notes.join('\n')}` : ''}`;
       const delivery: Delivery = { to: name, agentId, status: 'queued', at: now, ...(talk ? { talk } : {}) };
       if (!agentId) Object.assign(delivery, { status: 'failed', reason: 'no session' });
       else {
@@ -317,6 +346,7 @@ export class Crews {
         if (queued.ok) {
           delivery.commandId = queued.command.id;
           if (member?.talkNote) delete member.talkNote;
+          if (member?.pathsNote) delete member.pathsNote;
           toLead?.done();
         } else Object.assign(delivery, { status: 'failed', reason: queued.error });
       }
@@ -382,11 +412,166 @@ export class Crews {
       crew.lead.kind === 'claude' ? `Lead: ${crew.lead.name} — ${doing(crew.lead.name, crew.agents.lead)}` : 'Lead: the user, from the Forchetta app.',
       'Members:',
       ...crew.members.map((member) => {
-        const talk = effectiveTalk(crew, member) === 'twoway' ? 'answers' : 'executes only';
-        return `- ${member.name} (${talk}): ${flat(member.role)} — works ${this.placeText(crew, member)} — now: ${doing(member.name, crew.agents[member.name])}`;
+        const talk = `${effectiveTalk(crew, member) === 'twoway' ? 'answers' : 'executes only'}${member.reviews ? ', reviews' : ''}`;
+        const files = member.paths ? ` — files: ${pathsText(member.paths)}` : '';
+        return `- ${member.name} (${talk}): ${flat(member.role)}${files} — works ${this.placeText(crew, member)} — now: ${doing(member.name, crew.agents[member.name])}`;
       }),
     ];
+    const reviews = (crew.reviews ?? []).slice(-6);
+    if (crew.members.some((member) => member.reviews)) {
+      lines.push(
+        reviews.length > 0 ? 'Last verdicts of the reviewers, newest last:' : 'No verdict of a reviewer yet.',
+        ...reviews.map((review) => `- ${reviewLine(review)}`),
+      );
+    }
     return lines.join('\n');
+  }
+
+  /**
+   * Whether a session may write a file, as a member of a team whose members have files: undefined when it may (not
+   * a member, a file outside the folder of the team, one of its own files, or a file no other member has). `tree` is
+   * the working tree of the file: in a worktree the folder of the team is the same place under its root.
+   */
+  laneCheck(agentId: string, file: string, tree: string | undefined): LaneCheck | undefined {
+    const me = this.whoami(agentId);
+    if (!me || me.role !== 'member') return undefined;
+    const crew = me.crew;
+    if (!crew.members.some((member) => member.paths)) return undefined;
+    const member = crew.members.find((candidate) => candidate.name === me.name);
+    if (!member) return undefined;
+    // The working tree of the file is the repository of the team, or one of the worktrees Claude Code makes in it:
+    // there the folder of the team is the same place under its root. Any other one is not of the team.
+    const root = this.rootOf(crew);
+    const ours = tree !== undefined && root !== undefined && (tree === root || tree.startsWith(`${join(root, '.claude', 'worktrees')}/`));
+    const base = ours ? join(tree, relative(root, crew.cwd)) : crew.cwd;
+    const rel = relative(base, file);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) return undefined;
+    if (ownsPath(member.paths, rel)) return undefined;
+    const owner = crew.members.find((other) => other !== member && ownsPath(other.paths, rel));
+    if (!member.paths && !owner) return undefined;
+    return {
+      team: crew.name,
+      rel,
+      ...(member.paths ? { mine: member.paths } : {}),
+      ...(owner?.paths ? { owner: { name: owner.name, ...(crew.agents[owner.name] ? { agentId: crew.agents[owner.name] } : {}), paths: owner.paths } } : {}),
+    };
+  }
+
+  private rootOf(crew: Crew): string | undefined {
+    if (!this.roots.has(crew.id)) this.roots.set(crew.id, this.gitInfo(crew.cwd).root ?? null);
+    return this.roots.get(crew.id) ?? undefined;
+  }
+
+  /**
+   * The files of a member, from the panel: the guard follows them at once, the member learns them with its next
+   * request (its system prompt has the old ones), the Claude lead with the next text that reaches it.
+   */
+  setPaths(crewId: string, name: string, input: unknown): Result<{ paths?: string[] }> {
+    const crew = this.crews.get(crewId);
+    const member = crew?.members.find((candidate) => candidate.name === name);
+    if (!crew || !member) return { ok: false, error: 'unknown member' };
+    const checked = cleanPaths(input);
+    if ('error' in checked) return { ok: false, error: checked.error };
+    if (JSON.stringify(member.paths ?? []) === JSON.stringify(checked.paths ?? [])) return { ok: true, ...(member.paths ? { paths: member.paths } : {}) };
+    if (checked.paths) member.paths = checked.paths;
+    else delete member.paths;
+    member.pathsNote = true;
+    this.noteForLead(crew, checked.paths ? `${name} now works only on ${pathsText(checked.paths)}` : `${name} no longer has files of its own`);
+    this.log(`team «${crew.name}»: file di ${name} ${checked.paths ? `ora ${pathsText(checked.paths)}` : 'tolti'}`);
+    this.changed(crew);
+    return { ok: true, ...(checked.paths ? { paths: checked.paths } : {}) };
+  }
+
+  /**
+   * The tool review of a member that reviews: its verdict on one commit, found by git in its own folder (its worktree
+   * sees the commits of the others: one repository). An approval covers that commit and those before it.
+   */
+  async review(agentId: string, commit: string, verdict: string, note: string, now = Date.now()): Promise<Result<{ short: string; subject?: string; verdict: ReviewRecord['verdict'] }>> {
+    const me = this.whoami(agentId);
+    const member = me?.crew.members.find((candidate) => candidate.name === me.name);
+    if (!me || me.role !== 'member' || !member?.reviews) return { ok: false, error: 'only a member that reviews can record a verdict' };
+    const crew = me.crew;
+    const wanted = commit.trim();
+    if (!wanted || wanted.startsWith('-') || !/^[\w./@^~{}-]{1,200}$/.test(wanted)) return { ok: false, error: 'give the hash of the commit you reviewed' };
+    const value: ReviewRecord['verdict'] | undefined = verdict === 'approve' || verdict === 'approved' ? 'approved' : verdict === 'changes' ? 'changes' : undefined;
+    if (!value) return { ok: false, error: 'the verdict is "approve" or "changes"' };
+    const text = note.replace(/\r\n?/g, '\n').trim();
+    if (value === 'changes' && !text) return { ok: false, error: 'say in the note what to fix' };
+    const dir = this.agent(agentId)?.cwd ?? crew.cwd;
+    const found = await this.git(dir, ['show', '-s', '--format=%H%n%h%n%s', `${wanted}^{commit}`]);
+    const [sha, short, subject] = (found ?? '').split('\n');
+    if (!sha || !short || !/^[0-9a-f]{7,64}$/.test(sha)) return { ok: false, error: `git does not know the commit "${wanted}" in ${dir}` };
+    const record: ReviewRecord = { sha, short, ...(subject ? { subject: clip(subject, 120) } : {}), by: me.name, verdict: value, ...(text ? { note: clip(text, REVIEW_NOTE_MAX) } : {}), at: now };
+    crew.reviews = [...(crew.reviews ?? []), record].slice(-KEPT_REVIEWS);
+    this.log(`team «${crew.name}»: ${me.name} ${value === 'approved' ? 'approva' : 'chiede modifiche a'} ${short}`);
+    this.changed(crew);
+    return { ok: true, short, ...(record.subject ? { subject: record.subject } : {}), verdict: value };
+  }
+
+  /**
+   * Before a git merge by a session of a team with a member that reviews: the commits of the branch of a member that
+   * no approval covers. "ask", with them, so that you decide; undefined when all of them are approved, and for any
+   * other command.
+   */
+  async decideMerge(agentId: string, line: string, cwd: string): Promise<{ decision: 'ask'; reason: string } | undefined> {
+    const me = this.whoami(agentId);
+    if (!me) return undefined;
+    const crew = me.crew;
+    const reviewers = crew.members.filter((member) => member.reviews).map((member) => member.name);
+    if (reviewers.length === 0) return undefined;
+    for (const command of gitCommands(line, cwd)) {
+      if (command.sub !== 'merge') continue;
+      const refs = mergeRefs(command.args);
+      if (refs.length === 0) continue;
+      const branches = await this.memberBranches(crew, command.dir);
+      for (const ref of refs) {
+        const owner = branches.get(ref.replace(/^refs\/heads\//, ''));
+        if (!owner) continue;
+        const approved = (crew.reviews ?? []).filter((review) => review.verdict === 'approved');
+        const out = await this.git(command.dir, ['log', '--ignore-missing', '--format=%H %h %s', '-n', '6', ref, '^HEAD', ...approved.map((review) => `^${review.sha}`), '--']);
+        if (out === undefined) continue;
+        const commits = out
+          .split('\n')
+          .map((row) => row.trim())
+          .filter(Boolean)
+          .map((row) => {
+            const [sha = '', short = '', ...subject] = row.split(' ');
+            return { sha, short, subject: subject.join(' ') };
+          });
+        if (commits.length === 0) continue;
+        const who = reviewers.length === 1 ? reviewers[0]! : `${reviewers.slice(0, -1).join(', ')} and ${reviewers.at(-1)!}`;
+        const listed = commits.slice(0, 5).map((commit) => `${commit.short} ${clip(commit.subject, 60)}`.trim());
+        const last = [...approved].reverse()[0];
+        const asked = [...(crew.reviews ?? [])].reverse().find((review) => review.sha === commits[0]!.sha && review.verdict === 'changes');
+        return {
+          decision: 'ask',
+          reason: [
+            `Forchetta: "${command.text}" would bring in commits of ${owner} that ${who}, who reviews in the team "${crew.name}", has not approved: ${listed.join('; ')}${commits.length > 5 ? '; and more' : ''}.`,
+            asked ? `${asked.by} asked for changes on ${asked.short}${asked.note ? `: ${clip(asked.note, 160)}` : ''}.` : '',
+            last ? `The last approval is of ${last.short}${last.subject ? ` (${clip(last.subject, 60)})` : ''}.` : `${who} has approved nothing yet.`,
+            'Allow it only if you want them merged without that review.',
+          ]
+            .filter(Boolean)
+            .join(' '),
+        };
+      }
+    }
+    return undefined;
+  }
+
+  /** The branches of the worktrees of the members of a team (those that do not review): branch → member. */
+  private async memberBranches(crew: Crew, dir: string): Promise<Map<string, string>> {
+    const found = new Map<string, string>();
+    const out = await this.git(dir, ['worktree', 'list', '--porcelain']);
+    if (!out) return found;
+    const byFolder = new Map(crew.members.filter((member) => !member.reviews).map((member) => [`/.claude/worktrees/${worktreeName(crew.id, crew.name, member.name)}`, member.name]));
+    for (const block of out.split('\n\n')) {
+      const path = /^worktree (.+)$/m.exec(block)?.[1];
+      const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1];
+      if (!path || !branch) continue;
+      for (const [tail, name] of byFolder) if (path.endsWith(tail)) found.set(branch, name);
+    }
+    return found;
   }
 
   /** A command of the team changed status in the queue of its session: a request, an answer or a question. */
@@ -823,6 +1008,33 @@ export class Crews {
   }
 }
 
+/** "3f2a1bc add retries: approved by reviewer, 12:40 — looks good": a verdict, in a line. */
+export function reviewLine(review: ReviewRecord): string {
+  const time = new Date(review.at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return `${review.short}${review.subject ? ` ${clip(review.subject, 60)}` : ''}: ${review.verdict === 'approved' ? 'approved' : 'changes asked'} by ${review.by}, ${time}${review.note ? ` — ${clip(flat(review.note), 160)}` : ''}`;
+}
+
+/** The options of git merge that take the next word as their value. */
+const MERGE_VALUE_OPTIONS = new Set(['-m', '-F', '-s', '-X', '--message', '--file', '--strategy', '--strategy-option', '--into-name', '--cleanup']);
+
+/** What a git merge merges: its arguments that are not options (nor their values). */
+export function mergeRefs(args: readonly string[]): string[] {
+  const refs: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--') {
+      refs.push(...args.slice(i + 1));
+      break;
+    }
+    if (arg.startsWith('-')) {
+      if (MERGE_VALUE_OPTIONS.has(arg)) i++;
+      continue;
+    }
+    refs.push(arg);
+  }
+  return refs;
+}
+
 /**
  * The routes of the MCP server of a team (mcp/team.ts), on /api/crew/<route> with the token of the daemon. The
  * caller is the session in `agent`: what it may do follows from its place in its team.
@@ -849,6 +1061,10 @@ export async function crewApi(crews: Crews, route: string, input: Record<string,
       const requests = Array.isArray(input.requests) ? input.requests.filter((n): n is number => Number.isInteger(n)) : undefined;
       return answer(crews.startWait(agentId, requests, typeof input.minutes === 'number' ? input.minutes : undefined));
     }
+    case 'review':
+      return answer(
+        await crews.review(agentId, typeof input.commit === 'string' ? input.commit : '', typeof input.verdict === 'string' ? input.verdict : '', typeof input.note === 'string' ? input.note : ''),
+      );
     case 'wait-poll': {
       // The wait must be of this lead: an id alone is not enough.
       if (typeof input.id !== 'string' || !crews.waitOf(input.id, agentId)) return answer({ ok: false, error: 'unknown wait' });

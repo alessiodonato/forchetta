@@ -8,6 +8,7 @@ import { hooksCommand } from './hooks.ts';
 import { ago, listSessions } from './ls.ts';
 import { type RunIO, runClaude } from './run.ts';
 import { defaultAppDir, setupCommand } from './setup.ts';
+import { parseDays, statsCommand } from './stats.ts';
 import { pairs, styleFor, tildify } from './style.ts';
 
 const io: RunIO = {
@@ -99,6 +100,16 @@ async function main(argv: string[]): Promise<number> {
       return listSessions(io, { json: rest.includes('--json') });
     case 'daemon':
       return daemonCommand(rest[0]);
+    case 'stats': {
+      const args = rest.flatMap((arg) => (arg.startsWith('--days=') ? ['--days', arg.slice('--days='.length)] : [arg]));
+      const at = args.indexOf('--days');
+      checkOptions(
+        'stats',
+        args.filter((_, index) => at < 0 || index !== at + 1),
+        ['--json', '--days'],
+      );
+      return statsCommand({ days: at >= 0 ? parseDays(args[at + 1]) : 7, json: args.includes('--json') }, io);
+    }
     case 'setup': {
       const args = rest.flatMap((arg) => (arg.startsWith('--app-dir=') ? ['--app-dir', arg.slice('--app-dir='.length)] : [arg]));
       const at = args.indexOf('--app-dir');

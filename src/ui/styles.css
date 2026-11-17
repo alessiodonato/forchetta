@@ -97,7 +97,8 @@ header.top {
 }
 
 .counts .today,
-.counts .limit {
+.counts .limit,
+.counts .guard-count {
   font-family: var(--mono);
   font-size: 11.5px;
 }
@@ -1261,6 +1262,11 @@ html[data-hidden] *::after {
   text-overflow: ellipsis;
 }
 
+/* Going in circles: the same call failing the same way. Amber like a conflict: something to look at. */
+.conflict.loop .conflict-text {
+  color: var(--text);
+}
+
 /* ——— The guard: a file held back, a file held ——— */
 
 .guard-line {
@@ -2395,6 +2401,17 @@ html[data-hidden] *::after {
   flex: 1 1 260px;
 }
 
+/* The files of a member: next to its name in "edit team", on a row of their own under "more" in a new team. */
+.edit-team .member-files {
+  flex: 1 1 220px;
+  font-size: 12px;
+}
+
+.new-team .member-files {
+  flex: 1 1 auto;
+  font-size: 12px;
+}
+
 /* A template of yours: its name, and the × that deletes it. */
 .template-chip {
   display: inline-flex;
@@ -2453,6 +2470,23 @@ html[data-hidden] *::after {
 .thread-entry[data-kind='answer'][data-status='delivered'],
 .thread-entry[data-kind='answer'][data-status='shown'] {
   border-left-color: var(--green);
+}
+
+/* A verdict of a reviewer: green when it approved, amber when it asked for changes. */
+.thread-entry[data-kind='review'][data-verdict='approved'] {
+  border-left-color: var(--green);
+}
+
+.thread-entry[data-kind='review'][data-verdict='changes'] {
+  border-left-color: var(--accent);
+}
+
+.thread-entry[data-verdict='approved'] .thread-tag {
+  color: var(--green);
+}
+
+.thread-entry[data-verdict='changes'] .thread-tag {
+  color: var(--accent);
 }
 
 .thread-head {

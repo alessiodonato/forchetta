@@ -146,6 +146,7 @@ export function slimPayload(raw: unknown): HookPayload | undefined {
     last_assistant_message: optionalString(input.last_assistant_message),
     error: input.error,
     error_details: input.error_details,
+    is_interrupt: input.is_interrupt === true ? true : undefined,
     trigger: optionalString(input.trigger),
     agent_id: optionalString(input.agent_id),
     agent_type: optionalString(input.agent_type),

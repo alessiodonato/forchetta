@@ -1,4 +1,4 @@
-import type { Agent, CacheInfo, Conflict, ContextInfo, Subagent, UsageLimits } from './agent.ts';
+import type { Agent, CacheInfo, Conflict, ContextInfo, LoopInfo, Subagent, UsageLimits } from './agent.ts';
 
 // How an agent reads, in English, for `forchetta ls` and for the boxes of the app. No Node module here.
 
@@ -312,6 +312,11 @@ export function stalledFor(agent: Agent, now: number, stallMs = DEFAULT_STALL_MS
 }
 
 /** "no event for 12 min · Bash npm test running": what the box says of a stall. */
+/** A session going in circles, for its box and its notification: "npm test: the same error 3 times". */
+export function loopText(loop: LoopInfo): string {
+  return `${loop.subagent ? `↳ ${loop.subagent} · ` : ''}${loop.label}: the same error ${loop.count} times`;
+}
+
 export function stallText(agent: Agent, quietMs: number): string {
   const running = agent.state === 'working' && agent.action ? ` · ${agent.action.label} running` : '';
   return `no event for ${agoShort(quietMs)}${running}`;

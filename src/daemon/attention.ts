@@ -1,21 +1,22 @@
 import { type Agent, displayName } from '../shared/agent.ts';
-import { DEFAULT_STALL_MS, stallText, waitingText } from '../shared/present.ts';
+import { DEFAULT_STALL_MS, loopText, stallText, waitingText } from '../shared/present.ts';
 import { clip } from './labels.ts';
 
-// When a session deserves a notification of macOS. One per episode, of three kinds:
+// When a session deserves a notification of macOS. One per episode, of four kinds:
 //
 // - waiting: it waits for you (a permission, a question, a dialog) for 5 s. A wait answered within a few seconds,
 //   at the terminal, gets none, as Claude Code does with its own (permission_prompt comes about 6 s after the
 //   dialog);
 // - stall: it is "al lavoro" with no sign of life for the stall threshold, the rule of the box (present.ts);
-// - error: its turn ended with an error (StopFailure: a limit of the API, an overloaded server…), at once.
+// - error: its turn ended with an error (StopFailure: a limit of the API, an overloaded server…), at once;
+// - loop: it goes in circles, the same call failing the same way again and again (daemon/loops.ts), at once.
 //
 // The timers run here and not in the page: a hidden app can be slowed down by App Nap, a message from the daemon
 // still wakes it.
 
 export const ATTENTION_DELAY_MS = 5_000;
 
-export type NoticeKind = 'waiting' | 'stall' | 'error';
+export type NoticeKind = 'waiting' | 'stall' | 'error' | 'loop';
 
 export interface AttentionNotice {
   agentId: string;
@@ -41,13 +42,15 @@ function episode(agent: Agent, kind: NoticeKind): string | undefined {
       return agent.state === 'working' || agent.state === 'compacting' ? String(lastSign(agent)) : undefined;
     case 'error':
       return agent.state === 'error' ? String(agent.error?.at ?? 0) : undefined;
+    case 'loop':
+      return agent.loop && agent.state !== 'ended' ? String(agent.loop.since) : undefined;
   }
 }
 
 /** The last sign of life: a hook, or a cost that went up. */
 const lastSign = (agent: Agent): number => Math.max(agent.lastEvent.at, agent.usage?.at ?? 0);
 
-const KINDS: NoticeKind[] = ['waiting', 'stall', 'error'];
+const KINDS: NoticeKind[] = ['waiting', 'stall', 'error', 'loop'];
 
 export class Attention {
   /** Keyed by agent and kind. */
@@ -89,6 +92,7 @@ export class Attention {
     if (kind === 'waiting') return { agentId: agent.id, kind, title: `${name} waits for you`, body: clip(waitingText(agent), 180) };
     // A timer may fire a hair early: the time shown is the threshold at least, not "55 s" for one minute.
     if (kind === 'stall') return { agentId: agent.id, kind, title: `${name} seems stuck`, body: clip(stallText(agent, Math.max(this.now() - lastSign(agent), this.stallMs)), 180) };
+    if (kind === 'loop' && agent.loop) return { agentId: agent.id, kind, title: `${name} is going in circles`, body: clip(`${loopText(agent.loop)} · ${agent.loop.error}`, 180) };
     const error = agent.error;
     return { agentId: agent.id, kind, title: `${name}: error`, body: clip(`${error?.kind ?? 'error'}${error?.message ? ` · ${error.message}` : ''}`, 180) };
   }

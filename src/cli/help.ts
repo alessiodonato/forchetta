@@ -59,6 +59,19 @@ const COMMANDS: Record<string, CommandHelp> = {
     options: [{ name: '--json', text: 'The sessions as JSON, for scripts and jq (times in ms since 1970)' }],
     examples: ['forchetta ls', `forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'`],
   },
+  stats: {
+    summary: 'What the guard did on this Mac in the last days',
+    usage: 'forchetta stats [--days N] [--json]',
+    about: [
+      'Counts by kind: edits stopped while another session changed the file, git commands asked, notes before',
+      'tests, sessions going in circles… Only counts are kept, on this Mac: no file, command or name.',
+    ],
+    options: [
+      { name: '--days', args: '<N>', text: 'How many days, today included (default: 7, at most 120)' },
+      { name: '--json', text: 'The counts as JSON, for scripts' },
+    ],
+    examples: ['forchetta stats', 'forchetta stats --days 30'],
+  },
   daemon: {
     summary: 'Manage the local daemon (sessions never stop with it)',
     usage: 'forchetta daemon <start|stop|status>',
@@ -87,6 +100,7 @@ const LIST: Entry[] = [
   { name: 'setup', text: COMMANDS.setup!.summary },
   { name: 'run', args: 'claude [arguments]', text: COMMANDS.run!.summary },
   { name: 'ls', text: COMMANDS.ls!.summary },
+  { name: 'stats', text: COMMANDS.stats!.summary },
   { name: 'daemon', args: 'start|stop|status', text: COMMANDS.daemon!.summary },
   { name: 'hooks', args: 'install|uninstall', text: COMMANDS.hooks!.summary },
 ];

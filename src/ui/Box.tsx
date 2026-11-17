@@ -11,6 +11,7 @@ import {
   conflictText,
   controlLabel,
   cornerTime,
+  loopText,
   percentText,
   restLine,
   shownSubagents,
@@ -166,6 +167,21 @@ function StallLine({ agent, now, stallMs }: { agent: Agent; now: number; stallMs
   );
 }
 
+/** A session going in circles: the same call failing the same way again and again in this turn (daemon/loops.ts). */
+function LoopLine({ agent }: { agent: Agent }) {
+  const loop = agent.loop;
+  if (!loop || agent.state === 'ended') return null;
+  return (
+    <div
+      class="conflict loop"
+      title={`In this turn it ran ${loop.label} ${loop.count} times, and each time it failed the same way:\n${loop.error}\n\nOpen the terminal to give it a hint, or press Esc there to stop it.`}
+    >
+      <span class="conflict-mark">↻</span>
+      <span class="conflict-text">{loopText(loop)}</span>
+    </div>
+  );
+}
+
 interface BoxProps {
   agent: Agent;
   now: number;
@@ -282,6 +298,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
       )}
       <PermissionOutcomeLine agent={agent} now={now} />
       <StallLine agent={agent} now={now} stallMs={(store.state.settings.stallMin ?? 10) * 60_000} />
+      <LoopLine agent={agent} />
       {agent.conflicts && (
         <div class="conflict" title={conflictsTitle(agent.conflicts)}>
           <span class="conflict-mark">⚠</span>

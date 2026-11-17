@@ -44,6 +44,7 @@ The usual way to run agents in parallel is a git worktree for each one. Then eac
 
 And it tells each session what the others did, right when it matters:
 
+- **when it arrives**: who is halfway through which files, so it plans around them from the start;
 - **a file it read changed since**: who changed it, and the lines. With worktrees you find out at the merge; here the session adapts at once;
 - **before tests or a build**: which files the others are halfway through, so their errors are not taken for its bugs;
 - **lines another session added**, about to be taken away: stopped once, so no work is undone without knowing;
@@ -65,12 +66,13 @@ Start a session with `forchetta run claude`, or from the app, and Forchetta can 
 - A live box per session: its state, what it is doing now, a short summary, its context and its cost. Amber when it waits for you, green when it's done, red on an error, and a dot on a result you haven't looked at yet.
 - The limits of your plan at the top (`5h 62% · week 31%`), and when the 5-hour one runs out at this pace.
 - Answer permission prompts from the box, once or "always".
-- A notification when a session waits for you, seems stuck, or ends with an error.
+- A notification when a session waits for you, seems stuck, goes in circles (the same command failing the same way, again and again), or ends with an error.
+- What the guard did this week, at the top; `forchetta stats` in the terminal.
 - Up to four real terminals side by side.
 
 ### Teams, when you want them
 
-A lead, which is a Claude session or you, and up to 6 members. Each member is a full Claude Code session with its own role and model, and by default its own worktree. The lead hands out requests through an MCP server; members answer, or ask the lead when they're stuck. Save a team as a template and start it again in another project. [Teams in the manual](https://forchetta.dev/manual.html#teams).
+A lead, which is a Claude session or you, and up to 6 members. Each member is a full Claude Code session with its own role and model, and by default its own worktree. The lead hands out requests through an MCP server; members answer, or ask the lead when they're stuck. Give a member its own files, and the guard keeps it in them and the others out of them. A member that reviews approves commits, and the guard asks you before a merge of anything it did not approve. Save a team as a template and start it again in another project. [Teams in the manual](https://forchetta.dev/manual.html#teams).
 
 ## How it compares
 
@@ -96,7 +98,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.9.6. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.9.7. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

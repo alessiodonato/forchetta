@@ -28,6 +28,8 @@ export interface HookPayload {
   last_assistant_message?: string;
   error?: unknown;
   error_details?: unknown;
+  /** PostToolUseFailure: the call was stopped by the user (Esc), it did not fail by itself. */
+  is_interrupt?: boolean;
   trigger?: string;
   agent_id?: string;
   agent_type?: string;

@@ -8,6 +8,9 @@ import type { Store } from './store.ts';
 // is shown: in coda, bloccato, inviato, confermato.
 
 const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
+/** A notice of the guard: a file is free again, or you let a member of a team change a file outside its files. */
+const freeWhat = (command: QueuedCommand): string => (command.arg?.includes('lets you change') ? 'that it can go on' : 'that its file is free');
+
 /** "/btw why…", "/compact", "request #3", "question: why…": what the box calls a command. */
 export const label = (command: QueuedCommand): string =>
   command.kind === 'btw'
@@ -17,7 +20,7 @@ export const label = (command: QueuedCommand): string =>
       : command.kind === 'ask'
         ? `question “${clip((command.arg ?? '').split('\n')[0] ?? '', 28)}”`
         : command.kind === 'free'
-          ? 'the notice that its file is free'
+          ? `the notice ${freeWhat(command)}`
           : `/${command.kind}`;
 
 /** The command to show: the one waiting or sent, else the last one done in the last two minutes. */
@@ -54,7 +57,7 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
             : command.kind === 'ask'
               ? '✓ question delivered'
             : command.kind === 'free'
-              ? '✓ told that its file is free'
+              ? `✓ told ${freeWhat(command)}`
             : command.kind === 'compact'
               ? '✓ /compact done'
               : '✓ /clear done';

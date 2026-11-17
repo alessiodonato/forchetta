@@ -1,8 +1,9 @@
 import type { Agent, GuardHold } from '../shared/agent.ts';
 import type { Store } from './store.ts';
 
-// The lines of the guard in a box (daemon/guard.ts): the file this session was stopped on, who is changing it,
-// and the button that lets it through; the files of its turn that keep other sessions waiting.
+// The lines of the guard in a box (daemon/guard.ts): the file this session was stopped on, who is changing it (or,
+// for a member of a team, whose files they are), and the button that lets it through; the files of its turn that
+// keep other sessions waiting.
 
 /** "beta", "beta and gamma", "beta, gamma and delta". */
 function names(list: string[]): string {
@@ -14,7 +15,20 @@ const more = (holds: readonly GuardHold[]): string => (holds.length > 1 ? ` · +
 
 /** The file a session was stopped on, for its box and its tooltip. */
 export function heldBackText(hold: GuardHold): string {
+  if (hold.lane) {
+    if (hold.letThrough) return `${hold.file}: let through, outside its files`;
+    return hold.withName ? `${hold.file} belongs to ${hold.withName}` : `${hold.file} outside its files`;
+  }
   return hold.letThrough ? `${hold.file}: let through, ${hold.withName} changes it too` : `${hold.file} held by ${hold.withName}`;
+}
+
+/** The tooltip of one file a session was stopped on. */
+function heldBackTitle(hold: GuardHold): string {
+  if (hold.lane) {
+    const whose = hold.withName ? `one of the files of ${hold.withName} in its team` : 'outside its files in its team';
+    return `${hold.file}: ${whose}${hold.letThrough ? ' (you let this session through)' : ''}`;
+  }
+  return `${hold.file}: ${hold.withName} is changing it in its turn${hold.letThrough ? ' (you let this session through)' : ''}`;
 }
 
 export function holdingText(holding: readonly GuardHold[]): string {
@@ -38,7 +52,7 @@ export function GuardLines({ agent, store }: { agent: Agent; store: Store }) {
           class="guard-line"
           data-kind="held"
           onClick={stop}
-          title={held!.map((hold) => `${hold.file}: ${hold.withName} is changing it in its turn${hold.letThrough ? ' (you let this session through)' : ''}`).join('\n')}
+          title={held!.map(heldBackTitle).join('\n')}
         >
           <span class="guard-mark">‖</span>
           <span class="guard-text">
@@ -46,7 +60,16 @@ export function GuardLines({ agent, store }: { agent: Agent; store: Store }) {
             {more(held!)}
           </span>
           {!first.letThrough && (
-            <button type="button" class="link" title={`Let this session write ${first.file} while ${first.withName} changes it too`} onClick={() => store.letThrough(agent.id, first.path)}>
+            <button
+              type="button"
+              class="link"
+              title={
+                first.lane
+                  ? `Let this session write ${first.file} anyway: it is told it can go on. To change its files for good, use "edit team".`
+                  : `Let this session write ${first.file} while ${first.withName} changes it too`
+              }
+              onClick={() => store.letThrough(agent.id, first.path)}
+            >
               let it through
             </button>
           )}

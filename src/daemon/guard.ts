@@ -1,6 +1,8 @@
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Agent, GuardHold } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
+import { pathsText } from '../shared/crew.ts';
+import type { GuardStatKind } from '../shared/guard-stats.ts';
 import type { HookPayload } from './state.ts';
 import { removedLines } from './coherence.ts';
 import { commandStart, isCheckCommand, placedCommands, shellCommands } from './shell.ts';
@@ -19,8 +21,12 @@ export { shellCommands } from './shell.ts';
 // if another live session works in that same working tree, the answer is "ask": you decide, with the reason in
 // the dialog. The command is read as well as a plain reading of a shell line allows; what cannot be read is let go.
 //
-// It also tells Claude what it should know, without stopping anything: before tests or a build, that another session
-// is halfway through some files, so the errors there are probably its work in progress. And it stops once what
+// Teams. A member of a team of agents with files of its own (shared/crew.ts) changes only those, and the other
+// members stay off them: an edit elsewhere is stopped, with whose files they are. You can let it through from its box.
+//
+// It also tells Claude what it should know, without stopping anything: at the first step of a session, who else is
+// halfway through which files in its folder; before tests or a build, that another session is halfway through some
+// files, so the errors there are probably its work in progress. And it stops once what
 // would undo the work of another session without knowing: taking away lines another session added in the last hour,
 // or a git add -A / commit -a that would take the changes of another session into this one's commit. The same call
 // again goes through: Claude was told, and means it.
@@ -41,6 +47,29 @@ export const WORKS_THERE_MS = 60 * 60_000;
 export const ONCE_MS = 10 * 60_000;
 /** The note before tests is said again for the same files only after this long. */
 export const CHECK_NOTE_AGAIN_MS = 15 * 60_000;
+/** A file a member of a team was stopped on, outside its files: its box says it this long, or until you let it through. */
+export const LANE_STOP_SHOWN_MS = 30 * 60_000;
+
+/** Why a member of a team may not write a file (daemon/crews.ts): undefined when it may. */
+export interface LaneCheck {
+  team: string;
+  /** The file, relative to the folder of the team. */
+  rel: string;
+  /** Its own files; undefined when it has none. */
+  mine?: string[];
+  /** The member whose files these are, when another one has them. */
+  owner?: { name: string; agentId?: string; paths: string[] };
+}
+
+/** A file a member was stopped on, outside its files. */
+interface LaneStop {
+  owner?: string;
+  ownerId?: string;
+  since: number;
+  letThrough?: boolean;
+  /** It wrote the file after you let it through: the end of its turn ends it. */
+  used?: boolean;
+}
 
 export interface GuardDecision {
   /** Absent: the tool goes on, and Claude reads the context with its result. */
@@ -197,6 +226,12 @@ export interface GuardOptions {
   touch: (agent: Agent) => void;
   /** A file held back is free again: the session that waited for it may go on (daemon/main.ts). */
   onFree?: (waiter: Agent, files: GuardHold[], by: Agent) => void;
+  /** Whether a member of a team may write a file: its own files, and those of the others (daemon/crews.ts). */
+  lane?: (agent: Agent, file: string) => LaneCheck | undefined;
+  /** You let a member of a team write a file outside its files: it may be told to go on (daemon/main.ts). */
+  onLaneThrough?: (agent: Agent, file: string, shown: string) => void;
+  /** Counts what it did, by kind (daemon/guard-stats.ts). */
+  count?: (kind: GuardStatKind) => void;
   now?: () => number;
 }
 
@@ -215,6 +250,10 @@ export class Guard {
   private readonly warned = new Map<string, number>();
   /** The last note before tests, by agent: its files, and when. */
   private readonly checkNotes = new Map<string, { key: string; at: number }>();
+  /** For each member of a team that was stopped outside its files: the files, and whose they are. */
+  private readonly laneStops = new Map<string, Map<string, LaneStop>>();
+  /** The conversation (session id) each session was already told who else works in its folder. */
+  private readonly arrived = new Map<string, string>();
   private readonly now: () => number;
 
   constructor(private readonly options: GuardOptions) {
@@ -226,6 +265,8 @@ export class Guard {
    * unless you let it through: that lasts until the other one's turn ends.
    */
   wrote(agent: Agent, file: string): void {
+    const lane = this.laneStops.get(agent.id)?.get(file);
+    if (lane?.letThrough) lane.used = true;
     let files = this.holds.get(agent.id);
     if (!files) {
       files = new Map();
@@ -250,11 +291,34 @@ export class Guard {
       event === 'SessionEnd' ||
       (event === 'SessionStart' && (payload.source === 'clear' || payload.source === 'resume'));
     if (turnEnded) this.release(agent);
+    this.pruneLaneStops(agent, turnEnded, event === 'SessionStart' && payload.source === 'clear');
+  }
+
+  /**
+   * The files a member was stopped on outside its files: those you let it through on go at the end of the turn in
+   * which it wrote them, the others after a while; a /clear ends them all.
+   */
+  private pruneLaneStops(agent: Agent, turnEnded: boolean, cleared: boolean): void {
+    const stops = this.laneStops.get(agent.id);
+    if (!stops) return;
+    const now = this.now();
+    let changed = false;
+    for (const [path, stop] of stops) {
+      if (cleared || (turnEnded && stop.used) || now - stop.since >= LANE_STOP_SHOWN_MS) {
+        stops.delete(path);
+        changed = true;
+      }
+    }
+    if (stops.size === 0) this.laneStops.delete(agent.id);
+    if (changed) this.refresh([agent]);
   }
 
   /** A session that ended: it holds nothing and waits for nothing. */
   ended(agent: Agent): void {
-    if (!this.holds.has(agent.id) && !this.stops.has(agent.id) && !agent.heldBack && !agent.holding) return;
+    this.arrived.delete(agent.id);
+    this.checkNotes.delete(agent.id);
+    const lanes = this.laneStops.delete(agent.id);
+    if (!lanes && !this.holds.has(agent.id) && !this.stops.has(agent.id) && !agent.heldBack && !agent.holding) return;
     this.release(agent);
     const stops = this.stops.get(agent.id);
     this.stops.delete(agent.id);
@@ -263,9 +327,19 @@ export class Guard {
 
   /** You let a session through for one file, from its box: its next write of it goes. */
   letThrough(agentId: string, path: string): boolean {
-    const stop = this.stops.get(agentId)?.get(path);
     const agent = this.byId(agentId);
+    const lane = this.laneStops.get(agentId)?.get(path);
+    if (agent && lane && !lane.letThrough) {
+      lane.letThrough = true;
+      lane.since = this.now();
+      this.options.count?.('letThrough');
+      this.refresh([agent]);
+      this.options.onLaneThrough?.(agent, path, this.shownPath(path, agent));
+      return true;
+    }
+    const stop = this.stops.get(agentId)?.get(path);
     if (!stop || !agent) return false;
+    if (!stop.letThrough) this.options.count?.('letThrough');
     stop.letThrough = true;
     const holder = this.byId(stop.holder);
     this.refresh(holder ? [agent, holder] : [agent]);
@@ -278,7 +352,7 @@ export class Guard {
     const enabled = this.options.enabled();
     const cwd = agent.cwd ?? payload.cwd;
     const file = targetFile(payload.tool_name, payload.tool_input, cwd);
-    if (file) return enabled.files ? (this.decideFile(agent, file) ?? this.decideUndo(agent, payload, file)) : undefined;
+    if (file) return enabled.files ? (this.decideLane(agent, file) ?? this.decideFile(agent, file) ?? this.decideUndo(agent, payload, file)) : undefined;
     const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
     if (payload.tool_name !== 'Bash' || !cwd || typeof command !== 'string') return undefined;
     const git = enabled.git ? this.decideGit(agent, command, cwd) : undefined;
@@ -329,6 +403,7 @@ export class Guard {
         own.length > 0 ? `Add only your own files: git add ${own.map(rel).join(' ')}` : 'You changed no other file here yourself.',
         'Run the same command again only if you were asked to commit the work of every session.',
       ];
+      this.options.count?.('commit');
       return { decision: 'deny', reason: parts.filter(Boolean).join(' ') };
     }
     return undefined;
@@ -356,6 +431,7 @@ export class Guard {
     const other = found ? this.byId(found.agentId) : undefined;
     if (!found || !other) return undefined;
     if (!this.firstTime(agent.id, `undo\n${file}\n${found.lines.join('\n')}`)) return undefined;
+    this.options.count?.('undo');
     const shown = this.shownPath(file, agent);
     const lines = found.lines.slice(0, 8).map((line) => `    + ${line.trim().slice(0, 160)}`);
     const more = found.lines.length > 8 ? [`    … and ${found.lines.length - 8} more`] : [];
@@ -380,27 +456,97 @@ export class Guard {
     if (checks.length === 0) return undefined;
     const repo = this.options.repoOf(checks[0]!.dir) ?? checks[0]!.dir;
     const now = this.now();
+    const busy = this.busyIn(repo, agent);
+    if (busy.length === 0) return undefined;
+    const key = busy.map((item) => `${item.other.id}:${item.files.join(',')}`).join('|');
+    const last = this.checkNotes.get(agent.id);
+    if (last && last.key === key && now - last.at < CHECK_NOTE_AGAIN_MS) return undefined;
+    this.checkNotes.set(agent.id, { key, at: now });
+    const who = this.busyText(busy, agent);
+    this.options.count?.('tests');
+    return {
+      context:
+        `Forchetta: other Claude Code sessions work in this folder right now: ${who.join('; ')}. ` +
+        "If this fails in those files, or in code that uses them, it is probably their unfinished work, not yours: don't fix it. " +
+        'Work on your part, run your own tests, and say so if you are blocked.',
+    };
+  }
+
+  /** The other live sessions in their turn with files they changed in this working tree: who, and which files. */
+  private busyIn(repo: string, agent: Agent): Array<{ other: Agent; files: string[] }> {
     const busy: Array<{ other: Agent; files: string[] }> = [];
     for (const other of this.options.agents()) {
       if (other.id === agent.id || other.state === 'ended' || !inTurn(other)) continue;
       const files = [...(this.holds.get(other.id)?.keys() ?? [])].filter((file) => file === repo || file.startsWith(`${repo}/`)).sort();
       if (files.length > 0) busy.push({ other, files });
     }
-    if (busy.length === 0) return undefined;
-    const key = busy.map((item) => `${item.other.id}:${item.files.join(',')}`).join('|');
-    const last = this.checkNotes.get(agent.id);
-    if (last && last.key === key && now - last.at < CHECK_NOTE_AGAIN_MS) return undefined;
-    this.checkNotes.set(agent.id, { key, at: now });
+    return busy;
+  }
+
+  /** '"retries" is in the middle of changing src/api.ts and test/api.test.ts', for each of them. */
+  private busyText(busy: Array<{ other: Agent; files: string[] }>, agent: Agent, since = false): string[] {
     const and = (items: string[]): string => (items.length === 1 ? items[0]! : `${items.slice(0, -1).join(', ')} and ${items.at(-1)!}`);
-    const who = busy.map(({ other, files }) => {
+    const now = this.now();
+    return busy.map(({ other, files }) => {
       const shown = files.slice(0, 5).map((file) => this.shownPath(file, agent));
-      return `"${otherName(other, agent)}" is in the middle of changing ${and(files.length > 5 ? [...shown, `${files.length - 5} more`] : shown)}`;
+      const started = since && other.turnStartedAt !== undefined ? ` (its turn started ${ago(now - other.turnStartedAt)})` : '';
+      return `"${otherName(other, agent)}" is in the middle of changing ${and(files.length > 5 ? [...shown, `${files.length - 5} more`] : shown)}${started}`;
     });
+  }
+
+  /**
+   * At the first step of a conversation (its first edit or command, after a start or a /clear): who else is halfway
+   * through which files in its folder, so that it plans around them from the start. Once per conversation, and only
+   * to the session itself, not to its subagents. `said`: another note of this answer already says it.
+   */
+  arrival(agent: Agent, payload: HookPayload, said = false): string | undefined {
+    if (payload.hook_event_name !== 'PreToolUse' || payload.agent_id || agent.state === 'ended') return undefined;
+    const conversation = agent.sessionId ?? payload.session_id ?? '';
+    if (this.arrived.get(agent.id) === conversation) return undefined;
+    this.arrived.set(agent.id, conversation);
+    if (said || this.options.enabled().notes === false) return undefined;
+    const cwd = agent.cwd ?? payload.cwd;
+    if (!cwd) return undefined;
+    const busy = this.busyIn(this.options.repoOf(cwd) ?? cwd, agent);
+    if (busy.length === 0) return undefined;
+    this.options.count?.('arrival');
+    return (
+      `Forchetta: other Claude Code sessions are working in this folder right now: ${this.busyText(busy, agent, true).join('; ')}. ` +
+      'Leave those files to them while they work: if your task needs them, start from the rest. ' +
+      'If you try to change one of them now, Forchetta stops you and tells you when it is free.'
+    );
+  }
+
+  /** A member of a team writing outside its files, or in the files of another member: stopped, with whose they are. */
+  private decideLane(agent: Agent, file: string): GuardDecision | undefined {
+    const check = this.options.lane?.(agent, file);
+    const stops = this.laneStops.get(agent.id);
+    if (!check) {
+      // Its files changed, or it is no longer in the team: what the box still showed goes.
+      if (stops?.delete(file)) {
+        if (stops.size === 0) this.laneStops.delete(agent.id);
+        this.refresh([agent]);
+      }
+      return undefined;
+    }
+    const known = stops?.get(file);
+    if (known?.letThrough) return undefined;
+    if (!known) {
+      const map = stops ?? new Map<string, LaneStop>();
+      map.set(file, { ...(check.owner ? { owner: check.owner.name, ...(check.owner.agentId ? { ownerId: check.owner.agentId } : {}) } : {}), since: this.now() });
+      this.laneStops.set(agent.id, map);
+      this.options.count?.('lane');
+      this.refresh([agent]);
+    }
+    const owner = check.owner;
+    const where = check.mine
+      ? `${check.rel} is outside your files in the team "${check.team}" (${pathsText(check.mine)})${owner ? `: it is one of the files of ${owner.name} (${pathsText(owner.paths)})` : ''}.`
+      : `${check.rel} is one of the files of ${owner?.name ?? 'another member'} in the team "${check.team}"${owner ? ` (${pathsText(owner.paths)})` : ''}.`;
     return {
-      context:
-        `Forchetta: other Claude Code sessions work in this folder right now: ${who.join('; ')}. ` +
-        "If this fails in those files, or in code that uses them, it is probably their unfinished work, not yours: don't fix it. " +
-        'Work on your part, run your own tests, and say so if you are blocked.',
+      decision: 'deny',
+      reason:
+        `Forchetta: ${where} Don't change it, and don't try again: do the part of your request that is in your files, ` +
+        `then end your turn saying what is needed in ${check.rel}${owner ? ` (for ${owner.name})` : ''}. If the user lets you through, you will be told.`,
     };
   }
 
@@ -421,6 +567,7 @@ export class Guard {
       const map = stops ?? new Map<string, Stop>();
       map.set(file, { holder: holder.id, since: this.now() });
       this.stops.set(agent.id, map);
+      this.options.count?.('held');
       this.refresh([agent, holder]);
     }
     const shown = this.shownPath(file, agent);
@@ -448,6 +595,7 @@ export class Guard {
           .sort((a, b) => b.at - a.at)[0];
         if (!last && !(there && inTurn(other))) continue;
         const what = last ? `it changed ${relative(repo, last.path)} ${ago(now - last.at)}` : 'it is working there now';
+        this.options.count?.('git');
         return {
           decision: 'ask',
           reason: `Forchetta: "${otherName(other, agent)}", another Claude Code session, works in this same folder (${what}). "${command.text}" changes the files under it.`,
@@ -487,6 +635,7 @@ export class Guard {
       const waiter = this.byId(waiterId);
       if (waiter && freed.length > 0) {
         touched.push(waiter);
+        this.options.count?.('freed');
         this.options.onFree?.(waiter, freed, holder);
       }
     }
@@ -530,6 +679,17 @@ export class Guard {
       if (seen.has(agent.id)) continue;
       seen.add(agent.id);
       const heldBack: GuardHold[] = [];
+      for (const [path, stop] of this.laneStops.get(agent.id) ?? []) {
+        heldBack.push({
+          file: this.shownPath(path, agent),
+          path,
+          with: stop.ownerId ?? '',
+          withName: stop.owner ?? '',
+          since: stop.since,
+          lane: true,
+          ...(stop.letThrough ? { letThrough: true } : {}),
+        });
+      }
       for (const [path, stop] of this.stops.get(agent.id) ?? []) {
         const holder = this.byId(stop.holder);
         if (holder) heldBack.push(this.line(path, stop, holder, agent));
