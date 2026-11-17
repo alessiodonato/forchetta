@@ -237,6 +237,9 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
       onClick={() => onOpen(agent.id)}
     >
       <div class="aura" aria-hidden="true" />
+      <span class="busy" aria-hidden="true">
+        <i />
+      </span>
       {completed && (
         <span class="done" key={agent.completedAt}>
           <Check />

@@ -25,8 +25,9 @@ import { editOf, Patches } from './patches.ts';
 import { runRecall } from './recall.ts';
 import { folderOf, inGitRepo, spawnSession } from './spawn.ts';
 import { Teams } from './teams.ts';
-import { crewApi, CrewTemplates, Crews } from './crews.ts';
+import { crewApi, CrewTemplates, Crews, templateApi } from './crews.ts';
 import { cleanCrewSpec, templateOf } from '../shared/crew.ts';
+import { mcpConfigFile } from '../shared/mcp-config.ts';
 import { Hub } from './hub.ts';
 import { Permissions } from './permissions.ts';
 import { isInteractiveCommand, readCommandLine } from './process.ts';
@@ -167,7 +168,8 @@ function main(): void {
     };
     return { root: git(['rev-parse', '--show-toplevel']), branch: git(['branch', '--show-current']) };
   };
-  // The tools of a team: Claude Code starts this server for each session that gets them (see mcp/team.ts).
+  // The tools of a team, or of templates for the other sessions it starts: Claude Code starts this server for each
+  // session (see mcp/team.ts).
   const teamMcp = { command: resolveTool('node', config), args: [paths.teamMcpJs] };
   crews.spawn = (choices, extras) => spawnSession({ tmux, registry, claude, log, teamMcp }, choices, extras);
   const patches = new Patches(paths.patches);
@@ -210,6 +212,8 @@ function main(): void {
       loops.forget(ids);
       teams.forget(ids);
       patches.forget(ids);
+      // Its MCP configuration (shared/mcp-config.ts): the session is over, nobody starts that server again.
+      for (const id of ids) rmSync(mcpConfigFile(id), { force: true });
     },
     onUnknownPid: reconcileSoon,
   });
@@ -399,7 +403,7 @@ function main(): void {
     onLetThrough: (agentId, path) => {
       if (guard?.letThrough(agentId, path)) log(`vigile: lasciata passare ${registry.agents.get(agentId)?.project ?? agentId} su ${path}`);
     },
-    onSpawn: (input) => spawnSession({ tmux, registry, claude, log }, input),
+    onSpawn: (input) => spawnSession({ tmux, registry, claude, log, teamMcp }, input),
     crews: () => crews.summaries(),
     onCrewRequest: (crewId, to, text) => crews.request(crewId, to, text),
     crewThread: (crewId) => crews.thread(crewId),
@@ -585,7 +589,11 @@ function main(): void {
     port: () => config.port,
     recordFile: process.env.FORCHETTA_RECORD === '1' ? paths.payloads : undefined,
     log,
-    crew: (route, input) => crewApi(crews, route, input),
+    crew: async (route, input) =>
+      templateApi(templates, route, input, (name, replaced) => {
+        hub?.templatesChanged();
+        log(`modello di team ${replaced ? 'sostituito' : 'salvato'} da una sessione: "${name}"`);
+      }) ?? (await crewApi(crews, route, input)),
     guard: async (agent, payload) => {
       const name = agent.team?.label ?? agent.project;
       const first = guard?.decide(agent, payload);

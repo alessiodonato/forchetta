@@ -28,6 +28,7 @@ import {
   effectiveWorktree,
   type TeamTool,
   teamToolsFor,
+  tooLong,
   leadPrompt,
   MAX_OPEN_DELIVERIES,
   memberPrompt,
@@ -1102,15 +1103,29 @@ export class CrewTemplates {
     return [...BUILTIN_TEMPLATES, ...this.saved];
   }
 
-  save(input: unknown): Result<{ name: string }> {
+  /**
+   * Saves a template; one of yours with the same name is replaced, unless `replace` is false (a session that saves
+   * one must say it means to replace it).
+   */
+  save(input: unknown, options: { replace?: boolean } = {}): Result<{ name: string; replaced: boolean }> {
     const checked = cleanTemplate(input);
     if ('error' in checked) return { ok: false, error: checked.error };
     const template = checked.template;
     const key = template.name.toLowerCase();
     if (BUILTIN_TEMPLATES.some((builtin) => builtin.name.toLowerCase() === key)) return { ok: false, error: `"${template.name}" is a template of Forchetta: give yours another name` };
+    const replaced = this.saved.some((other) => other.name.toLowerCase() === key);
+    if (replaced && options.replace === false) {
+      return { ok: false, error: `a template "${template.name}" already exists: give this one another name, or replace that one with replace: true if the user asked to change it` };
+    }
     this.saved = [...this.saved.filter((other) => other.name.toLowerCase() !== key), template];
     this.write();
-    return { ok: true, name: template.name };
+    return { ok: true, name: template.name, replaced };
+  }
+
+  /** One template by its name, any case. */
+  find(name: string): CrewTemplate | undefined {
+    const key = name.trim().toLowerCase();
+    return this.list().find((template) => template.name.toLowerCase() === key);
   }
 
   delete(name: string): Result {
@@ -1130,5 +1145,70 @@ export class CrewTemplates {
     } catch (error) {
       this.log(`modelli dei team non salvati: ${String(error)}`);
     }
+  }
+}
+
+/** A person of a template in a line: its name, then its model, its permissions and how it works in the team. */
+function personLine(crew: Pick<CrewTemplate, 'talk' | 'worktrees'>, person: CrewMemberSpec | Extract<CrewTemplate['lead'], { kind: 'claude' }>, member: boolean): string {
+  const traits = [
+    person.model,
+    person.mode,
+    ...(member ? [effectiveTalk(crew, person as CrewMemberSpec) === 'oneway' ? 'executes only' : undefined] : []),
+    ...(member && effectiveWorktree(crew, person as CrewMemberSpec) ? ['own worktree'] : []),
+    ...(member && (person as CrewMemberSpec).reviews ? ['reviews'] : []),
+    ...(member && (person as CrewMemberSpec).paths ? [`files: ${pathsText((person as CrewMemberSpec).paths!)}`] : []),
+  ].filter(Boolean);
+  return `${person.name}${traits.length > 0 ? ` (${traits.join(', ')})` : ''}`;
+}
+
+/** The templates as a session reads them (the tool list_team_templates): one line each. */
+export function templatesText(templates: readonly CrewTemplate[]): string {
+  return [
+    'The templates of teams in Forchetta. The user starts one from the app: "new team", Start from, then the folder of the team and "Create team".',
+    ...templates.map((template) => {
+      const lead = template.lead.kind === 'claude' ? `lead ${personLine(template, template.lead, false)}` : 'led by the user, from the app';
+      const members = template.members.map((member) => personLine(template, member, true)).join(', ');
+      return `- "${template.name}"${template.builtin ? ' (comes with Forchetta)' : ''}: ${lead}; members: ${members}`;
+    }),
+    'Ask for one by its name to get it in full, in the shape save_team_template takes.',
+  ].join('\n');
+}
+
+/**
+ * The routes of the tools of templates (mcp/team.ts), for a session of Forchetta: the templates, one in full, and
+ * saving one. Saving starts nothing: the user starts the team from the app, where they see roles and permissions.
+ * Undefined for another route (crewApi has those).
+ */
+export function templateApi(templates: CrewTemplates, route: string, input: Record<string, unknown>, onSaved?: (name: string, replaced: boolean) => void): { status: number; body: unknown } | undefined {
+  switch (route) {
+    case 'templates': {
+      const name = typeof input.name === 'string' ? input.name.trim() : '';
+      if (!name) return { status: 200, body: { ok: true, text: templatesText(templates.list()) } };
+      const found = templates.find(name);
+      if (!found) return { status: 400, body: { ok: false, error: `no template is called "${name}": list_team_templates without a name lists them` } };
+      const { builtin: _builtin, ...template } = found;
+      return { status: 200, body: { ok: true, text: `The template "${found.name}"${found.builtin ? ' (comes with Forchetta: save a copy under another name to change it)' : ''}:\n${JSON.stringify(template, null, 2)}` } };
+    }
+    case 'template-save': {
+      // Names and roles too long would be cut short in silence, as in the panel: the session must hear it.
+      const long = tooLong(input.template);
+      if (long) return { status: 400, body: { ok: false, error: long } };
+      const result = templates.save(input.template, { replace: input.replace === true });
+      if (!result.ok) return { status: 400, body: result };
+      onSaved?.(result.name, result.replaced);
+      const saved = templates.find(result.name)!;
+      const lead = saved.lead.kind === 'claude' ? `the lead ${saved.lead.name} and ` : '';
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          name: result.name,
+          replaced: result.replaced,
+          text: `${result.replaced ? 'Replaced' : 'Saved'} the template "${result.name}": ${lead}${saved.members.length} member${saved.members.length === 1 ? '' : 's'}. Nothing has started. The user starts the team from the Forchetta app: "new team" (or "teams" → "+ new team"), Start from "${result.name}", then the folder of the team and "Create team".`,
+        },
+      };
+    }
+    default:
+      return undefined;
   }
 }

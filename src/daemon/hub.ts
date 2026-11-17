@@ -369,6 +369,11 @@ export class Hub {
     this.flushSoon();
   }
 
+  /** The templates of teams changed outside the page (a session saved one): every window gets them again. */
+  templatesChanged(): void {
+    this.broadcast({ type: 'crewTemplates', now: Date.now(), templates: this.options.templates?.() ?? [] });
+  }
+
   agentsRemoved(ids: readonly string[]): void {
     for (const id of ids) {
       this.pending.delete(id);

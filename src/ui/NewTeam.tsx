@@ -124,6 +124,13 @@ export function NewTeamPanel({ agents, store, onClose }: { agents: readonly Agen
   const state = store.state.crewSpawn;
   const busy = state?.busy === true;
   const [applied, setApplied] = useState<string | undefined>(undefined);
+  // The template whose × was clicked once: the second click deletes it, within a few seconds.
+  const [armed, setArmed] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(undefined), 4000);
+    return () => clearTimeout(timer);
+  }, [armed]);
   const saving = store.state.crewEdit?.action === 'saveCrewTemplate' ? store.state.crewEdit : undefined;
 
   /** Fills the panel with a template: everything but the folder; the name too, unless you wrote your own. */
@@ -178,11 +185,16 @@ export function NewTeamPanel({ agents, store, onClose }: { agents: readonly Agen
               <button type="button" class={`chip${applied === template.name ? ' on' : ''}`} title={template.members.map((spec) => spec.name).join(', ')} onClick={() => apply(template)}>
                 {template.name}
               </button>
-              {!template.builtin && (
-                <button type="button" class="quiet template-delete" title={`Delete the template "${template.name}"`} onClick={() => store.deleteTemplate(template.name)}>
-                  ×
-                </button>
-              )}
+              {!template.builtin &&
+                (armed === template.name ? (
+                  <button type="button" class="quiet template-delete armed" title={`Click again to delete the template "${template.name}"`} onClick={() => store.deleteTemplate(template.name)}>
+                    delete?
+                  </button>
+                ) : (
+                  <button type="button" class="quiet template-delete" title={`Delete the template "${template.name}"`} onClick={() => setArmed(template.name)}>
+                    ×
+                  </button>
+                ))}
             </span>
           ))}
         </div>

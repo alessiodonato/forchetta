@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { teamMcpConfig } from '../src/daemon/spawn.ts';
-import { answersText, type Call, createHandler, TOOLS } from '../src/mcp/team.ts';
+import { answersText, type Call, createHandler, instructionsFor, TOOLS } from '../src/mcp/team.ts';
+import { cleanTemplate, TEMPLATE_TOOLS } from '../src/shared/crew.ts';
 
 // The MCP server of the tools of a team, as Claude Code talks to it: one JSON-RPC message, one answer.
 
@@ -100,5 +101,65 @@ describe('the MCP server of a team', () => {
         },
       },
     });
+  });
+});
+
+describe('the tools of templates, for a session not in a team', () => {
+  const asked: { route: string; body: Record<string, unknown> }[] = [];
+  const templates: Call = async (route, body) => {
+    asked.push({ route, body });
+    if (route === 'templates') return { ok: true, text: body.name ? `The template "${String(body.name)}":\n{}` : 'The templates of teams in Forchetta.' };
+    if (route === 'template-save') return (body.template as { name?: string }).name === 'taken' ? { ok: false, error: 'a template "taken" already exists' } : { ok: true, text: 'Saved the template "Bakery".' };
+    return { ok: false, error: 'unknown route' };
+  };
+  const session = createHandler({ agent: 'agent-9', tools: TEMPLATE_TOOLS, call: templates });
+
+  it('lists only those, and its instructions say when to use them', async () => {
+    expect(((await session({ jsonrpc: '2.0', id: 1, method: 'tools/list' }))?.result as { tools: { name: string }[] }).tools.map((tool) => tool.name)).toEqual(['list_team_templates', 'save_team_template']);
+    const hello = (await session({ jsonrpc: '2.0', id: 2, method: 'initialize', params: {} }))?.result as { instructions: string };
+    expect(hello.instructions).toContain('save it as a template with save_team_template: the user then starts it from the app');
+    expect(hello.instructions).not.toContain('your team');
+    expect(instructionsFor(['team', 'send_request'])).toBe('The tools of your team of agents in Forchetta.');
+  });
+
+  it('saves: the template goes to the daemon without replace, which goes on its own; a refusal says it was not saved', async () => {
+    asked.length = 0;
+    const template = { name: 'Bakery', lead: { kind: 'you' }, members: [{ name: 'a', role: 'Does a.' }] };
+    const saved = await session({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'save_team_template', arguments: { ...template, replace: true } } });
+    expect(asked).toEqual([{ route: 'template-save', body: { agent: 'agent-9', template, replace: true } }]);
+    expect(saved?.result).toEqual({ content: [{ type: 'text', text: 'Saved the template "Bakery".' }] });
+    const refused = await session({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'save_team_template', arguments: { ...template, name: 'taken' } } });
+    expect(asked[1]!.body.replace).toBe(false);
+    expect(refused?.result).toEqual({ content: [{ type: 'text', text: 'The template was not saved: a template "taken" already exists' }], isError: true });
+  });
+
+  it('lists all of them, or one by its name', async () => {
+    asked.length = 0;
+    await session({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'list_team_templates', arguments: {} } });
+    const one = await session({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'list_team_templates', arguments: { name: 'Bakery' } } });
+    expect(asked.map((item) => item.body)).toEqual([{ agent: 'agent-9' }, { agent: 'agent-9', name: 'Bakery' }]);
+    expect(one?.result).toEqual({ content: [{ type: 'text', text: 'The template "Bakery":\n{}' }] });
+  });
+
+  it('a session of a team does not have them, and a session of templates has no tool of a team', async () => {
+    const member = createHandler({ agent: 'agent-2', tools: ['team', 'ask_lead'], call: templates });
+    expect((await member({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'save_team_template', arguments: {} } }))?.result).toMatchObject({ isError: true });
+    expect((await session({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'send_request', arguments: {} } }))?.result).toMatchObject({ isError: true });
+  });
+
+  it('the schema of save_team_template takes what the daemon keeps of a template, and nothing else', () => {
+    const schema = TOOLS.save_team_template.inputSchema as { properties: Record<string, { properties?: object; items?: { properties: object } }> };
+    const checked = cleanTemplate({
+      name: 'All',
+      lead: { kind: 'claude', name: 'l', role: 'r', model: 'opus', mode: 'plan' },
+      talk: 'oneway',
+      worktrees: true,
+      members: [{ name: 'm', role: 'r', talk: 'twoway', model: 'haiku', mode: 'auto', worktree: false, paths: ['src/'], reviews: true }],
+    });
+    if ('error' in checked) throw new Error(checked.error);
+    const { lead, members, ...team } = checked.template;
+    expect(Object.keys(schema.properties).sort()).toEqual([...Object.keys(team), 'lead', 'members', 'replace'].sort());
+    expect(Object.keys(schema.properties.lead!.properties!).sort()).toEqual(Object.keys(lead).sort());
+    expect(Object.keys(schema.properties.members!.items!.properties).sort()).toEqual(Object.keys(members[0]!).sort());
   });
 });

@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.7. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.8. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -219,14 +219,14 @@ forchetta setup</pre>
         <div class="table"><table>
           <thead><tr><th>State</th><th>How it looks</th></tr></thead>
           <tbody>
-            <tr><td><strong>working</strong></td><td>the border pulses slowly</td></tr>
+            <tr><td><strong>working</strong></td><td>orange dashes run along the bottom of the box, in the column and in its square when the column is hidden</td></tr>
             <tr><td><strong>waiting</strong> for you</td><td>amber, with a breath: a permission, a question, a plan to approve</td></tr>
             <tr><td><strong>turn finished</strong></td><td>green for a moment, with a check; a green dot stays until you look</td></tr>
             <tr><td><strong>error</strong></td><td>red, with a single shake, and a red dot until you look</td></tr>
             <tr><td><strong>compacting</strong></td><td>the context bar squeezes</td></tr>
           </tbody>
         </table></div>
-        <p>Amber, green and red only ever mean a state. Claude orange marks what you can act on: the buttons that start something, what you chose, the pane you are typing in. With “Reduce motion” on in macOS, the states stay recognizable but still. When the window is hidden, nothing moves. At rest, the app, the page and the daemon together stay under 1% of CPU.</p>
+        <p>Amber, green and red only ever mean a state. Claude orange marks what you can act on (the buttons that start something, what you chose, the pane you are typing in) and work under way: the dashes of a session at work, the requests of a team. With “Reduce motion” on in macOS, the states stay recognizable but still. When the window is hidden, nothing moves. At rest, the app, the page and the daemon together stay under 1% of CPU.</p>
 
         <h3>Names, groups and roles</h3>
         <p>Hover a box and click <strong>✎</strong> to give the session a <strong>name</strong> (shown in place of the folder), a <strong>color</strong> (a dot before the name, in the box, the column and the pane, and a tint in the background of its terminal, to tell sessions apart at a glance), a <strong>group</strong>, a <strong>role</strong> in free text, and the mark <span class="ui">lead of the group</span>. The choice is kept for its folder too: a session that starts again in the same folder finds its place again. <span class="ui">Remove</span> clears it.</p>
@@ -240,6 +240,7 @@ forchetta setup</pre>
           <li>1: the whole area; 2: side by side; 3: the one you activated last, large on the left, the other two stacked; 4: two by two.</li>
           <li>The fifth click replaces the pane used longest ago. To choose every time, set <code>"panes": { "replace": "chiedi" }</code> in the <a href="#config">configuration</a>.</li>
           <li><strong>✕ closes the pane only</strong>: the session goes on in tmux and stays in the column.</li>
+          <li><span class="ui">‹</span>, at the top of the column, hides it and gives its room to the panes; <span class="ui">›</span> brings it back. Hidden, the column is a thin strip with one square per session: its initial in its color, amber when it waits for you, red on an error, a green dot when it finished since you last looked. Click a square to open its terminal; hover it for its name and state. The window remembers the choice.</li>
         </ul>
         <h3>Inside a terminal</h3>
         <ul>
@@ -342,7 +343,17 @@ forchetta setup</pre>
         </ol>
         <p>Every session starts in the tmux of Forchetta, the lead first. From its system prompt each one knows who it is, its role, its lead and the other members. Its name shows in its box, in its pane and in Claude Code. <span class="ui">Save as template</span> keeps the team without its folder, to start it again elsewhere.</p>
 
-        <h3>⇄ answers, or → executes</h3>
+        <h3 id="team-from-document">A team from a document</h3>
+        <p>Every session Forchetta starts, from the app or with <code>forchetta run claude</code>, has two tools of the MCP server <code>forchetta</code>: <code>list_team_templates</code> and <code>save_team_template</code>. So a team can come from a description. Ask any session “Set up in Forchetta the teams described in roles.md”, or point it at an artifact, or describe the team in your own words. Claude reads the description and saves one template per team, with the name, the role, the model and the permissions of the lead and of each member, and for each member whether it answers the lead or executes only (<a href="#talk">⇄ or →</a>): as the document says, or as Claude judges from the role.</p>
+        <ul>
+          <li>Saving starts nothing. You start the team as usual: <span class="ui">new team</span>, <span class="ui">Start from</span> the template, its folder, <span class="ui">Create team</span>. There you see the roles and the permissions before anything runs.</li>
+          <li>Claude Code asks you before each save, as for any tool. Reading the templates needs no permission.</li>
+          <li>Forchetta checks a template as the panel does. A role longer than 1,000 characters, a seventh member, a model or a permission mode it does not know go back to Claude as an error, and Claude fixes them. A template of yours with the same name is replaced only when you asked for it.</li>
+          <li>Rules the whole team shares, too long for a role, belong in a <code>CLAUDE.md</code> in the folder of the team: Claude Code loads it in every session there. Claude can write it in the same request.</li>
+        </ul>
+        <p>A session started with a plain <code>claude</code>, or with <code>forchetta run claude</code> followed by a prompt or a subcommand, does not have these tools.</p>
+
+        <h3 id="talk">⇄ answers, or → executes</h3>
         <div class="table"><table>
           <thead><tr><th>Member</th><th>What happens when it finishes a request</th></tr></thead>
           <tbody>
@@ -352,7 +363,7 @@ forchetta setup</pre>
         </table></div>
 
         <h3>How the work goes</h3>
-        <p>Give the goal to the lead: from the <a href="#team-panel">team panel</a>, or by writing in its terminal. A Claude lead works with the tools of the team, an MCP server called <code>forchetta</code> that only the sessions of the team get, and that needs no permission:</p>
+        <p>Give the goal to the lead: from the <a href="#team-panel">team panel</a>, or by writing in its terminal. A Claude lead works with the tools of the team, from an MCP server called <code>forchetta</code>. Only the sessions of the team get these tools, and they need no permission:</p>
         <div class="table"><table>
           <thead><tr><th>Tool</th><th>Who has it</th><th>What it does</th></tr></thead>
           <tbody>
@@ -378,6 +389,7 @@ forchetta setup</pre>
           <li>the verdicts of the members that review, with the commit and the note: <span class="ui">approved</span> in green, <span class="ui">changes asked</span> in amber.</li>
         </ul>
         <p>Below the thread, write a request yourself, to the lead, to one member or to all; it arrives as “Request #n from the user:”. In the grid and in the org chart, the box of each session says what it works on (<span class="ui">#4 from lead: Write the tests…</span>), and the box of a Claude lead says which requests it still waits for.</p>
+        <p>In the org chart a line runs from the lead to each member, and says what goes on between the two: <strong>orange</strong>, a request the member works on (dashed while it waits in its queue); <strong>green</strong>, an answer on its way back to the lead; <strong>amber</strong>, a question for the lead. When something arrives, a request at a member, an answer or a question at the lead, its line flashes twice and a dot runs along it, the way it went.</p>
 
         <h3>Change a team while it works</h3>
         <p><span class="ui">edit team</span>, in the team panel:</p>

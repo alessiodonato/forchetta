@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef } from 'preact/hooks';
+import { useCallback, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { type Agent, displayName } from '../shared/agent.ts';
 import { focusKey, layoutFor } from './layout.ts';
 import { motionAllowed } from './motion.ts';
@@ -7,7 +7,7 @@ import { Rail } from './Rail.tsx';
 import { springKeyframes } from './spring.ts';
 import type { Store, UiState } from './store.ts';
 
-// The work area: the column of boxes on the left, up to four panes on the right. When panes open, close or
+// The work area: the column of boxes on the left (it can be hidden), up to four panes on the right. When panes open, close or
 // change place, they move to their new place with a spring (position and size), and a new one grows in.
 
 /** Moves each pane from where it was to where it is, scaling it from its old size; new panes grow in. */
@@ -69,7 +69,27 @@ function ReplaceChooser({ state, store }: { state: UiState; store: Store }) {
   );
 }
 
+/** Whether the column of sessions was hidden last time in this window: a convenience, so it may be missing. */
+function savedRailHidden(): boolean {
+  try {
+    return localStorage.getItem('forchetta.rail') === 'hidden';
+  } catch {
+    return false;
+  }
+}
+
 export function Workspace({ state, store, agents, now }: { state: UiState; store: Store; agents: readonly Agent[]; now: number }) {
+  const [railHidden, setRailHidden] = useState(savedRailHidden);
+  const toggleRail = useCallback(() => {
+    setRailHidden((hidden) => {
+      try {
+        localStorage.setItem('forchetta.rail', hidden ? 'shown' : 'hidden');
+      } catch {
+        // The choice is only for this window.
+      }
+      return !hidden;
+    });
+  }, []);
   const panes = state.panes;
   const layout = layoutFor(panes);
   const grid = useRef<HTMLDivElement>(null);
@@ -80,7 +100,7 @@ export function Workspace({ state, store, agents, now }: { state: UiState; store
 
   return (
     <div class="workspace">
-      <Rail agents={agents} now={now} open={panes.open} onOpen={open} store={store} />
+      <Rail agents={agents} now={now} open={panes.open} onOpen={open} store={store} hidden={railHidden} onToggle={toggleRail} />
       <div class="work">
         <ReplaceChooser state={state} store={store} />
         <div class="panes" ref={grid} style={{ gridTemplateColumns: layout.columns, gridTemplateRows: layout.rows, gridTemplateAreas: layout.areas }}>

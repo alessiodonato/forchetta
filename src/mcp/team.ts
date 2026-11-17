@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import type { TeamTool } from '../shared/crew.ts';
+import { CREW_MAX_MEMBERS, CREW_NAME_MAX, MEMBER_NAME_MAX, MODELS, MODES, PATHS_MAX, ROLE_MAX, type TeamTool, TEMPLATE_TOOLS } from '../shared/crew.ts';
 import { paths } from '../shared/paths.ts';
 import { VERSION } from '../shared/version.ts';
 
-// The tools of a team of agents, for Claude Code: an MCP server on stdio (JSON-RPC 2.0, one message per line),
-// started by Claude Code for the lead of a team and for its members that answer (daemon/crews.ts writes their MCP
+// The tools of Forchetta for Claude Code: an MCP server on stdio (JSON-RPC 2.0, one message per line), started by
+// Claude Code for the lead of a team and for its members that answer, with the tools of the team, and for every
+// other session Forchetta starts, with the tools of the templates of teams (shared/mcp-config.ts writes the
 // configuration). It knows its session by FORCHETTA_AGENT and its tools by FORCHETTA_TEAM_TOOLS, and asks the
 // daemon, with the token of var/daemon.json, to do what a tool says: the daemon checks again who may do what.
 // No SDK: the closed list of dependencies has none, and initialize, tools/list and tools/call are enough.
@@ -76,12 +77,117 @@ export const TOOLS: Record<TeamTool, Tool> = {
       additionalProperties: false,
     },
   },
+  list_team_templates: {
+    name: 'list_team_templates',
+    description:
+      'The templates of teams of agents in Forchetta: the ones that come with it and the ones the user saved, with lead, members and models. With a name, that template in full, in the shape save_team_template takes: to change it and save it again.',
+    inputSchema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'The name of one template, to get it in full; none: all of them, one line each.' } },
+      additionalProperties: false,
+    },
+  },
+  save_team_template: {
+    name: 'save_team_template',
+    description: [
+      'Save a team of agents as a template of Forchetta: a lead and its members, each one a Claude Code session with its role, model and permissions. Use it when the user asks to create or set up a team in Forchetta, also from a document that describes the roles and their prompts: read the document, then save one template per team.',
+      'A template starts nothing: the user starts the team from the Forchetta app, choosing its folder, and sees the roles and permissions there first. Tell the user so.',
+      'Forchetta adds by itself who the lead and the members are and how requests, answers and questions travel between them (the tools send_request, wait_for_answers and ask_lead): the roles say only what each one does. Rules the whole team shares, longer than a role, belong in a CLAUDE.md in the folder of the team (Claude Code loads it in every session there): write that file yourself, it is not part of the template.',
+      'Forchetta checks the template as its panel does: what is wrong comes back as an error, to fix and save again.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', maxLength: CREW_NAME_MAX, description: `The name of the template, also the name the team gets; ${CREW_NAME_MAX} characters at most.` },
+        lead: {
+          type: 'object',
+          description: 'The lead: a Claude session that splits the work into requests to the members, or the user, who writes the requests from the app.',
+          properties: {
+            kind: { type: 'string', enum: ['claude', 'you'], description: '"claude": a lead session; "you": the user leads, from the app, and no lead session starts (name, role, model and mode are then ignored).' },
+            ...{
+  name: { type: 'string', maxLength: MEMBER_NAME_MAX, description: `Its name, also in the requests and in Claude Code: letters, digits, spaces, ".", "_" and "-", starting with a letter or a digit; ${MEMBER_NAME_MAX} characters at most, each one different.` },
+  role: {
+    type: 'string',
+    maxLength: ROLE_MAX,
+    description: `What it does: it goes into its system prompt after "Your role:", and the lead and the other members read it too, so write it in the third person ("Reviews the code…", not "You review…"). ${ROLE_MAX} characters at most.`,
+  },
+  model: { type: 'string', enum: [...MODELS], description: 'Its model; none: the model of the user.' },
+  mode: { type: 'string', enum: [...MODES], description: 'The permission mode of its session; none: the one of the user.' },
+},
+          },
+          required: ['kind'],
+          additionalProperties: false,
+        },
+        talk: {
+          type: 'string',
+          enum: ['twoway', 'oneway'],
+          description:
+            'How the members talk with the lead, unless a member says otherwise: "twoway", the final message of each request goes back to the lead and the member can ask it questions; "oneway", the member executes only. Default "twoway". Follow the document when it says; otherwise choose for each member (its own talk).',
+        },
+        worktrees: { type: 'boolean', description: 'Each member in a git worktree of its own (only in a git repository), unless a member says otherwise; the lead merges their branches. Default false: all in the folder of the team.' },
+        members: {
+          type: 'array',
+          minItems: 1,
+          maxItems: CREW_MAX_MEMBERS,
+          description: `The members, ${CREW_MAX_MEMBERS} at most: a bigger organization is several teams, one template each.`,
+          items: {
+            type: 'object',
+            properties: {
+              ...{
+  name: { type: 'string', maxLength: MEMBER_NAME_MAX, description: `Its name, also in the requests and in Claude Code: letters, digits, spaces, ".", "_" and "-", starting with a letter or a digit; ${MEMBER_NAME_MAX} characters at most, each one different.` },
+  role: {
+    type: 'string',
+    maxLength: ROLE_MAX,
+    description: `What it does: it goes into its system prompt after "Your role:", and the lead and the other members read it too, so write it in the third person ("Reviews the code…", not "You review…"). ${ROLE_MAX} characters at most.`,
+  },
+  model: { type: 'string', enum: [...MODELS], description: 'Its model; none: the model of the user.' },
+  mode: { type: 'string', enum: [...MODES], description: 'The permission mode of its session; none: the one of the user.' },
+},
+              talk: {
+                type: 'string',
+                enum: ['twoway', 'oneway'],
+                description:
+                  'Its own way of talking with the lead; none: the one of the team. "twoway" when the lead needs something back from it: a report, a verdict, facts or an answer to go on with, or when it may need to ask. "oneway" when its work shows in the files and the lead needs no report (formatting, running a fixed step, writing a text the lead does not check): it costs the lead no turn, but it cannot ask questions.',
+              },
+              worktree: { type: 'boolean', description: 'Its own choice of a git worktree; none: the one of the team.' },
+              paths: {
+                type: 'array',
+                items: { type: 'string' },
+                maxItems: PATHS_MAX,
+                description: 'The only files it may change, relative to the folder of the team: folders ("src/ui/"), files, or patterns ("*.test.ts", "docs/**"). Forchetta stops its edits elsewhere, and the edits of the other members there. None: any file no other member has.',
+              },
+              reviews: { type: 'boolean', description: 'It reviews the commits of the others and records a verdict on each; the lead merges only what it approved.' },
+            },
+            required: ['name', 'role'],
+            additionalProperties: false,
+          },
+        },
+        replace: { type: 'boolean', description: 'Replace a template of the user with the same name. Only when the user asked to change that template; otherwise a name already taken is refused.' },
+      },
+      required: ['name', 'lead', 'members'],
+      additionalProperties: false,
+    },
+  },
 };
 
 /** A route of the daemon (/api/crew/<route>): its JSON answer, also for a refusal. */
 export type Call = (route: string, body: Record<string, unknown>) => Promise<{ ok: boolean; error?: string; [key: string]: unknown }>;
 
 type Message = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
+
+/** What Claude Code is told of the server, for the tools the session has. */
+export function instructionsFor(tools: readonly TeamTool[]): string {
+  const team = tools.some((tool) => !TEMPLATE_TOOLS.includes(tool));
+  const templates = tools.some((tool) => TEMPLATE_TOOLS.includes(tool));
+  return [
+    ...(team ? ['The tools of your team of agents in Forchetta.'] : []),
+    ...(templates
+      ? [
+          'Forchetta, the control center of the Claude Code sessions of the user, runs this session. When the user asks to create or set up a team of agents in Forchetta, also from a document or an artifact that describes the roles and their prompts, save it as a template with save_team_template: the user then starts it from the app.',
+        ]
+      : []),
+  ].join(' ');
+}
 type Reply = { jsonrpc: '2.0'; id: string | number | null; result?: unknown; error?: { code: number; message: string } };
 
 const text = (value: string, isError = false) => ({ content: [{ type: 'text', text: value }], ...(isError ? { isError: true } : {}) });
@@ -101,7 +207,7 @@ export function createHandler(options: { agent: string; tools: readonly TeamTool
           protocolVersion: typeof asked === 'string' ? asked : '2025-06-18',
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: 'forchetta', version: VERSION },
-          instructions: 'The tools of your team of agents in Forchetta.',
+          instructions: instructionsFor(tools),
         });
       }
       case 'ping':
@@ -118,6 +224,15 @@ export function createHandler(options: { agent: string; tools: readonly TeamTool
             return ok(result.ok ? text(String(result.text)) : text(result.error ?? 'no answer from Forchetta', true));
           }
           if (name === 'wait_for_answers') return ok(await waitForAnswers(options, input));
+          if (name === 'list_team_templates') {
+            const result = await options.call('templates', { agent: options.agent, ...(typeof input.name === 'string' ? { name: input.name } : {}) });
+            return ok(result.ok ? text(String(result.text)) : text(result.error ?? 'no answer from Forchetta', true));
+          }
+          if (name === 'save_team_template') {
+            const { replace, ...template } = input;
+            const result = await options.call('template-save', { agent: options.agent, template, replace: replace === true });
+            return ok(result.ok ? text(String(result.text)) : text(`The template was not saved: ${result.error ?? 'no answer from Forchetta'}`, true));
+          }
           if (name === 'review') {
             const result = await options.call('review', { agent: options.agent, commit: input.commit, verdict: input.verdict, note: input.note });
             if (!result.ok) return ok(text(result.error ?? 'the verdict was not recorded', true));

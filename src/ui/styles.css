@@ -424,7 +424,6 @@ header.top {
 
 /* The moving layers get a layer of their own: a change of their opacity is then a property of that layer, with
    no repaint of the box. Only in the states that move. */
-.box[data-state='working'] .aura,
 .box[data-state='waiting'] .aura {
   will-change: opacity;
 }
@@ -433,11 +432,49 @@ header.top {
   will-change: transform;
 }
 
-/* At work: the border pulses slowly. */
+/* At work: the border lights a little, and orange dashes run along the bottom, like a progress bar with no end.
+   They run in CSS for their first cycles, then ambient.ts carries them on at 12 steps per second. */
 .box[data-state='working'] .aura {
-  border-color: rgba(232, 233, 235, 0.5);
-  opacity: 0.12;
-  animation: pulse 2.4s ease-in-out 2;
+  border-color: rgba(217, 119, 87, 0.6);
+  opacity: 0.45;
+}
+
+.busy {
+  position: absolute;
+  right: 14px;
+  bottom: 0;
+  left: 14px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.busy i {
+  display: block;
+  width: calc(100% + 16px);
+  height: 100%;
+  background: repeating-linear-gradient(90deg, var(--claude) 0 9px, transparent 9px 16px);
+}
+
+[data-state='working'] > .busy {
+  opacity: 1;
+}
+
+[data-state='working'] > .busy i {
+  will-change: transform;
+  animation: dashes 0.8s linear 4;
+}
+
+@keyframes dashes {
+  from {
+    transform: translateX(-16px);
+  }
+
+  to {
+    transform: translateX(0);
+  }
 }
 
 .box[data-state='working'] .state {
@@ -529,16 +566,6 @@ header.top {
   color: var(--text-2);
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 0.12;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-
 @keyframes breathe {
   0%,
   100% {
@@ -604,6 +631,10 @@ html[data-reduced-motion] .box[data-state='working'] .aura {
   opacity: 0.45 !important;
 }
 
+html[data-reduced-motion] .busy i {
+  transform: none !important;
+}
+
 html[data-reduced-motion] .box[data-state='waiting'] .aura,
 html[data-reduced-motion] .box[data-completed] .aura {
   opacity: 1 !important;
@@ -667,6 +698,102 @@ html[data-hidden] *::after {
   gap: 8px;
   width: 216px;
   overflow-y: auto;
+}
+
+/* ‹ hides the column, › shows it again: small, at the top, in sight while the boxes scroll. */
+.rail-toggle {
+  -webkit-appearance: none;
+  appearance: none;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: none;
+  align-self: flex-end;
+  width: 22px;
+  height: 20px;
+  margin-bottom: -4px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--bg);
+  font: 14px/1 var(--ui);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.rail-toggle:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+/* The hidden column: a thin strip, one square per session. */
+.rail.hidden {
+  align-items: center;
+  gap: 6px;
+  width: 30px;
+}
+
+.rail.hidden .rail-toggle {
+  align-self: center;
+  margin-bottom: 0;
+}
+
+.rail-mini {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font: 600 12px/1 var(--ui);
+  color: var(--session-color, var(--text-2));
+  cursor: pointer;
+}
+
+.rail-mini:hover,
+.rail-mini[data-open] {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+.rail-mini[data-state='working'] {
+  border-color: rgba(217, 119, 87, 0.55);
+}
+
+.rail-mini .busy {
+  right: 5px;
+  bottom: 3px;
+  left: 5px;
+}
+
+.rail-mini[data-state='waiting'] {
+  border-color: var(--accent);
+  background: var(--surface-waiting);
+  box-shadow: 0 0 0 2px rgba(240, 164, 60, 0.18);
+}
+
+.rail-mini[data-state='error'] {
+  border-color: var(--red);
+}
+
+.rail-mini[data-state='ended'] {
+  opacity: 0.42;
+}
+
+/* Finished since you last looked: a small green dot in the corner. */
+.rail-mini[data-unseen]::after {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  content: '';
 }
 
 .box.compact {
@@ -1366,7 +1493,24 @@ html[data-hidden] *::after {
 }
 
 .app.with-panes .broadcast {
+  /* With the panes the page does not scroll: a panel taller than its share of the window (a team of 7, say)
+     scrolls inside itself, and the panes keep the rest. */
+  flex: none;
+  max-height: 64vh;
   margin: 0 16px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The buttons of a new team stay in sight while its members scroll by. */
+.new-team > .broadcast-row.end {
+  position: sticky;
+  bottom: -14px;
+  z-index: 1;
+  margin: 0 -16px -14px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .broadcast-row {
@@ -1867,7 +2011,7 @@ html[data-hidden] *::after {
   color: var(--text);
 }
 
-/* The button of the subagents while one works: the pulse of a box at work, quicker, on a layer of its own so that
+/* The button of the subagents while one works: a quick pulse, on a layer of its own so that
    only its opacity changes. Its first cycles run here, then ambient.ts carries it on. */
 .files-button[data-working],
 .pane-files[data-working] {
@@ -2341,6 +2485,106 @@ html[data-hidden] *::after {
   content: '';
 }
 
+/* A team of agents: a line from the lead to each member (OrgLinks.tsx) instead of the bracket. The line says what
+   goes on between the two, in the colors of the thread of the team; an arrival flashes it twice and a dot runs
+   along it. Only an arrival moves, for about a second. */
+.org-group[data-crew] {
+  position: relative;
+}
+
+.org-group[data-crew] .org-leads::after,
+.org-group[data-crew] .org-members::before {
+  display: none;
+}
+
+.org-links {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.org-link {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.org-link[data-kind='queued'] {
+  stroke: var(--claude);
+  stroke-dasharray: 4 4;
+}
+
+.org-link[data-kind='working'] {
+  stroke: var(--claude);
+  stroke-width: 1.5;
+}
+
+.org-link[data-kind='answer'] {
+  stroke: var(--green);
+  stroke-width: 1.5;
+}
+
+.org-link[data-kind='question'] {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.org-flash {
+  --flash: var(--claude);
+}
+
+.org-flash[data-kind='answer'] {
+  --flash: var(--green);
+}
+
+.org-flash[data-kind='question'] {
+  --flash: var(--accent);
+}
+
+.org-flash path {
+  fill: none;
+  stroke: var(--flash);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: link-flash 1.3s ease-out 1;
+}
+
+.org-runner {
+  fill: var(--flash);
+  animation: runner-fade 1.3s linear 1 forwards;
+}
+
+@keyframes link-flash {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.9;
+  }
+  40% {
+    opacity: 0.2;
+  }
+  62% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes runner-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* A team led by you: you sit where the lead would, a small card, the bracket goes down to the members. */
 .org-you {
   padding: 10px 18px;
@@ -2420,6 +2664,13 @@ html[data-hidden] *::after {
 
 .broadcast button.template-delete {
   padding: 3px 4px;
+}
+
+/* The first click on × only asks: "delete?", in red; the second deletes. */
+.broadcast button.template-delete.armed {
+  padding: 3px 8px;
+  border-color: var(--red);
+  color: var(--red);
 }
 
 /* → executes / ⇄ answers: one click switches. Dimmed while it only follows the default of the team. */

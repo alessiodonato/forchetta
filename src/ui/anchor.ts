@@ -12,7 +12,7 @@ export function useMotionAnchor(element: { current: HTMLElement | null }, state:
     since.current = Date.now();
   }
   useLayoutEffect(() => {
-    for (const moved of Array.from(element.current?.querySelectorAll<HTMLElement>('.aura[style], .fill i[style]') ?? [])) {
+    for (const moved of Array.from(element.current?.querySelectorAll<HTMLElement>('.aura[style], .fill i[style], .busy i[style]') ?? [])) {
       moved.style.removeProperty('opacity');
       moved.style.removeProperty('transform');
     }

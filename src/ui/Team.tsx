@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type Agent, SESSION_COLOR_HEX, SESSION_COLORS, type SessionColor, TEAM_TEXT_MAX } from '../shared/agent.ts';
 import type { CrewSummary } from '../shared/crew.ts';
 import type { Store } from './store.ts';
+import { OrgLinks } from './OrgLinks.tsx';
 
 // Names, colors, groups and roles: a team of agents seen as a chart. The box sets them (TeamEditor); the daemon
 // keeps them, also for the folder of the session (daemon/teams.ts). The chart shows each group with its heads
@@ -172,8 +173,12 @@ export function OrgChart({ agents, crews = [], render }: { agents: readonly Agen
     <main class="org">
       {groups.map((group) => {
         const you = ledByYou(group, crews);
+        const linked = (group.leads.length > 0 || you) && group.members.length > 0;
+        // A team of agents draws a line to each member (OrgLinks); a group made by hand keeps the bracket.
+        const crew = linked && group.crew ? crews.find((item) => item.id === group.crew) : undefined;
         return (
-          <section key={group.name ?? ''} class="org-group" data-linked={(group.leads.length > 0 || you) && group.members.length > 0 ? '' : undefined}>
+          <section key={group.name ?? ''} class="org-group" data-linked={linked ? '' : undefined} data-crew={crew ? '' : undefined}>
+            {crew && <OrgLinks crew={crew} />}
             <h3 class="org-title">
               {group.name ?? 'No group'}
               <span class="org-count">{group.leads.length + group.members.length}</span>

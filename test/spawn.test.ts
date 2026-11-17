@@ -189,4 +189,35 @@ describe('spawnSession', () => {
     registry.dispose();
   });
 
+  it('a session not in a team gets the tools of templates, only reading allowed; a member that executes only gets none', async () => {
+    const out = join(temp.dir, 'modelli.txt');
+    const fake = join(temp.dir, 'claude-modelli');
+    writeFileSync(fake, `#!/bin/sh\n{ for a in "$@"; do printf '[%s]\\n' "$a"; done; printf 'fine\\n'; } >> '${out}'\nsleep 1\n`, { mode: 0o755 });
+    const registry = new Registry();
+    const options = { tmux, registry, claude: fake, log, shell: '/bin/bash', env: { PATH: '/usr/bin:/bin', HOME: join(temp.dir, 'home') }, watchMs: 400, teamMcp: { command: '/n/node', args: ['/F/team-mcp.js'] } };
+    const plain = await spawnSession(options, { cwd: temp.dir });
+    const waitFor = async (count: number) => {
+      for (let round = 0; round < 150; round++) {
+        try {
+          if (readFileSync(out, 'utf8').split('fine').length > count) return;
+        } catch {
+          // Not yet.
+        }
+        await sleep(100);
+      }
+    };
+    await waitFor(1);
+    const executes = await spawnSession(options, { cwd: temp.dir }, { name: 'writer', teamTools: [] });
+    await waitFor(2);
+    expect(plain.ok && executes.ok).toBe(true);
+    const plainId = (plain as { agentId: string }).agentId;
+    const mcpFile = join(paths.crewMcp, `${plainId}.json`);
+    const [first, second] = readFileSync(out, 'utf8').split('fine\n');
+    expect(first!.trimEnd().split('\n')).toEqual(['[--mcp-config]', `[${mcpFile}]`, '[--allowedTools]', '[mcp__forchetta__list_team_templates]']);
+    expect(JSON.parse(readFileSync(mcpFile, 'utf8')).mcpServers.forchetta.env.FORCHETTA_TEAM_TOOLS).toBe('list_team_templates,save_team_template');
+    expect(second!.trimEnd().split('\n')).toEqual(['[--name]', '[writer]']);
+    expect(existsSync(join(paths.crewMcp, `${(executes as { agentId: string }).agentId}.json`))).toBe(false);
+    rmSync(mcpFile, { force: true });
+    registry.dispose();
+  });
 });

@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { crewApi, CrewTemplates, Crews, shortRole } from '../src/daemon/crews.ts';
+import { crewApi, CrewTemplates, Crews, shortRole, templateApi } from '../src/daemon/crews.ts';
 import type { SpawnChoices, SpawnExtras } from '../src/daemon/spawn.ts';
 import { Teams } from '../src/daemon/teams.ts';
 import { newAgent } from '../src/daemon/state.ts';
 import type { Agent } from '../src/shared/agent.ts';
-import { BUILTIN_TEMPLATES, cleanTemplate, worktreeName, type CrewRequest, type CrewSummary, cleanCrewSpec, templateOf, type CrewSpec, crewLineOf, DEFAULT_LEAD_ROLE, effectiveTalk, leadPrompt, MAX_OPEN_DELIVERIES, memberPrompt, teamToolsFor, threadOf } from '../src/shared/crew.ts';
+import { BUILTIN_TEMPLATES, cleanTemplate, tooLong, worktreeName, type CrewRequest, type CrewSummary, cleanCrewSpec, templateOf, type CrewSpec, crewLineOf, DEFAULT_LEAD_ROLE, effectiveTalk, leadPrompt, MAX_OPEN_DELIVERIES, memberPrompt, teamToolsFor, threadOf } from '../src/shared/crew.ts';
 import { panesToOpen } from '../src/ui/store.ts';
 import { groupsOf, ledByYou, roleText } from '../src/ui/Team.tsx';
 import { entryHead, entryTag, recipientText, toggleRecipient } from '../src/ui/TeamRequests.tsx';
@@ -572,7 +572,7 @@ describe('templates of teams', () => {
   it('a template saved from a team starts the same team again: lead, members, roles, → / ⇄, models', async () => {
     const original = checked(spec({ members: [{ name: 'tester', role: 'Tests.', model: 'haiku', mode: 'acceptEdits' }, { name: 'formatter', role: 'Format.', talk: 'oneway', worktree: true }] }));
     const store = new CrewTemplates(join(temp.dir, 'templates.json'));
-    expect(store.save(templateOf({ ...original, members: original.members.map((m, i) => (i === 0 ? { ...m, talkNote: true } : m)) }))).toEqual({ ok: true, name: 'checkout' });
+    expect(store.save(templateOf({ ...original, members: original.members.map((m, i) => (i === 0 ? { ...m, talkNote: true } : m)) }))).toEqual({ ok: true, name: 'checkout', replaced: false });
     // Read back by a new daemon, put in the panel, created in another folder.
     const template = new CrewTemplates(join(temp.dir, 'templates.json')).list().find((item) => item.name === 'checkout')!;
     expect(template.members[0]).not.toHaveProperty('talkNote');
@@ -616,6 +616,77 @@ describe('templates of teams', () => {
     expect(new CrewTemplates(file).list().filter((template) => !template.builtin)).toEqual([]);
     expect(statSync(file).mode & 0o777).toBe(0o600);
     expect('error' in cleanTemplate({ name: '', lead: { kind: 'you' }, members: [{ name: 'a' }] })).toBe(true);
+  });
+});
+
+describe('templates saved by a session (the tools list_team_templates and save_team_template)', () => {
+  const bakery = {
+    name: 'Bakery',
+    lead: { kind: 'claude', name: 'chef', role: 'Leads the bakery.', model: 'opus', mode: 'acceptEdits' },
+    talk: 'twoway',
+    members: [
+      { name: 'baker', role: 'Bakes the bread.', model: 'sonnet' },
+      { name: 'cashier', role: 'Writes the texts.', talk: 'oneway', paths: ['cashier/'] },
+    ],
+  };
+
+  it('saves a template and says that nothing started, and where the user starts it; the page hears of it', () => {
+    const store = new CrewTemplates(join(temp.dir, 'templates-api.json'));
+    const saved: [string, boolean][] = [];
+    const result = templateApi(store, 'template-save', { agent: 'a1', template: bakery, replace: false }, (name, replaced) => saved.push([name, replaced]));
+    expect(result).toMatchObject({ status: 200, body: { ok: true, name: 'Bakery', replaced: false } });
+    expect((result!.body as { text: string }).text).toBe(
+      'Saved the template "Bakery": the lead chef and 2 members. Nothing has started. The user starts the team from the Forchetta app: "new team" (or "teams" → "+ new team"), Start from "Bakery", then the folder of the team and "Create team".',
+    );
+    expect(saved).toEqual([['Bakery', false]]);
+    expect(new CrewTemplates(join(temp.dir, 'templates-api.json')).find('bakery')).toMatchObject({ name: 'Bakery', lead: { name: 'chef', model: 'opus' }, members: [{ name: 'baker' }, { name: 'cashier', paths: ['cashier/'] }] });
+  });
+
+  it('a name already taken is refused unless the session says replace; the names of Forchetta never', () => {
+    const store = new CrewTemplates(join(temp.dir, 'templates-api-2.json'));
+    const saved: string[] = [];
+    const onSaved = (name: string) => saved.push(name);
+    expect(templateApi(store, 'template-save', { template: bakery }, onSaved)).toMatchObject({ status: 200 });
+    const again = { ...bakery, name: 'BAKERY', members: [{ name: 'solo', role: 'Does it all.' }] };
+    expect(templateApi(store, 'template-save', { template: again }, onSaved)).toMatchObject({ status: 400, body: { ok: false, error: expect.stringContaining('a template "BAKERY" already exists') } });
+    expect(store.find('bakery')!.members).toHaveLength(2);
+    expect(templateApi(store, 'template-save', { template: again, replace: true }, onSaved)).toMatchObject({ status: 200, body: { replaced: true, text: expect.stringMatching(/^Replaced the template "BAKERY": the lead chef and 1 member\./) } });
+    expect(store.list().filter((template) => !template.builtin).map((template) => template.name)).toEqual(['BAKERY']);
+    expect(templateApi(store, 'template-save', { template: { ...bakery, name: 'feature squad' }, replace: true }, onSaved)).toMatchObject({ status: 400, body: { error: expect.stringContaining('is a template of Forchetta') } });
+    expect(saved).toEqual(['Bakery', 'BAKERY']);
+  });
+
+  it('what the panel would cut short, or would refuse, comes back as an error to fix', () => {
+    const store = new CrewTemplates(join(temp.dir, 'templates-api-3.json'));
+    const save = (template: unknown) => (templateApi(store, 'template-save', { template }) as { body: { ok: boolean; error?: string } }).body;
+    expect(save({ ...bakery, members: [{ name: 'baker', role: 'x'.repeat(1001) }] })).toEqual({
+      ok: false,
+      error: '"baker": the role is 1001 characters, 1000 at most (the rules the whole team shares belong in a CLAUDE.md in its folder)',
+    });
+    expect(save({ ...bakery, lead: { ...bakery.lead, role: `  ${'y'.repeat(1000)}\n` } }).ok).toBe(true);
+    expect(save({ ...bakery, name: 'n'.repeat(41) }).error).toBe('the name of the team is 41 characters: 40 at most');
+    expect(save({ ...bakery, members: [{ name: 'a-very-long-name-for-a-member', role: 'x' }] }).error).toBe('"a-very-long-name-for-a-member": the name is 29 characters, 24 at most');
+    expect(save({ ...bakery, members: Array.from({ length: 7 }, (_, i) => ({ name: `m${i}`, role: 'x' })) }).error).toBe('6 members at most');
+    expect(save({ ...bakery, members: [{ name: 'a', role: 'x', model: 'claude-opus-5-5' }] }).error).toBe('a: invalid model');
+    expect(save({ ...bakery, members: [{ name: 'a', role: 'x', mode: 'bypassPermissions' }] }).error).toBe('a: invalid permission mode');
+    expect(save({ ...bakery, members: [{ name: 'a', role: 'x', paths: ['../outside'] }] }).error).toContain('must be inside the folder of the team');
+    expect(tooLong({ name: 'ok', members: [{ role: 'z'.repeat(1001) }] })).toContain('member 1: the role is 1001 characters');
+    expect(tooLong('nothing')).toBeUndefined();
+  });
+
+  it('lists the templates, one line each, and gives one in full in the shape it is saved', () => {
+    const store = new CrewTemplates(join(temp.dir, 'templates-api-4.json'));
+    templateApi(store, 'template-save', { template: bakery });
+    const list = (templateApi(store, 'templates', {})!.body as { text: string }).text.split('\n');
+    expect(list[0]).toContain('The user starts one from the app');
+    expect(list).toContain('- "developer + reviewer" (comes with Forchetta): lead lead; members: developer (own worktree), reviewer (own worktree, reviews)');
+    expect(list).toContain('- "Bakery": lead chef (opus, acceptEdits); members: baker (sonnet), cashier (executes only, files: cashier/)');
+    const one = (templateApi(store, 'templates', { name: ' bakery ' })!.body as { text: string }).text;
+    expect(one.split('\n')[0]).toBe('The template "Bakery":');
+    expect(JSON.parse(one.slice(one.indexOf('\n') + 1))).toEqual((cleanTemplate(bakery) as { template: object }).template);
+    expect((templateApi(store, 'templates', { name: 'feature squad' })!.body as { text: string }).text).toContain('comes with Forchetta: save a copy under another name');
+    expect(templateApi(store, 'templates', { name: 'nope' })).toMatchObject({ status: 400, body: { ok: false, error: expect.stringContaining('no template is called "nope"') } });
+    expect(templateApi(store, 'team', {})).toBeUndefined();
   });
 });
 

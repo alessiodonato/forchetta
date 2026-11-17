@@ -136,7 +136,15 @@ export const TEAM_MCP = 'forchetta';
 /** At most this many deliveries open at once in a team: a lead does not spend the plan before you see it. */
 export const MAX_OPEN_DELIVERIES = 20;
 
-export type TeamTool = 'team' | 'send_request' | 'wait_for_answers' | 'ask_lead' | 'review';
+export type TeamTool = 'team' | 'send_request' | 'wait_for_answers' | 'ask_lead' | 'review' | 'list_team_templates' | 'save_team_template';
+
+/**
+ * The tools of the templates of teams, for a session of Forchetta that is not in a team: it reads them, and saves
+ * one, say from a document that describes the roles. A template starts nothing: the user starts it from the app.
+ */
+export const TEMPLATE_TOOLS: readonly TeamTool[] = ['list_team_templates', 'save_team_template'];
+/** Of those, the one a session uses without asking: reading. Saving asks the user, as Claude Code asks for a tool. */
+export const TEMPLATE_TOOLS_ALLOWED = `mcp__${TEAM_MCP}__list_team_templates`;
 
 /**
  * The tools of the team a session gets: the Claude lead sends requests, a member that answers can ask, a member that
@@ -559,6 +567,32 @@ export function cleanTemplate(input: unknown): { template: CrewTemplate } | { er
   if ('error' in checked) return checked;
   const { cwd: _cwd, ...rest } = checked.spec;
   return { template: { ...rest, members: rest.members.map(({ talkNote: _note, pathsNote: _paths, ...member }) => member) } };
+}
+
+/**
+ * What cleanCrewSpec would cut short without a word (a name or a role too long), said for a caller that does not
+ * see the panel: a session that saves a template. Undefined when nothing is too long.
+ */
+export function tooLong(input: unknown): string | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const raw = input as Record<string, unknown>;
+  const lineLength = (value: unknown): number => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().length : 0);
+  const blockLength = (value: unknown): number => (typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim().length : 0);
+  const name = lineLength(raw.name);
+  if (name > CREW_NAME_MAX) return `the name of the team is ${name} characters: ${CREW_NAME_MAX} at most`;
+  const people: [string, unknown][] = [['the lead', raw.lead], ...(Array.isArray(raw.members) ? raw.members.map((member, index): [string, unknown] => [`member ${index + 1}`, member]) : [])];
+  for (const [what, item] of people) {
+    if (!item || typeof item !== 'object') continue;
+    const person = item as Record<string, unknown>;
+    const label = typeof person.name === 'string' && person.name.trim() ? `"${person.name.trim()}"` : what;
+    const nameLength = lineLength(person.name);
+    if (nameLength > MEMBER_NAME_MAX) return `${label}: the name is ${nameLength} characters, ${MEMBER_NAME_MAX} at most`;
+    const roleLength = blockLength(person.role);
+    if (roleLength > ROLE_MAX) {
+      return `${label}: the role is ${roleLength} characters, ${ROLE_MAX} at most (the rules the whole team shares belong in a CLAUDE.md in its folder)`;
+    }
+  }
+  return undefined;
 }
 
 /** A team as a template: what is needed to start it again, without its folder, its sessions and its requests. */

@@ -3,6 +3,7 @@ import { Limits, sharesOf } from '../src/daemon/limits.ts';
 import { applyHook, newAgent } from '../src/daemon/state.ts';
 import type { Agent } from '../src/shared/agent.ts';
 import { cornerTime, errorLine, folderText, limitParts, restLine, resultAt } from '../src/shared/present.ts';
+import { initialOf } from '../src/ui/Rail.tsx';
 import { Store } from '../src/ui/store.ts';
 
 // What a box says beyond its state: the line under the name, the time in its corner, the dot of a result not seen
@@ -109,3 +110,14 @@ describe('who spent the 5-hour window', () => {
     expect(alone?.title).not.toContain('What the sessions spent');
   });
 });
+
+describe('the square of a session in the hidden column', () => {
+  const named = (cwd: string, label?: string): Agent => ({ ...newAgent({ id: 'r1', cwd, control: { kind: 'tmux', session: 'fk-r1' }, state: 'idle' }, NOW), ...(label ? { team: { label } } : {}) });
+
+  it('shows the first letter of its name, in capitals, whole even outside ASCII', () => {
+    expect(initialOf(named('/Users/me/shop'))).toBe('S');
+    expect(initialOf(named('/Users/me/shop', 'èlite'))).toBe('È');
+    expect(initialOf(named('/Users/me/shop', '🍝 pasta'))).toBe('🍝');
+  });
+});
+

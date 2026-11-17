@@ -1,7 +1,8 @@
 import { motionAllowed, reducedMotion } from './motion.ts';
 
-// The endless state animations: the pulse of a box at work, the breath of a box waiting for you, the squeeze of
-// the context bar while compacting, the pulse of the button of the subagents while one works.
+// The endless state animations: the dashes that run along the bottom of a box at work, the breath of a box waiting
+// for you, the squeeze of the context bar while compacting, the pulse of the button of the subagents while one
+// works.
 //
 // On this hardware (Intel Mac, macOS 12) the window server spends about a quarter of a core on any animation at
 // 60 fps, and independent animations add up. So each one runs smoothly in CSS for its first seconds after a
@@ -19,16 +20,21 @@ interface Ambient {
   apply: (element: HTMLElement, elapsed: number) => void;
 }
 
+/** The dashes of a box at work: one dash and its gap (the CSS gradient), run in this time (the CSS keyframes). */
+const DASH_PX = 16;
+const DASH_MS = 800;
+
 /** 0 at the start of a cycle, 1 at its middle, 0 at its end: the shape of the ease-in-out keyframes. */
 const wave = (elapsed: number, period: number): number => (1 - Math.cos((2 * Math.PI * elapsed) / period)) / 2;
 
 const AMBIENTS: Ambient[] = [
   {
-    selector: '.box[data-state="working"] .aura',
-    period: 2400,
-    smoothCycles: 2,
+    // The box, the box in the column and the square of the hidden column.
+    selector: '[data-state="working"] > .busy i',
+    period: DASH_MS,
+    smoothCycles: 4,
     apply: (element, elapsed) => {
-      element.style.opacity = (0.12 + 0.68 * wave(elapsed, 2400)).toFixed(3);
+      element.style.transform = `translateX(${(((elapsed % DASH_MS) / DASH_MS - 1) * DASH_PX).toFixed(1)}px)`;
     },
   },
   {
@@ -94,7 +100,7 @@ export function stopAmbient(clear: boolean): void {
   if (timer !== undefined) clearInterval(timer);
   timer = undefined;
   if (!clear) return;
-  for (const element of Array.from(document.querySelectorAll<HTMLElement>('.aura[style], .fill i[style], .subagents-pulse[style]'))) {
+  for (const element of Array.from(document.querySelectorAll<HTMLElement>('.aura[style], .fill i[style], .busy i[style], .subagents-pulse[style]'))) {
     element.style.removeProperty('opacity');
     element.style.removeProperty('transform');
   }

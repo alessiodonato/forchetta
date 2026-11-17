@@ -1,6 +1,6 @@
 import { memo } from 'preact/compat';
 import { useRef } from 'preact/hooks';
-import { type Agent, displayName, STATE_LABEL, type UsageLimits } from '../shared/agent.ts';
+import { type Agent, displayName, SESSION_COLOR_HEX, STATE_LABEL, type UsageLimits } from '../shared/agent.ts';
 import { conflictsTitle, cornerTime, errorLine, stalledFor, stallText, waitingText } from '../shared/present.ts';
 import { useMotionAnchor } from './anchor.ts';
 import { heldBackText } from './Guard.tsx';
@@ -11,6 +11,8 @@ import { ColorDot } from './Team.tsx';
 
 // With panes open, the boxes become a column on the left: project, state, one line, time. They keep their state
 // colors and animations (the amber breath shows here too). A click opens or activates the pane of the session.
+// The column can be hidden: then a thin strip keeps one square per session, with its initial, its color and the
+// color of its state, so a session that waits for you still shows.
 
 function line(agent: Agent, now: number, limits: UsageLimits | undefined): string {
   if (agent.state === 'waiting') return waitingText(agent);
@@ -58,6 +60,9 @@ function CompactBoxView({ agent, now, open, onOpen, store, unseen, limits }: Pro
       }}
     >
       <span class="aura" aria-hidden="true" />
+      <span class="busy" aria-hidden="true">
+        <i />
+      </span>
       <span class="compact-head">
         <span class="project" title={agent.team?.label ? agent.project : undefined}>
           <ColorDot agent={agent} />
@@ -107,9 +112,73 @@ export const CompactBox = memo(CompactBoxView, (before, after) => {
   return cornerTime(before.agent, before.now)?.text === cornerTime(after.agent, after.now)?.text;
 });
 
-export function Rail({ agents, now, open, onOpen, store }: { agents: readonly Agent[]; now: number; open: readonly string[]; onOpen: (id: string) => void; store: Store }) {
+/** The first letter of the name of a session, for its square in the hidden column. */
+export function initialOf(agent: Agent): string {
+  return [...displayName(agent).trim()][0]?.toUpperCase() ?? '·';
+}
+
+/** A session in the hidden column: a square with its initial; its state in the border, its name on hover. */
+function MiniBox({ agent, open, onOpen, unseen }: { agent: Agent; open: boolean; onOpen: (id: string) => void; unseen: boolean }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const since = useMotionAnchor(ref, agent.state);
+  const color = agent.team?.color;
+  const label = `${displayName(agent)} · ${STATE_LABEL[agent.state]}${unseen ? ' · it finished since you last looked' : ''}`;
+  return (
+    <button
+      ref={ref}
+      type="button"
+      class="rail-mini"
+      data-state={agent.state}
+      data-since={since}
+      data-open={open ? '' : undefined}
+      data-unseen={unseen ? '' : undefined}
+      title={label}
+      aria-label={label}
+      style={color ? { '--session-color': SESSION_COLOR_HEX[color] } : undefined}
+      onClick={() => onOpen(agent.id)}
+    >
+      {initialOf(agent)}
+      <span class="busy" aria-hidden="true">
+        <i />
+      </span>
+    </button>
+  );
+}
+
+export function Rail({
+  agents,
+  now,
+  open,
+  onOpen,
+  store,
+  hidden,
+  onToggle,
+}: {
+  agents: readonly Agent[];
+  now: number;
+  open: readonly string[];
+  onOpen: (id: string) => void;
+  store: Store;
+  hidden: boolean;
+  onToggle: () => void;
+}) {
+  if (hidden) {
+    return (
+      <nav class="rail hidden" aria-label="Sessions">
+        <button type="button" class="rail-toggle" title="Show the column of sessions" aria-expanded="false" onClick={onToggle}>
+          ›
+        </button>
+        {agents.map((agent) => (
+          <MiniBox key={agent.id} agent={agent} open={open.includes(agent.id)} onOpen={onOpen} unseen={store.unseen(agent)} />
+        ))}
+      </nav>
+    );
+  }
   return (
     <nav class="rail" aria-label="Sessions">
+      <button type="button" class="rail-toggle" title="Hide the column of sessions: the panes take its room" aria-expanded="true" onClick={onToggle}>
+        ‹
+      </button>
       {agents.map((agent) => (
         <CompactBox
           key={agent.id}

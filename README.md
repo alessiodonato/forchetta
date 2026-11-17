@@ -72,7 +72,7 @@ Start a session with `forchetta run claude`, or from the app, and Forchetta can 
 
 ### Teams, when you want them
 
-A lead, which is a Claude session or you, and up to 6 members. Each member is a full Claude Code session with its own role and model, and by default its own worktree. The lead hands out requests through an MCP server; members answer, or ask the lead when they're stuck. Give a member its own files, and the guard keeps it in them and the others out of them. A member that reviews approves commits, and the guard asks you before a merge of anything it did not approve. Save a team as a template and start it again in another project. [Teams in the manual](https://forchetta.dev/manual.html#teams).
+A lead, which is a Claude session or you, and up to 6 members. Each member is a full Claude Code session with its own role and model, and by default its own worktree. The lead hands out requests through an MCP server; members answer, or ask the lead when they're stuck. Give a member its own files, and the guard keeps it in them and the others out of them. A member that reviews approves commits, and the guard asks you before a merge of anything it did not approve. Save a team as a template and start it again in another project, or describe your teams in a document and ask any session to set them up: it saves the templates, and you start them from the app. [Teams in the manual](https://forchetta.dev/manual.html#teams).
 
 ## How it compares
 
@@ -98,7 +98,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.9.7. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.9.8. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

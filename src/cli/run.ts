@@ -1,10 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { rmSync, writeFileSync } from 'node:fs';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, resolveTool } from '../shared/config.ts';
+import { TEMPLATE_TOOLS, TEMPLATE_TOOLS_ALLOWED } from '../shared/crew.ts';
 import { api, ensureDaemon } from '../shared/daemon-client.ts';
 import { UserError } from '../shared/errors.ts';
+import { mcpConfigFile, writeMcpConfig } from '../shared/mcp-config.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import { Tmux, tmuxSessionName } from '../shared/tmux.ts';
 import { envFileText, paneEnv } from './pane-env.ts';
@@ -29,6 +31,17 @@ function clientEnv(): NodeJS.ProcessEnv {
   delete env.TMUX_PANE;
   return env;
 }
+
+/**
+ * Whether the session gets the tools of templates (mcp/team.ts): their options go first, and the next option of
+ * claude or "--" closes them, since they take several values. So only when claude starts with an option or with
+ * nothing: a first word may be a subcommand (`claude mcp list`), which refuses them, or a prompt, which
+ * --allowedTools would take for one more tool.
+ */
+export const takesTemplateTools = (claudeArgs: readonly string[]): boolean => claudeArgs.length === 0 || claudeArgs[0]!.startsWith('-');
+
+/** The options of claude for the tools of templates: their MCP configuration, and reading allowed without asking. */
+export const templateToolArgs = (configFile: string): string[] => ['--mcp-config', configFile, '--allowedTools', TEMPLATE_TOOLS_ALLOWED];
 
 export async function runClaude(args: string[], io: RunIO): Promise<number> {
   if (args[0] !== 'claude') {
@@ -69,16 +82,23 @@ export async function runClaude(args: string[], io: RunIO): Promise<number> {
 
   const envFile = join(paths.runDir, `${id}.env`);
   writeFileSync(envFile, envFileText(paneEnv(process.env, id)), { mode: 0o600 });
+  // The tools of templates, as for a session started from the app; the daemon takes the file away when it forgets
+  // the session.
+  const tools =
+    takesTemplateTools(args.slice(1)) && existsSync(paths.teamMcpJs)
+      ? templateToolArgs(writeMcpConfig({ command: resolveTool('node', config), args: [paths.teamMcpJs] }, id, TEMPLATE_TOOLS))
+      : [];
 
   const columns = process.stdout.columns || 120;
   const rows = process.stdout.rows || 40;
   const created = spawnSync(
     tmuxBin,
-    tmux.argv('new-session', ['-d', '-s', session, '-c', cwd, '-x', String(columns), '-y', String(rows), '--', '/bin/sh', paths.execScript, envFile, '--', claude, ...args.slice(1)]),
+    tmux.argv('new-session', ['-d', '-s', session, '-c', cwd, '-x', String(columns), '-y', String(rows), '--', '/bin/sh', paths.execScript, envFile, '--', claude, ...tools, ...args.slice(1)]),
     { stdio: ['ignore', 'ignore', 'pipe'], env: clientEnv() },
   );
   if (created.status !== 0) {
     rmSync(envFile, { force: true });
+    rmSync(mcpConfigFile(id), { force: true });
     throw new UserError(`tmux did not create the session: ${String(created.stderr).trim() || `code ${created.status}`}`);
   }
 

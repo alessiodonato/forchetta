@@ -4,7 +4,8 @@ import { homedir, userInfo } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { envFileText, paneEnv } from '../cli/pane-env.ts';
 import type { TeamInfo } from '../shared/agent.ts';
-import { MODELS, MODES, TEAM_MCP } from '../shared/crew.ts';
+import { MODELS, MODES, TEAM_MCP, TEMPLATE_TOOLS, TEMPLATE_TOOLS_ALLOWED } from '../shared/crew.ts';
+import { type TeamMcpServer, writeMcpConfig } from '../shared/mcp-config.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import { type Tmux, tmuxSessionName } from '../shared/tmux.ts';
 import type { Registry } from './registry.ts';
@@ -63,7 +64,7 @@ export interface SpawnOptions {
   env?: NodeJS.ProcessEnv;
   shell?: string;
   log: (message: string) => void;
-  /** The MCP server of the tools of a team, for the sessions that get them. */
+  /** The MCP server of Forchetta: the tools of a team for its sessions, the tools of templates for the others. */
   teamMcp?: TeamMcpServer;
 }
 
@@ -103,38 +104,14 @@ export interface SpawnExtras {
   name?: string;
   /** Its place in the team, set before it starts: the box is in its group from the first moment. */
   team?: TeamInfo;
-  /** The tools of its team (mcp/team.ts), when it has some: an MCP server of its own, allowed without asking. */
+  /**
+   * The tools of its team (mcp/team.ts): an MCP server of its own, allowed without asking. None for a member that
+   * executes only; undefined for a session not in a team, which gets the tools of templates.
+   */
   teamTools?: readonly string[];
 }
 
-/** How long Claude Code lets a call to a tool of the team run: the longest wait for answers, and a margin. */
-export const TEAM_MCP_TIMEOUT_MS = 11 * 60_000;
-
-/** How Claude Code starts the MCP server of the tools of a team: node and its script. */
-export interface TeamMcpServer {
-  command: string;
-  args: string[];
-}
-
-/**
- * The MCP configuration of one session: the server knows the session by FORCHETTA_AGENT, the daemon by
- * FORCHETTA_VAR, and its tools by FORCHETTA_TEAM_TOOLS (Claude Code lists them once, when the daemon may be
- * restarting; the daemon still checks every call).
- */
-export function teamMcpConfig(server: TeamMcpServer, agentId: string, varDir: string, tools: readonly string[]): object {
-  return {
-    mcpServers: {
-      [TEAM_MCP]: {
-        type: 'stdio',
-        command: server.command,
-        args: server.args,
-        env: { FORCHETTA_AGENT: agentId, FORCHETTA_VAR: varDir, FORCHETTA_TEAM_TOOLS: tools.join(',') },
-        // wait_for_answers waits up to 10 minutes: more than the default time of a call to a tool.
-        timeout: TEAM_MCP_TIMEOUT_MS,
-      },
-    },
-  };
-}
+export { TEAM_MCP_TIMEOUT_MS, type TeamMcpServer, teamMcpConfig } from '../shared/mcp-config.ts';
 
 export async function spawnSession(options: SpawnOptions, input: { cwd: unknown; prompt?: unknown } & SpawnChoices, extras: SpawnExtras = {}): Promise<SpawnResult> {
   const { tmux, registry, claude, log } = options;
@@ -164,13 +141,12 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   // Like the prompt, the texts of a team go through the private env file: forchetta-start gives them to claude.
   if (extras.system) env.FORCHETTA_SYSTEM_PROMPT = extras.system;
   if (extras.name) env.FORCHETTA_NAME = extras.name;
-  if (extras.teamTools?.length && options.teamMcp) {
+  // The tools of its team, all allowed; or, out of a team, the tools of templates, of which only reading is.
+  const tools = extras.teamTools ?? TEMPLATE_TOOLS;
+  if (tools.length > 0 && options.teamMcp) {
     // Its own file, kept while the session lives: Claude Code starts the server again after /clear.
-    ensurePrivateDir(paths.crewMcp);
-    const mcpFile = join(paths.crewMcp, `${id}.json`);
-    writeFileSync(mcpFile, `${JSON.stringify(teamMcpConfig(options.teamMcp, id, paths.varDir, extras.teamTools), null, 2)}\n`, { mode: 0o600 });
-    env.FORCHETTA_MCP_CONFIG = mcpFile;
-    env.FORCHETTA_ALLOWED_TOOLS = `mcp__${TEAM_MCP}`;
+    env.FORCHETTA_MCP_CONFIG = writeMcpConfig(options.teamMcp, id, tools);
+    env.FORCHETTA_ALLOWED_TOOLS = extras.teamTools ? `mcp__${TEAM_MCP}` : TEMPLATE_TOOLS_ALLOWED;
   }
   writeFileSync(envFile, envFileText(env), { mode: 0o600 });
 
