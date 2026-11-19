@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { crewApi, CrewTemplates, Crews, shortRole, templateApi } from '../src/daemon/crews.ts';
+import { crewApi, CrewTemplates, Crews, RESTORED_WAIT_GRACE_MS, shortRole, templateApi } from '../src/daemon/crews.ts';
 import type { SpawnChoices, SpawnExtras } from '../src/daemon/spawn.ts';
 import { Teams } from '../src/daemon/teams.ts';
 import { newAgent } from '../src/daemon/state.ts';
@@ -897,7 +897,8 @@ describe('members in worktrees of their own', () => {
 describe('the lead waits for its answers', () => {
   // Lead agent-1, tester agent-2 (answers), formatter agent-3 (executes only).
   const started = async () => {
-    const crews = new Crews(join(temp.dir, `wait-${Math.random()}`));
+    const dir = join(temp.dir, `wait-${Math.random()}`);
+    const crews = new Crews(dir);
     let next = 0;
     const result = await crews.create(checked(spec()), async () => ({ ok: true as const, agentId: `agent-${++next}` }));
     const queued: { agentId: string; text: string; id: string }[] = [];
@@ -906,7 +907,7 @@ describe('the lead waits for its answers', () => {
       queued.push({ agentId, text, id: command.id });
       return { ok: true, command };
     };
-    return { crews, crewId: result.crewId!, queued };
+    return { crews, crewId: result.crewId!, queued, dir };
   };
   const agentIn = (id: string, crew: string): Agent => ({ ...newAgent({ id, control: { kind: 'tmux', session: `fk-${id}` } }, 0), team: { crew } });
   const working = (crews: Crews, crewId: string, queued: { id: string; text: string }[], index: number, n: number) =>
@@ -967,6 +968,47 @@ describe('the lead waits for its answers', () => {
       vi.advanceTimersByTime(91_000);
       expect(queued.at(-1)).toMatchObject({ agentId: 'agent-1', text: 'Answer from tester to request #1:\nTested.' });
       expect(crews.get(crewId)!.requests![0]!.deliveries[0]!.reply).toMatchObject({ status: 'queued' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a restart of the daemon keeps the wait and the answers it holds: the lead collects them as before', async () => {
+    const { crews, crewId, queued, dir } = await started();
+    crews.requestFrom('agent-1', ['tester'], 'Test it.');
+    working(crews, crewId, queued, 0, 1);
+    const id = (crews.startWait('agent-1', undefined, 5) as { id: string }).id;
+    crews.hook(agentIn('agent-2', crewId), { hook_event_name: 'Stop', session_id: 's', last_assistant_message: 'Tested.' });
+    expect(crews.get(crewId)!.requests![0]!.deliveries[0]!.reply).toEqual({ status: 'held' });
+    expect(crews.get(crewId)!.waits).toEqual([{ id, by: 'agent-1', requests: [1], until: expect.any(Number) }]);
+    // The daemon stops and starts: a new Crews reads the files.
+    const again = new Crews(dir);
+    expect(await again.pollWait(id, 10)).toEqual({ ok: true, done: true, open: [], answers: [{ n: 1, from: 'tester', status: 'done', talk: 'twoway', answer: 'Tested.' }] });
+    expect(again.get(crewId)!.requests![0]!.deliveries[0]!.reply).toEqual({ status: 'delivered', byWait: true });
+    expect(again.get(crewId)!.waits).toBeUndefined();
+    expect(new Crews(dir).get(crewId)!.waits).toBeUndefined();
+  });
+
+  it('a wait taken up again that nobody collects gives its held answers to the lead as prompts', async () => {
+    const { crews, crewId, queued, dir } = await started();
+    crews.requestFrom('agent-1', ['tester'], 'Test it.');
+    working(crews, crewId, queued, 0, 1);
+    crews.startWait('agent-1', undefined, 1);
+    crews.hook(agentIn('agent-2', crewId), { hook_event_name: 'Stop', session_id: 's', last_assistant_message: 'Tested.' });
+    vi.useFakeTimers();
+    try {
+      const again = new Crews(dir);
+      const prompts: { agentId: string; text: string }[] = [];
+      again.enqueue = (agentId, text, link) => {
+        prompts.push({ agentId, text });
+        return { ok: true, command: { id: 'cmd-x', kind: 'request', arg: text, request: link, status: 'in-coda', createdAt: 0 } };
+      };
+      vi.advanceTimersByTime(RESTORED_WAIT_GRACE_MS - 1_000);
+      expect(prompts).toEqual([]);
+      vi.advanceTimersByTime(31_000);
+      expect(prompts).toEqual([{ agentId: 'agent-1', text: 'Answer from tester to request #1:\nTested.' }]);
+      expect(again.get(crewId)!.requests![0]!.deliveries[0]!.reply).toMatchObject({ status: 'queued' });
+      expect(again.get(crewId)!.waits).toBeUndefined();
     } finally {
       vi.useRealTimers();
     }

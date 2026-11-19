@@ -3809,3 +3809,17 @@ html[data-hidden] *::after {
   max-width: 640px;
   margin: 6px 0 0;
 }
+
+/* ↶ ↷ in the top bar of the studio. */
+.studio-top .studio-undo {
+  padding: 0 6px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* The folder of a skill of yours, in its card. */
+.studio-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

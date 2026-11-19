@@ -6,6 +6,7 @@ import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, To
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate, ReviewRecord, RolePreset } from '../shared/crew.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
+import type { SkillInfo } from '../shared/skills.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
 // that changed and the ids of those that went away. The page tells whether its window can be seen, so that the
@@ -14,7 +15,7 @@ import type { QuickPrompt } from '../shared/prompts.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo }
   /** What you selected with the mouse in a pane, for the window where you did it. */
   | { type: 'selection'; now: number; agentId: string; text: string }
   /** How a question or a text from the menu of a selection went: queued, put in the prompt, or why not. */
@@ -29,6 +30,10 @@ export type ServerMessage =
   | { type: 'crewTemplates'; now: number; templates: CrewTemplate[] }
   /** The presets of agents of the studio, after one was saved or deleted. */
   | { type: 'crewRoles'; now: number; roles: RolePreset[] }
+  /** The skills you added, after a change: next to the catalog. */
+  | { type: 'customSkills'; now: number; skills: SkillInfo[] }
+  /** How adding or taking away a skill of yours went, for the window that asked. */
+  | { type: 'skillEdited'; now: number; action: 'add' | 'remove'; ok: boolean; error?: string; id?: string }
   /** The folder chosen in the panel of macOS, for the window that asked (chooseFolder). */
   | { type: 'folderChosen'; now: number; path: string }
   /** How a change of a team went (a member added, taken away, → / ⇄), or a template saved: for the window that asked. */
@@ -105,6 +110,9 @@ export type ClientMessage =
   | { type: 'saveRolePreset'; preset: unknown; previous?: string }
   | { type: 'deleteRolePreset'; name: string }
   | { type: 'recall'; id: number; project: string; query: string }
+  /** A skill of yours, from a link of GitHub or a folder of this Mac; or taken away. */
+  | { type: 'addSkill'; source: string }
+  | { type: 'removeSkill'; id: string }
   /** The panel of macOS for a folder, from a page in a browser (the app has its own), starting at `folder`. */
   | { type: 'chooseFolder'; folder?: string }
   /** Run `claude update`, or hide the line of the last one. */
@@ -148,6 +156,10 @@ export interface HubOptions {
   /** The presets of agents of the studio, and saving or deleting one. */
   roles?: () => RolePreset[];
   onRole?: (message: Extract<ClientMessage, { type: 'saveRolePreset' | 'deleteRolePreset' }>) => { ok: boolean; error?: string };
+  /** The skills you added, and adding or taking one away. */
+  customSkills?: () => readonly SkillInfo[];
+  onAddSkill?: (source: string) => Promise<{ ok: boolean; error?: string; id?: string }>;
+  onRemoveSkill?: (id: string) => { ok: boolean; error?: string };
   /** The folder chosen in the panel of macOS; undefined if cancelled. */
   onChooseFolder?: (folder: string | undefined) => Promise<string | undefined>;
   /** A request from you to a team. */
@@ -217,6 +229,7 @@ export class Hub {
       crews: this.options.crews?.(),
       templates: this.options.templates?.(),
       roles: this.options.roles?.(),
+      skills: this.options.customSkills ? [...this.options.customSkills()] : undefined,
       claudeUpdate: this.options.claudeUpdate?.(),
       prompts: this.options.prompts?.(),
       limits: this.limits,
@@ -313,6 +326,18 @@ export class Hub {
               : this.options.onRole({ type: 'deleteRolePreset', name: String(message.name ?? '') });
           this.send(ws, { type: 'crewEdited', now: Date.now(), action: message.type, ...result });
           if (result.ok) this.broadcast({ type: 'crewRoles', now: Date.now(), roles: this.options.roles?.() ?? [] });
+        } else if (message.type === 'addSkill' && this.options.onAddSkill) {
+          void this.options.onAddSkill(String(message.source ?? '').slice(0, 2048)).then(
+            (result) => {
+              this.send(ws, { type: 'skillEdited', now: Date.now(), action: 'add', ok: result.ok, ...(result.error ? { error: result.error } : {}), ...(result.id ? { id: result.id } : {}) });
+              if (result.ok) this.broadcast({ type: 'customSkills', now: Date.now(), skills: [...(this.options.customSkills?.() ?? [])] });
+            },
+            (error: unknown) => this.send(ws, { type: 'skillEdited', now: Date.now(), action: 'add', ok: false, error: String(error) }),
+          );
+        } else if (message.type === 'removeSkill' && this.options.onRemoveSkill) {
+          const result = this.options.onRemoveSkill(String(message.id ?? ''));
+          this.send(ws, { type: 'skillEdited', now: Date.now(), action: 'remove', ok: result.ok, ...(result.error ? { error: result.error } : {}) });
+          if (result.ok) this.broadcast({ type: 'customSkills', now: Date.now(), skills: [...(this.options.customSkills?.() ?? [])] });
         } else if (message.type === 'chooseFolder' && this.options.onChooseFolder) {
           void this.options.onChooseFolder(typeof message.folder === 'string' ? message.folder.slice(0, 4096) : undefined).then(
             (path) => {

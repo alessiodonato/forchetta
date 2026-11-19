@@ -9,17 +9,23 @@ import {
   connect,
   docOfTemplate,
   emptyDoc,
+  emptyHistory,
   fieldsOf,
+  HISTORY_MAX,
+  HISTORY_PAUSE_MS,
   leadKey,
   NODE_H,
   NODE_W,
   nodeAt,
   problems,
+  redoStep,
+  remember,
   removeNode,
   specOfDoc,
   type StudioDoc,
   templateOfDoc,
   tidy,
+  undoStep,
   uniqueName,
   updateLink,
 } from '../src/ui/studio-model.ts';
@@ -203,5 +209,48 @@ describe('the presets of the studio', () => {
     expect(templates.list().filter((template) => template.name === pair.name)).toHaveLength(1);
     expect(templates.delete(pair.name)).toEqual({ ok: true });
     expect(templates.list()[0]).toEqual(pair);
+  });
+});
+
+describe('undo and redo in the studio', () => {
+  it('makes changes in a row one step, and a pause starts the next one', () => {
+    const one = canvas('manager').doc;
+    const two = canvas('manager', 'senior').doc;
+    const three = canvas('manager', 'senior', 'junior').doc;
+    // Typing a role: three changes in a row, then one after a pause.
+    let history = remember(emptyHistory(), one, 1_000);
+    history = remember(history, two, 1_000 + HISTORY_PAUSE_MS / 2);
+    history = remember(history, three, 1_000 + HISTORY_PAUSE_MS);
+    expect(history.past).toEqual([one]);
+    history = remember(history, three, 1_000 + 3 * HISTORY_PAUSE_MS);
+    expect(history.past).toEqual([one, three]);
+  });
+
+  it('goes back and forth, and a new change after an undo forgets what could be redone', () => {
+    const one = canvas('manager').doc;
+    const two = canvas('manager', 'senior').doc;
+    const three = canvas('manager', 'senior', 'junior').doc;
+    let history = remember(remember(emptyHistory(), one, 0), two, 10_000);
+    expect(undoStep(emptyHistory(), three)).toBeUndefined();
+    const back = undoStep(history, three)!;
+    expect(back.doc).toBe(two);
+    const backAgain = undoStep(back.history, back.doc)!;
+    expect(backAgain.doc).toBe(one);
+    expect(undoStep(backAgain.history, one)).toBeUndefined();
+    const forward = redoStep(backAgain.history, one)!;
+    expect(forward.doc).toBe(two);
+    expect(redoStep(forward.history, two)!.doc).toBe(three);
+    // A change right after an undo is a step of its own, and there is nothing to redo any more.
+    history = remember(back.history, back.doc, 10_001);
+    expect(history.future).toEqual([]);
+    expect(history.past).toEqual([one, two]);
+  });
+
+  it('keeps the last 100 steps', () => {
+    let history = emptyHistory();
+    const docs = Array.from({ length: HISTORY_MAX + 20 }, (_, i) => ({ ...emptyDoc(''), name: `step ${i}` }));
+    for (const [i, doc] of docs.entries()) history = remember(history, doc, i * 10_000);
+    expect(history.past).toHaveLength(HISTORY_MAX);
+    expect(history.past[0]!.name).toBe('step 20');
   });
 });

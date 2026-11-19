@@ -4,9 +4,10 @@
 // only (claude --plugin-dir). The folder of the project stays as it was, and an agent carries only the names and
 // descriptions of its own skills until it uses one. No Node module here: the page uses it too.
 
-export type SkillGroup = 'plan' | 'build' | 'quality' | 'review' | 'security' | 'test' | 'docs';
+export type SkillGroup = 'yours' | 'plan' | 'build' | 'quality' | 'review' | 'security' | 'test' | 'docs';
 
 export const SKILL_GROUPS: readonly [SkillGroup, string][] = [
+  ['yours', 'Yours'],
   ['plan', 'Plan'],
   ['build', 'Build'],
   ['quality', 'Debug & quality'],
@@ -26,7 +27,13 @@ export interface SkillInfo {
   path: string;
   /** The commit it is taken from: the version that was checked, never a branch that moves. */
   commit: string;
-  license: 'MIT' | 'Apache-2.0' | 'CC-BY-SA-4.0';
+  /** Of the catalog: checked. Of yours: unknown, it is in its repository. */
+  license: 'MIT' | 'Apache-2.0' | 'CC-BY-SA-4.0' | 'unknown';
+  /**
+   * One of yours from a folder of this Mac: used where it is (no repository, no commit), so your changes count from
+   * the next session that has it.
+   */
+  local?: string;
   /** How much it weighs, in KB, and in how many files: what the first use downloads. */
   kb: number;
   files: number;
@@ -80,7 +87,22 @@ export const SKILLS: readonly SkillInfo[] = [
 /** At most this many skills for one agent: each one adds its name and description to what the session carries. */
 export const SKILLS_PER_AGENT_MAX = 8;
 
-export const skillById = (id: string): SkillInfo | undefined => SKILLS.find((skill) => skill.id === id);
+/**
+ * The skills you added (daemon/custom-skills.ts): from a link of GitHub, at the commit of when you added it, or from a
+ * folder of this Mac. The daemon keeps them and says them to the page; both put them here, next to the catalog.
+ */
+let yours: readonly SkillInfo[] = [];
+
+export function setCustomSkills(skills: readonly SkillInfo[]): void {
+  yours = skills;
+}
+
+export const customSkills = (): readonly SkillInfo[] => yours;
+
+/** Yours first, then the catalog. */
+export const allSkills = (): readonly SkillInfo[] => [...yours, ...SKILLS];
+
+export const skillById = (id: string): SkillInfo | undefined => SKILLS.find((skill) => skill.id === id) ?? yours.find((skill) => skill.id === id);
 
 /** Where a skill is on GitHub, at its commit: for the page, and for you to read it before using it. */
 export const skillUrl = (skill: Pick<SkillInfo, 'repo' | 'commit' | 'path'>): string => `https://github.com/${skill.repo}/tree/${skill.commit}/${skill.path}`;
@@ -93,7 +115,7 @@ export function cleanSkills(raw: unknown): { skills?: string[] } | { error: stri
   for (const item of raw) {
     const id = typeof item === 'string' ? item.trim().toLowerCase() : '';
     if (!id) continue;
-    if (!skillById(id)) return { error: `the skill "${String(item).slice(0, 40)}" is not in the catalog of Forchetta` };
+    if (!skillById(id)) return { error: `the skill "${String(item).slice(0, 40)}" is not in the catalog of Forchetta, nor among the skills the user added` };
     if (!out.includes(id)) out.push(id);
   }
   if (out.length > SKILLS_PER_AGENT_MAX) return { error: `${SKILLS_PER_AGENT_MAX} skills at most for one agent` };

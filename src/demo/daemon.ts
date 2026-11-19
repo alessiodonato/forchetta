@@ -177,6 +177,9 @@ export class DemoDaemon {
       onTemplate: (message) => (message.type === 'deleteCrewTemplate' ? this.templates.delete(message.name) : this.templates.save(message.template, { override: true })),
       roles: () => this.roles.list(),
       onRole: (message) => (message.type === 'deleteRolePreset' ? this.roles.delete(message.name) : this.roles.save(message.preset, message.previous)),
+      // No git and no folders of yours in a browser: the demo says what it would do.
+      customSkills: () => [],
+      onAddSkill: async () => ({ ok: false, error: 'Not in the demo: on your Mac, Forchetta fetches the folder of the skill from GitHub at the commit of now, or uses your folder where it is.' }),
       // No panel of macOS in a browser: the demo "chooses" the folder written, if it is a project, or the first one.
       onChooseFolder: async (folder) => {
         await new Promise((resolve) => setTimeout(resolve, 350));

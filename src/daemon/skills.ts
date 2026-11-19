@@ -26,9 +26,9 @@ export const gitRunner =
       });
     });
 
-const slug = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+export const slug = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-function bytesOf(dir: string): number {
+export function bytesOf(dir: string): number {
   let total = 0;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
@@ -52,9 +52,16 @@ export class SkillCache {
     private readonly catalog: (id: string) => SkillInfo | undefined = skillById,
   ) {}
 
-  /** Where a skill of the catalog is kept. */
-  folderOf(skill: Pick<SkillInfo, 'id' | 'repo' | 'commit'>): string {
+  /** Where a skill is kept: in the cache, at its commit; one of yours from a folder, in that folder. */
+  folderOf(skill: Pick<SkillInfo, 'id' | 'repo' | 'commit' | 'local'>): string {
+    if (skill.local) return skill.local;
     return join(this.dir, 'cache', `${slug(skill.repo)}-${skill.commit.slice(0, 12)}`, skill.id);
+  }
+
+  /** Fetches one skill that is not in the catalog yet (one you add): into the cache, at its commit. */
+  async fetchOne(skill: SkillInfo): Promise<void> {
+    if (skill.local || existsSync(join(this.folderOf(skill), 'SKILL.md'))) return;
+    await this.fetch([skill]);
   }
 
   has(id: string): boolean {
@@ -69,6 +76,7 @@ export class SkillCache {
     for (const id of new Set(ids)) {
       const skill = this.catalog(id);
       if (!skill) failed.push({ id, error: 'not in the catalog' });
+      else if (skill.local && !this.has(id)) failed.push({ id, error: `its folder has no SKILL.md any more: ${skill.local}` });
       else if (!this.has(id)) missing.push(skill);
     }
     const byRepo = new Map<string, SkillInfo[]>();

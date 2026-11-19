@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { teamMcpConfig } from '../src/daemon/spawn.ts';
-import { answersText, type Call, createHandler, instructionsFor, TOOLS } from '../src/mcp/team.ts';
+import { answersText, type Call, createHandler, instructionsFor, setWaitClock, TOOLS, WAIT_RETRY_MS } from '../src/mcp/team.ts';
 import { cleanTemplate, TEMPLATE_TOOLS } from '../src/shared/crew.ts';
 
 // The MCP server of the tools of a team, as Claude Code talks to it: one JSON-RPC message, one answer.
@@ -41,6 +41,37 @@ describe('the MCP server of a team', () => {
     expect((reply?.result as { content: { text: string }[] }).content[0]!.text).toBe(
       'Answers:\n- tester, request #3:\n8 tests pass.\n- formatter, request #3: finished (it executes only: no answer)\n\nStill open, they will reach you as new prompts: #4 docs.',
     );
+  });
+
+  it('keeps waiting while the daemon restarts, and gives up only if it does not come back', async () => {
+    let clock = 0;
+    setWaitClock(
+      () => clock,
+      async (ms) => {
+        clock += ms;
+      },
+    );
+    try {
+      let down = 3;
+      const restarting: Call = async (route) => {
+        if (route === 'wait') return { ok: true, id: 'w1', requests: [3] };
+        if (down-- > 0) throw new Error('fetch failed');
+        return { ok: true, done: true, open: [], answers: [{ n: 3, from: 'tester', status: 'done', talk: 'twoway', answer: 'Done.' }] };
+      };
+      const reply = await createHandler({ agent: 'agent-1', tools: ['wait_for_answers'], call: restarting })({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'wait_for_answers', arguments: {} } });
+      expect((reply?.result as { content: { text: string }[] }).content[0]!.text).toBe('Answers:\n- tester, request #3:\nDone.');
+
+      const gone: Call = async (route) => {
+        if (route === 'wait') return { ok: true, id: 'w2', requests: [3] };
+        throw new Error('fetch failed');
+      };
+      clock = 0;
+      const given = await createHandler({ agent: 'agent-1', tools: ['wait_for_answers'], call: gone })({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'wait_for_answers', arguments: {} } });
+      expect(clock).toBeGreaterThan(WAIT_RETRY_MS);
+      expect((given?.result as { content: { text: string }[]; isError?: boolean }).content[0]!.text).toContain('Forchetta does not answer (fetch failed)');
+    } finally {
+      setWaitClock(Date.now, (ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    }
   });
 
   it('says what each answer is, failed ones too', () => {

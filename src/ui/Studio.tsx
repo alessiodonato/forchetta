@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import { CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, type Talk } from '../shared/crew.ts';
-import { SKILL_GROUPS, type SkillInfo, SKILLS, SKILLS_PER_AGENT_MAX, skillById, skillUrl } from '../shared/skills.ts';
+import { allSkills, SKILL_GROUPS, type SkillInfo, SKILLS_PER_AGENT_MAX, skillById, skillUrl } from '../shared/skills.ts';
 import { openLink } from './Artifacts.tsx';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { TALK_TEXT } from './NewTeam.tsx';
@@ -15,6 +15,7 @@ import {
   curve,
   docOfTemplate,
   emptyDoc,
+  emptyHistory,
   fieldsOf,
   type From,
   fromName,
@@ -27,14 +28,18 @@ import {
   nodeOf,
   presetOfNode,
   problems,
+  redoStep,
+  remember,
   removeLink,
   removeNode,
   skillsOf,
   specOfDoc,
   type StudioDoc,
+  type StudioHistory,
   type StudioNode,
   templateOfDoc,
   tidy,
+  undoStep,
   updateLink,
   updateNode,
   YOU_H,
@@ -49,8 +54,10 @@ import {
 
 /** The canvas you were drawing, kept while the window lives: closing the studio does not lose it. */
 let draft: StudioDoc | undefined;
+/** Its undo and redo, kept with it until the page reloads. */
+let history: StudioHistory = emptyHistory();
 
-type Selection = { kind: 'node'; key: number } | { kind: 'link'; to: number } | { kind: 'role'; name: string } | { kind: 'new-role' } | { kind: 'team'; name: string } | { kind: 'skill'; id: string } | undefined;
+type Selection = { kind: 'node'; key: number } | { kind: 'link'; to: number } | { kind: 'role'; name: string } | { kind: 'new-role' } | { kind: 'team'; name: string } | { kind: 'skill'; id: string } | { kind: 'new-skill' } | undefined;
 
 /** "+ new agent" in the palette: dragged, a box to fill on the canvas; clicked, a preset of your own to write. */
 const BLANK_AGENT: RolePreset = { name: 'agent', role: '' };
@@ -116,7 +123,7 @@ function AgentForm({ fields, worktrees, lead, onChange }: { fields: AgentFields;
 
 /** The skills of an agent: each one removable, one more from the catalog; dropping one on its box does the same. */
 function SkillsField({ skills, onChange }: { skills: readonly string[]; onChange: (skills: string[]) => void }) {
-  const left = SKILLS.filter((skill) => !skills.includes(skill.id));
+  const left = allSkills().filter((skill) => !skills.includes(skill.id));
   return (
     <div class="studio-field">
       <span>
@@ -144,7 +151,7 @@ function SkillsField({ skills, onChange }: { skills: readonly string[]; onChange
           }}
         >
           <option value="">+ add a skill…</option>
-          {SKILL_GROUPS.map(([group, label]) => (
+          {SKILL_GROUPS.filter(([group]) => left.some((skill) => skill.group === group)).map(([group, label]) => (
             <optgroup key={group} label={label}>
               {left
                 .filter((skill) => skill.group === group)
@@ -161,38 +168,118 @@ function SkillsField({ skills, onChange }: { skills: readonly string[]; onChange
   );
 }
 
-/** A skill of the catalog: what it does, where it comes from, what it weighs. */
-function SkillCard({ skill }: { skill: SkillInfo }) {
+/** A skill: what it does, where it comes from, what it weighs; one of yours can be taken away. */
+function SkillCard({ skill, store }: { skill: SkillInfo; store: Store }) {
+  const [armed, setArmed] = useState(false);
+  const yours = skill.group === 'yours';
+  const edit = store.state.skillEdit?.action === 'remove' ? store.state.skillEdit : undefined;
+  const size = `${skill.kb >= 1000 ? `${(skill.kb / 1024).toFixed(1)} MB` : `${skill.kb} KB`} in ${skill.files} ${skill.files === 1 ? 'file' : 'files'}`;
   return (
     <>
       <p class="studio-title">
         {skill.id}
         <span class="studio-tag">{SKILL_GROUPS.find(([group]) => group === skill.group)?.[1]}</span>
       </p>
-      <p class="studio-hint studio-strong">{skill.summary}</p>
+      {skill.summary && <p class="studio-hint studio-strong">{skill.summary}</p>}
       <ul class="studio-list">
-        <li>
-          From{' '}
-          <a
-            href={skillUrl(skill)}
-            onClick={(event) => {
-              event.preventDefault();
-              openLink(skillUrl(skill));
-            }}
-          >
-            {skill.repo}
-          </a>
-          , at commit {skill.commit.slice(0, 7)}
-        </li>
-        <li>License {skill.license}</li>
-        <li>
-          {skill.kb >= 1000 ? `${(skill.kb / 1024).toFixed(1)} MB` : `${skill.kb} KB`} in {skill.files} {skill.files === 1 ? 'file' : 'files'}
-        </li>
+        {skill.local ? (
+          <li>
+            From your folder <span class="studio-path">{skill.local}</span>
+          </li>
+        ) : (
+          <li>
+            From{' '}
+            <a
+              href={skillUrl(skill)}
+              onClick={(event) => {
+                event.preventDefault();
+                openLink(skillUrl(skill));
+              }}
+            >
+              {skill.repo}
+            </a>
+            , at commit {skill.commit.slice(0, 7)}
+          </li>
+        )}
+        {!skill.local && <li>{skill.license === 'unknown' ? 'License: see its repository' : `License ${skill.license}`}</li>}
+        <li>{size}</li>
       </ul>
       <p class="studio-hint">
-        Nothing is downloaded now. The first time a team uses it, Forchetta fetches only this folder, at that commit, into its own folder (not into your project), and keeps it for the next teams. Each agent gets only its own skills, for its session only.
+        {skill.local
+          ? 'Used where it is, never copied: what you change in the folder counts from the next session that has it. Each agent gets only its own skills, for its session only.'
+          : yours
+            ? 'Kept at that commit, so it does not change by itself: the folder is in the cache of Forchetta already, not in your project. Each agent gets only its own skills, for its session only.'
+            : 'Nothing is downloaded now. The first time a team uses it, Forchetta fetches only this folder, at that commit, into its own folder (not into your project), and keeps it for the next teams. Each agent gets only its own skills, for its session only.'}
       </p>
       <p class="studio-hint">Drag it onto an agent, or add it from the agent's skills.</p>
+      {yours && (
+        <div class="studio-actions">
+          {armed ? (
+            <button
+              type="button"
+              class="danger"
+              onClick={() => {
+                setArmed(false);
+                store.removeSkill(skill.id);
+              }}
+            >
+              take it away?
+            </button>
+          ) : (
+            <button type="button" class="quiet" onClick={() => setArmed(true)}>
+              Take away
+            </button>
+          )}
+        </div>
+      )}
+      {yours && edit?.error && <p class="studio-note error">{edit.error}</p>}
+    </>
+  );
+}
+
+/** A skill of yours: the link of its folder on GitHub, or a folder of this Mac. */
+function AddSkill({ store, onChoose, onAdded }: { store: Store; onChoose: (current: string, put: (path: string) => void) => void; onAdded: (id: string) => void }) {
+  const [source, setSource] = useState('');
+  const edit = store.state.skillEdit?.action === 'add' ? store.state.skillEdit : undefined;
+  const [sentAt, setSentAt] = useState<number | undefined>(undefined);
+  // Added: it is selected, with its card.
+  useEffect(() => {
+    if (sentAt !== undefined && edit && !edit.busy && edit.at >= sentAt && edit.ok && edit.id) onAdded(edit.id);
+  }, [edit?.at, edit?.busy]);
+  const add = (): void => {
+    if (!source.trim() || edit?.busy) return;
+    setSentAt(Date.now());
+    store.addSkill(source.trim());
+  };
+  return (
+    <>
+      <p class="studio-title">Add a skill of yours</p>
+      <p class="studio-hint">
+        From GitHub: the link of the folder of the skill, with its SKILL.md. Forchetta keeps the commit of now, so the skill does not change by itself, and fetches only that folder, outside your projects. From a folder of this Mac: it is used where it is, never copied.
+      </p>
+      <label class="studio-field">
+        <span>Link or folder</span>
+        <div class="studio-row">
+          <input
+            class="command-input mono"
+            type="text"
+            value={source}
+            placeholder="https://github.com/owner/repo/tree/main/skills/name"
+            spellcheck={false}
+            onInput={(event) => setSource((event.target as HTMLInputElement).value)}
+            onKeyDown={(event) => event.key === 'Enter' && add()}
+          />
+          <button type="button" title="Choose the folder of a skill in the panel of macOS" onClick={() => onChoose(source.startsWith('/') || source.startsWith('~') ? source : '', setSource)}>
+            Choose…
+          </button>
+        </div>
+      </label>
+      <div class="studio-actions">
+        <button type="button" class="primary" disabled={!source.trim() || edit?.busy === true} onClick={add}>
+          {edit?.busy ? 'Adding…' : 'Add skill'}
+        </button>
+      </div>
+      {sentAt !== undefined && edit && !edit.busy && edit.at >= sentAt && edit.error && <p class="studio-note error">{edit.error}</p>}
     </>
   );
 }
@@ -424,6 +511,7 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
   /** A change of the canvas: kept for the next opening; the last note goes, unless the change sets its own after. */
   const setDoc = (next: StudioDoc | ((current: StudioDoc) => StudioDoc)): void => {
     const value = typeof next === 'function' ? next(docRef.current) : next;
+    if (value !== docRef.current) history = remember(history, docRef.current, Date.now());
     draft = value;
     docRef.current = value;
     setDocState(value);
@@ -463,8 +551,19 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
   const size = canvasSize(doc);
   const members = doc.nodes.length - (lead !== undefined ? 1 : 0);
 
+  // The panel of macOS answers here: for the folder of a skill, when that asked; else for the folder of the team.
+  const folderFor = useRef<((path: string) => void) | undefined>(undefined);
+  const chooseFolder = (current: string, put?: (path: string) => void): void => {
+    folderFor.current = put;
+    store.chooseFolder(current);
+  };
   useEffect(() => {
-    window.forchettaFolder = (path: string) => setDoc((current) => ({ ...current, folder: path }));
+    window.forchettaFolder = (path: string) => {
+      const put = folderFor.current;
+      folderFor.current = undefined;
+      if (put) put(path);
+      else setDoc((current) => ({ ...current, folder: path }));
+    };
     return () => {
       window.forchettaFolder = undefined;
     };
@@ -639,8 +738,29 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
       setSelection(undefined);
     }
   };
+  // ⌘Z and ⇧⌘Z: the canvas a step back or forward. What is selected stays, if it is still there.
+  const step = (back: boolean): void => {
+    const moved = back ? undoStep(history, docRef.current) : redoStep(history, docRef.current);
+    if (!moved) return;
+    history = moved.history;
+    draft = moved.doc;
+    docRef.current = moved.doc;
+    setDocState(moved.doc);
+    setPopover(undefined);
+    setSelection((current) =>
+      current?.kind === 'node' && !nodeOf(moved.doc, current.key) ? undefined : current?.kind === 'link' && !incoming(moved.doc, current.to) ? undefined : current,
+    );
+    setNote({ text: back ? 'Undone: ⇧⌘Z does it again.' : 'Done again.' });
+  };
+
   const onKey = (event: KeyboardEvent): void => {
     const field = (event.target as HTMLElement).closest('input, textarea, select');
+    // In a field, ⌘Z undoes the typing there, as anywhere.
+    if (!field && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      step(!event.shiftKey);
+      return;
+    }
     if (event.key === 'Escape') {
       if (popover) setPopover(undefined);
       else if (selection) setSelection(undefined);
@@ -695,6 +815,12 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
           {members} {members === 1 ? 'member' : 'members'}
         </span>
         <span class="studio-spacer" />
+        <button type="button" class="quiet studio-undo" title="Undo the last change of the canvas (⌘Z)" aria-label="Undo" disabled={history.past.length === 0} onClick={() => step(true)}>
+          ↶
+        </button>
+        <button type="button" class="quiet studio-undo" title="Redo (⇧⌘Z)" aria-label="Redo" disabled={history.future.length === 0} onClick={() => step(false)}>
+          ↷
+        </button>
         <button type="button" title="Lay the boxes out as a tree, each one under the one that leads it" disabled={doc.nodes.length === 0} onClick={() => setDoc(tidy(doc))}>
           Tidy up
         </button>
@@ -747,7 +873,7 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
           onPointerDown={(event) => startPalette(event, { preset: BLANK_AGENT })}
         >
           <strong>+ new agent</strong>
-          <span>role, model, skills: yours</span>
+          <span>yours, from scratch</span>
         </div>
         <p class="studio-section">Teams</p>
         {store.state.templates.map((template) => (
@@ -776,9 +902,20 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
           aria-label="Filter the skills"
           onInput={(event) => setSkillFilter((event.target as HTMLInputElement).value)}
         />
+        <div
+          class={`studio-preset studio-new${selection?.kind === 'new-skill' ? ' on' : ''}`}
+          title="A skill of yours: the link of its folder on GitHub, or a folder of this Mac"
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            setSelection({ kind: 'new-skill' });
+          }}
+        >
+          <strong>+ add a skill</strong>
+          <span>from GitHub, or a folder</span>
+        </div>
         {SKILL_GROUPS.map(([group, label]) => {
           const words = skillFilter.trim().toLowerCase();
-          const shown = SKILLS.filter((skill) => skill.group === group && (!words || `${skill.id} ${skill.summary} ${skill.repo}`.toLowerCase().includes(words)));
+          const shown = allSkills().filter((skill) => skill.group === group && (!words || `${skill.id} ${skill.summary} ${skill.repo} ${skill.local ?? ''}`.toLowerCase().includes(words)));
           if (shown.length === 0) return null;
           return (
             <div key={group} class="studio-skill-group">
@@ -787,12 +924,12 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
                 <div
                   key={skill.id}
                   class={`studio-preset studio-skill${selection?.kind === 'skill' && selection.id === skill.id ? ' on' : ''}`}
-                  title={`${skill.summary}\n\n${skill.repo} · ${skill.license}. Drag it onto an agent; click it for more.`}
+                  title={`${skill.summary}\n\n${skill.local ?? `${skill.repo} · ${skill.license}`}. Drag it onto an agent; click it for more.`}
                   onPointerDown={(event) => startPalette(event, { skill })}
                 >
                   <strong>{skill.id}</strong>
                   <span>
-                    {skill.repo.split('/')[0]} · {skill.kb >= 1000 ? `${(skill.kb / 1024).toFixed(1)} MB` : `${skill.kb} KB`}
+                    {skill.local ? 'your folder' : skill.repo.split('/')[0]} · {skill.kb >= 1000 ? `${(skill.kb / 1024).toFixed(1)} MB` : `${skill.kb} KB`}
                   </span>
                 </div>
               ))}
@@ -969,8 +1106,10 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
           <RoleEditor preset={selectedRole} store={store} onAdd={(preset) => addPreset(preset)} onRenamed={(name) => setSelection({ kind: 'role', name })} />
         ) : selectedTeam ? (
           <TeamCard template={selectedTeam} store={store} onOpen={() => openTeam(selectedTeam)} onAdd={() => addTeam(selectedTeam)} />
+        ) : selection?.kind === 'new-skill' ? (
+          <AddSkill store={store} onChoose={chooseFolder} onAdded={(id) => setSelection({ kind: 'skill', id })} />
         ) : selectedSkill ? (
-          <SkillCard skill={selectedSkill} />
+          <SkillCard skill={selectedSkill} store={store} />
         ) : (
           <>
             <p class="studio-title">The team</p>
@@ -985,7 +1124,7 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
                   spellcheck={false}
                   onInput={(event) => setDoc({ ...doc, folder: (event.target as HTMLInputElement).value })}
                 />
-                <button type="button" title="Choose the folder in the panel of macOS" onClick={() => store.chooseFolder(doc.folder)}>
+                <button type="button" title="Choose the folder in the panel of macOS" onClick={() => chooseFolder(doc.folder)}>
                   Choose…
                 </button>
               </div>

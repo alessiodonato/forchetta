@@ -139,6 +139,11 @@ export interface Crew extends CrewSpec {
   /** The sessions started for it: "lead" and the name of each member → the id of its agent. */
   agents: Record<string, string>;
   requests?: CrewRequest[];
+  /**
+   * The sessions of the team waiting for their answers (wait_for_answers), with the answers held for them: kept in
+   * its file, so that a restart of the daemon does not lose a wait, nor the answers it holds.
+   */
+  waits?: { id: string; by: string; requests: number[]; until: number }[];
   /** Changes of the team the Claude lead has not been told yet: the next text that reaches it carries them. */
   leadNotes?: string[];
   /**

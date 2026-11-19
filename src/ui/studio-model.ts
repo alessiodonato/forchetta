@@ -396,3 +396,39 @@ export function canvasSize(doc: StudioDoc): { width: number; height: number } {
   const bottom = Math.max(doc.you.y + YOU_H, ...doc.nodes.map((node) => node.y + NODE_H));
   return { width: Math.max(1200, right + 480), height: Math.max(800, bottom + 360) };
 }
+
+// ---- Undo and redo (⌘Z, ⇧⌘Z) ----
+
+/** The canvas as it was before each change, and the changes undone, for redo. */
+export interface StudioHistory {
+  past: StudioDoc[];
+  future: StudioDoc[];
+  /** When the last change came: changes in a row (typing a role, dragging a box) are one step. */
+  at: number;
+}
+
+export const HISTORY_MAX = 100;
+/** A pause this long between two changes makes the second one a step of its own. */
+export const HISTORY_PAUSE_MS = 600;
+
+export const emptyHistory = (): StudioHistory => ({ past: [], future: [], at: 0 });
+
+/** A change of the canvas, from `previous`: a new step after a pause, else part of the step under way. */
+export function remember(history: StudioHistory, previous: StudioDoc, now: number): StudioHistory {
+  const step = history.past.length === 0 || now - history.at > HISTORY_PAUSE_MS;
+  return { past: step ? [...history.past, previous].slice(-HISTORY_MAX) : history.past, future: [], at: now };
+}
+
+/** The canvas one step back, and the history after it; undefined with nothing to undo. */
+export function undoStep(history: StudioHistory, current: StudioDoc): { doc: StudioDoc; history: StudioHistory } | undefined {
+  const doc = history.past.at(-1);
+  if (!doc) return undefined;
+  return { doc, history: { past: history.past.slice(0, -1), future: [...history.future, current], at: 0 } };
+}
+
+/** The canvas one step forward again; undefined with nothing to redo. */
+export function redoStep(history: StudioHistory, current: StudioDoc): { doc: StudioDoc; history: StudioHistory } | undefined {
+  const doc = history.future.at(-1);
+  if (!doc) return undefined;
+  return { doc, history: { past: [...history.past, current].slice(-HISTORY_MAX), future: history.future.slice(0, -1), at: 0 } };
+}

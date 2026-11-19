@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.10. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.11. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -354,7 +354,7 @@ forchetta setup</pre>
           <li>Drag agents, or a whole team, onto the canvas. Each agent is a box; move it where you like.</li>
           <li>Pull an arrow from the dot under <strong>You</strong> or under a box, and drop it on the agent it leads. On release you choose the relation: <a href="#talk">⇄ answers or → executes</a>, and its prompt. An agent has one arrow coming in; a new one moves it under someone else, and a circle is refused.</li>
           <li>If You point at one agent only, and it leads others, it is the Claude lead of the team (its arrow says <span class="ui">lead</span>). If You point at several, you lead, and they are the members at the top.</li>
-          <li>Click a box to change its name, role, model, permissions, worktree, files and review; click an arrow, or its label, to change the relation. <kbd>Delete</kbd> removes what is selected; the agents it led go up to the one above it.</li>
+          <li>Click a box to change its name, role, model, permissions, worktree, files and review; click an arrow, or its label, to change the relation. <kbd>Delete</kbd> removes what is selected; the agents it led go up to the one above it. <kbd>⌘</kbd><kbd>Z</kbd> undoes the last change of the canvas, <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd> does it again (also ↶ and ↷, at the top); changes in a row, like typing a role or dragging a box, are one step.</li>
           <li>In the right column, with nothing selected: the folder of the team (<span class="ui">Choose…</span> opens the panel of macOS), the default of the arrows and the worktrees, and what is still missing before it can start. <span class="ui">Tidy up</span> lays the boxes out as a tree.</li>
           <li><span class="ui">Create team</span> starts it, as the panel does; <span class="ui">Save as template</span> keeps it among the teams, with where its boxes stand.</li>
         </ol>
@@ -365,6 +365,7 @@ forchetta setup</pre>
           <li><strong>Each agent gets only its own</strong>, for its session only (<code>claude --plugin-dir</code>): they show as <code>forchetta-skills:pdf</code> and so on. Until it uses one, an agent carries only its name and description.</li>
           <li>A skill that cannot be fetched (no network, say) does not stop the team: it starts without it, and the panel says which.</li>
         </ul>
+        <p><strong>Skills of your own.</strong> <span class="ui">+ add a skill</span>, at the top of the skills, takes the link of the folder of a skill on GitHub (<code>…/tree/main/skills/name</code>, with its <code>SKILL.md</code>), or a folder of this Mac (<span class="ui">Choose…</span>). From GitHub, Forchetta finds the commit the link points at now and keeps it, so the skill does not change by itself, and fetches only that folder into its own. A folder of yours is used where it is, never copied: what you change in it counts from the next session that has it. They show under <strong>Yours</strong>, and an agent takes them like the others; a session that sets up teams from a document can use them too. <span class="ui">Take away</span> on its card removes one, unless an agent, a template or a team still uses it.</p>
         <p>Every preset can be changed and duplicated. Click an agent on the left to edit it: saving one of Forchetta makes it your version, marked with a dot, and <span class="ui">Restore</span> brings theirs back. <span class="ui">Save as preset</span>, on a box, keeps an agent you set up. Click a team to <span class="ui">Open</span> it on the canvas (it replaces what is there), add it, duplicate it, or delete it; saved with the same name, a team of Forchetta becomes your version too. Closing the studio keeps the canvas until you come back.</p>
 
         <h3 id="team-from-document">A team from a document</h3>
@@ -402,7 +403,7 @@ forchetta setup</pre>
           <thead><tr><th>Tool</th><th>Who has it</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td><code>send_request</code></td><td>lead, members others report to</td><td>Gives work to one of its members, to some or to all. The request gets a number and reaches each member as a new prompt, “Request #3 from lead:”, as soon as its session is free; until then it waits in its queue.</td></tr>
-            <tr><td><code>wait_for_answers</code></td><td>lead, members others report to</td><td>Waits for the answers of its requests, up to 10 minutes, and returns them all at once, in the same turn. Answers that come later arrive as prompts.</td></tr>
+            <tr><td><code>wait_for_answers</code></td><td>lead, members others report to</td><td>Waits for the answers of its requests, up to 10 minutes, and returns them all at once, in the same turn. Answers that come later arrive as prompts. A restart of the daemon (an update, say) does not lose a wait: it is kept in the file of the team, and the tool asks again until the daemon is back.</td></tr>
             <tr><td><code>team</code></td><td>lead, ⇄ members, reviewers</td><td>Shows the members, what each one does, its files, what it is working on, the folder and branch of each, and the last verdicts of the reviewers.</td></tr>
             <tr><td><code>ask_lead</code></td><td>⇄ members</td><td>Asks whoever sent the current request (the lead, or the member it reports to), as “Question from reviewer about request #3:”. The answer comes back as a new request.</td></tr>
             <tr><td><code>review</code></td><td>members that review</td><td>Records a verdict on one commit: <code>approve</code>, or <code>changes</code> with what to fix (see <a href="#team-reviews">A member that reviews</a>).</td></tr>

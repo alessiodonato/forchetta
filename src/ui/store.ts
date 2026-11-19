@@ -6,6 +6,7 @@ import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, 
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import { cleanSelection } from '../shared/selection.ts';
+import { setCustomSkills, type SkillInfo } from '../shared/skills.ts';
 import { shell } from './connection.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
 
@@ -57,6 +58,10 @@ export interface UiState {
   templates: readonly CrewTemplate[];
   /** The presets of agents of the studio: the ones of Forchetta (or your version of them), then yours. */
   roles: readonly RolePreset[];
+  /** The skills you added (shared/skills.ts keeps them too, for the checks of the page). */
+  customSkills: readonly SkillInfo[];
+  /** Adding or taking away a skill of yours: under way, or how it went. */
+  skillEdit?: { action: 'add' | 'remove'; busy: boolean; ok?: boolean; error?: string; id?: string; at: number };
   /** The last change of a team or of the templates asked from a panel, and how it went. */
   crewEdit?: { action: string; busy: boolean; ok?: boolean; error?: string; at: number };
   /** The whole thread of the team the panel shows: asked again each time the teams change. */
@@ -121,7 +126,7 @@ function loadSeen(): Record<string, number> | undefined {
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
 export class Store {
-  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [], roles: [], prompts: [] };
+  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [], roles: [], customSkills: [], prompts: [] };
   /** Sends a message to the daemon (set by the connection). */
   send: (message: ClientMessage) => void = () => {};
   /** A notification asked by the daemon (see attention.ts). */
@@ -217,6 +222,15 @@ export class Store {
       this.set({ roles: message.roles });
       return;
     }
+    if (message.type === 'customSkills') {
+      setCustomSkills(message.skills);
+      this.set({ customSkills: message.skills });
+      return;
+    }
+    if (message.type === 'skillEdited') {
+      this.set({ skillEdit: { action: message.action, busy: false, ok: message.ok, ...(message.error ? { error: message.error } : {}), ...(message.id ? { id: message.id } : {}), at: Date.now() } });
+      return;
+    }
     if (message.type === 'folderChosen') {
       // As the panel of the app does: the field of the panel that asked takes it.
       window.forchettaFolder?.(message.path);
@@ -280,6 +294,8 @@ export class Store {
         extra.crews = message.crews ?? [];
         extra.templates = message.templates ?? [];
         extra.roles = message.roles ?? [];
+        setCustomSkills(message.skills ?? []);
+        extra.customSkills = message.skills ?? [];
         break;
       case 'agents':
         for (const agent of message.agents) {
@@ -476,6 +492,17 @@ export class Store {
     const app = shell();
     if (app) app.postMessage({ type: 'chooseFolder', folder });
     else this.send({ type: 'chooseFolder', folder });
+  }
+
+  /** A skill of yours from a link of GitHub or a folder; the daemon fetches it, and says how it went (skillEdit). */
+  addSkill(source: string): void {
+    this.set({ skillEdit: { action: 'add', busy: true, at: Date.now() } });
+    this.send({ type: 'addSkill', source });
+  }
+
+  removeSkill(id: string): void {
+    this.set({ skillEdit: { action: 'remove', busy: true, at: Date.now() } });
+    this.send({ type: 'removeSkill', id });
   }
 
   /** Deletes a preset of yours; for one of Forchetta you changed, brings back theirs. */

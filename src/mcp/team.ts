@@ -117,9 +117,9 @@ export const TOOLS: Record<TeamTool, Tool> = {
   mode: { type: 'string', enum: [...MODES], description: 'The permission mode of its session; none: the one of the user.' },
   skills: {
     type: 'array',
-    items: { type: 'string', enum: SKILLS.map((skill) => skill.id) },
+    items: { type: 'string' },
     maxItems: SKILLS_PER_AGENT_MAX,
-    description: `Open-source skills of Claude Code from the catalog of Forchetta, for this agent only; Forchetta downloads them when the team starts, outside the project. ${SKILLS_PER_AGENT_MAX} at most; only what the role needs, or none: ${SKILLS.map((skill) => `${skill.id} (${skill.summary.replace(/\.$/, '')})`).join('; ')}.`,
+    description: `Skills of Claude Code for this agent only, by name; Forchetta fetches them when the team starts, outside the project. ${SKILLS_PER_AGENT_MAX} at most; only what the role needs, or none. The open-source catalog of Forchetta: ${SKILLS.map((skill) => `${skill.id} (${skill.summary.replace(/\.$/, '')})`).join('; ')}. The skills the user added in the studio are allowed too: list_team_templates names them.`,
   },
 },
           },
@@ -152,9 +152,9 @@ export const TOOLS: Record<TeamTool, Tool> = {
   mode: { type: 'string', enum: [...MODES], description: 'The permission mode of its session; none: the one of the user.' },
   skills: {
     type: 'array',
-    items: { type: 'string', enum: SKILLS.map((skill) => skill.id) },
+    items: { type: 'string' },
     maxItems: SKILLS_PER_AGENT_MAX,
-    description: `Open-source skills of Claude Code from the catalog of Forchetta, for this agent only; Forchetta downloads them when the team starts, outside the project. ${SKILLS_PER_AGENT_MAX} at most; only what the role needs, or none: ${SKILLS.map((skill) => `${skill.id} (${skill.summary.replace(/\.$/, '')})`).join('; ')}.`,
+    description: `Skills of Claude Code for this agent only, by name; Forchetta fetches them when the team starts, outside the project. ${SKILLS_PER_AGENT_MAX} at most; only what the role needs, or none. The open-source catalog of Forchetta: ${SKILLS.map((skill) => `${skill.id} (${skill.summary.replace(/\.$/, '')})`).join('; ')}. The skills the user added in the studio are allowed too: list_team_templates names them.`,
   },
 },
               talk: {
@@ -314,11 +314,33 @@ async function waitForAnswers(options: { agent: string; call: Call }, input: Rec
   if (!started.ok) return text(started.error ?? 'the wait did not start', true);
   const requests = (started.requests as number[] | undefined) ?? [];
   if (requests.length === 0) return text('No request of yours is open: there is nothing to wait for.');
+  let downSince: number | undefined;
   for (;;) {
-    const polled = await options.call('wait-poll', { agent: options.agent, id: started.id });
+    let polled: Awaited<ReturnType<Call>>;
+    try {
+      polled = await options.call('wait-poll', { agent: options.agent, id: started.id });
+      downSince = undefined;
+    } catch (error) {
+      // The daemon restarts (an update, say): it keeps the wait, and this asks again until it is back.
+      downSince ??= now();
+      if (now() - downSince > WAIT_RETRY_MS) throw error;
+      await sleep(RETRY_EVERY_MS);
+      continue;
+    }
     if (!polled.ok) return text(polled.error ?? 'the wait ended', true);
     if (polled.done) return text(answersText((polled.answers as Answer[]) ?? [], (polled.open as string[]) ?? []));
   }
+}
+
+/** How long a wait asks again for a daemon that does not answer (a restart takes a few seconds), and how often. */
+export const WAIT_RETRY_MS = 90_000;
+const RETRY_EVERY_MS = 2_000;
+let now = (): number => Date.now();
+let sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+/** For the tests: a clock and a sleep of their own. */
+export function setWaitClock(clock: () => number, wait: (ms: number) => Promise<void>): void {
+  now = clock;
+  sleep = wait;
 }
 
 /** The daemon, read again at each call: after a restart it has another port and token. */

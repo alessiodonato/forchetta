@@ -26,6 +26,7 @@ import { runRecall } from './recall.ts';
 import { folderOf, inGitRepo, spawnSession } from './spawn.ts';
 import { Teams } from './teams.ts';
 import { crewApi, CrewTemplates, Crews, RolePresets, templateApi } from './crews.ts';
+import { CustomSkills, skillUsers } from './custom-skills.ts';
 import { FolderChooser } from './folder-chooser.ts';
 import { TokenCounter } from './token-usage.ts';
 import { gitRunner, SkillCache } from './skills.ts';
@@ -137,6 +138,10 @@ function main(): void {
       execFile(file, args, { encoding: 'utf8', timeout: 700, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(stdout || (error ? undefined : '')));
     });
   const teams = new Teams(paths.teams, log);
+  // The skills of the agents: fetched from GitHub the first time a team uses them, kept in var/skills. Yours are
+  // read before the presets and the templates, which are checked against them.
+  const skillCache = new SkillCache(join(paths.varDir, 'skills'), gitRunner(), log);
+  const yourSkills = new CustomSkills(join(paths.varDir, 'skills', 'yours.json'), skillCache, gitRunner(), log);
   const crews = new Crews(paths.crews, log);
   const templates = new CrewTemplates(paths.crewTemplates, log);
   const roles = new RolePresets(paths.crewRoles, log);
@@ -169,8 +174,6 @@ function main(): void {
       countingTokens = false;
     }
   };
-  // The skills of the agents: fetched from GitHub the first time a team uses them, kept in var/skills.
-  const skillCache = new SkillCache(join(paths.varDir, 'skills'), gitRunner(), log);
   crews.skills = { ensure: (ids) => skillCache.ensure(ids), plugin: (key, ids) => skillCache.plugin(key, ids) };
   // git for the verdicts of the reviewers and the merges: by its full path, briefly, its output or nothing.
   crews.git = (dir, args) =>
@@ -457,6 +460,12 @@ function main(): void {
     roles: () => roles.list(),
     onRole: (message) => (message.type === 'deleteRolePreset' ? roles.delete(message.name) : roles.save(message.preset, message.previous)),
     onChooseFolder: (folder) => folderChooser.choose(folder),
+    customSkills: () => yourSkills.list(),
+    onAddSkill: async (source) => {
+      const result = await yourSkills.add(source);
+      return result.ok ? { ok: true, id: result.skill.id } : result;
+    },
+    onRemoveSkill: (id) => yourSkills.remove(id, skillUsers(id, roles.list(), templates.list(), crews.list())),
     onEditCrew: async (message) => {
       // The box and the chart follow a change of the place of a session in its team.
       const place = (agentId: string, team: Agent['team']): void => {

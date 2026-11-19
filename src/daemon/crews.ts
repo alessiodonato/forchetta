@@ -44,6 +44,7 @@ import {
   worktreeName,
 } from '../shared/crew.ts';
 import { ensurePrivateDir } from '../shared/paths.ts';
+import { customSkills } from '../shared/skills.ts';
 import type { EnqueueResult } from './commands.ts';
 import { gitCommands, type LaneCheck } from './guard.ts';
 import type { SpawnChoices, SpawnExtras, SpawnResult } from './spawn.ts';
@@ -160,6 +161,12 @@ function stateText(agent: Agent | undefined): string {
 /** The longest wait of a lead for its answers. */
 export const MAX_WAIT_MS = 10 * 60_000;
 
+/**
+ * A wait found in the file of a team when the daemon starts: its session gets this long to ask for it again (its
+ * MCP server tries again while the daemon restarts) before the answers it holds go to it as prompts.
+ */
+export const RESTORED_WAIT_GRACE_MS = 60_000;
+
 /** A session waiting for the answers of some of its requests (wait_for_answers): its answers are held for it. */
 interface Waiter {
   id: string;
@@ -246,6 +253,26 @@ export class Crews {
       } catch {
         this.log(`team ${file} illeggibile, ignorato`);
       }
+    }
+    for (const crew of this.crews.values()) this.restoreWaits(crew);
+  }
+
+  /** The waits a team had when the daemon stopped: the same again, for their sessions to collect. */
+  private restoreWaits(crew: Crew, now = Date.now()): void {
+    for (const wait of Array.isArray(crew.waits) ? crew.waits : []) {
+      if (typeof wait?.id !== 'string' || typeof wait.by !== 'string' || !Array.isArray(wait.requests) || typeof wait.until !== 'number') continue;
+      const waiter: Waiter = {
+        id: wait.id,
+        crewId: crew.id,
+        by: wait.by,
+        requests: new Set(wait.requests.filter((n) => typeof n === 'number')),
+        until: wait.until,
+        listeners: [],
+        timer: setTimeout(() => this.release(wait.id), Math.max(wait.until + 30_000 - now, RESTORED_WAIT_GRACE_MS)),
+      };
+      waiter.timer.unref?.();
+      this.waiters.set(wait.id, waiter);
+      this.log(`team «${crew.name}»: ripresa l'attesa delle risposte di ${[...waiter.requests].map((n) => `#${n}`).join(', ')}`);
     }
   }
 
@@ -913,6 +940,7 @@ export class Crews {
     };
     waiter.timer.unref?.();
     this.waiters.set(id, waiter);
+    this.save(crew);
     this.log(`team «${crew.name}»: ${me.name} aspetta le risposte di ${[...waiter.requests].map((n) => `#${n}`).join(', ') || 'nessuna richiesta'}`);
     return { ok: true, id, requests: [...waiter.requests] };
   }
@@ -1237,6 +1265,10 @@ export class Crews {
   }
 
   private save(crew: Crew): void {
+    // The waits of its sessions, as they are now: a restart takes them up again (restoreWaits).
+    const waits = [...this.waiters.values()].filter((waiter) => waiter.crewId === crew.id).map((waiter) => ({ id: waiter.id, by: waiter.by, requests: [...waiter.requests], until: waiter.until }));
+    if (waits.length > 0) crew.waits = waits;
+    else delete crew.waits;
     if (!this.dir) return;
     try {
       ensurePrivateDir(this.dir);
@@ -1489,6 +1521,7 @@ export function templatesText(templates: readonly CrewTemplate[]): string {
       const members = template.members.map((member) => personLine(template, member, true)).join(', ');
       return `- "${template.name}"${template.builtin ? ' (comes with Forchetta)' : ''}: ${lead}; members: ${members}`;
     }),
+    ...(customSkills().length > 0 ? [`Skills the user added, usable like those of the catalog: ${customSkills().map((skill) => `${skill.id}${skill.summary ? ` (${skill.summary.replace(/\.$/, '')})` : ''}`).join('; ')}.`] : []),
     'Ask for one by its name to get it in full, in the shape save_team_template takes.',
   ].join('\n');
 }

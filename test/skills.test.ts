@@ -48,7 +48,7 @@ describe('the catalog of skills', () => {
   });
 
   it('checks the skills of an agent: known ones, each once, at most 8', () => {
-    expect(cleanSkills([' TDD-x '])).toEqual({ error: 'the skill " TDD-x " is not in the catalog of Forchetta' });
+    expect(cleanSkills([' TDD-x '])).toEqual({ error: 'the skill " TDD-x " is not in the catalog of Forchetta, nor among the skills the user added' });
     expect(cleanSkills(['pdf', 'PDF', 'docx'])).toEqual({ skills: ['pdf', 'docx'] });
     expect(cleanSkills(SKILLS.slice(0, 9).map((skill) => skill.id))).toEqual({ error: '8 skills at most for one agent' });
     expect(cleanSkills('pdf')).toEqual({ error: 'skills: a list of names' });
