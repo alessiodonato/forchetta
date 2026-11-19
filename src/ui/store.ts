@@ -7,6 +7,7 @@ import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import { cleanSelection } from '../shared/selection.ts';
 import { setCustomSkills, type SkillInfo } from '../shared/skills.ts';
+import { teamFileName, teamFileOf } from '../shared/team-file.ts';
 import { shell } from './connection.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
 
@@ -60,6 +61,10 @@ export interface UiState {
   roles: readonly RolePreset[];
   /** The skills you added (shared/skills.ts keeps them too, for the checks of the page). */
   customSkills: readonly SkillInfo[];
+  /** A running team in full, as the studio asked for it (requestCrewTemplate). */
+  liveTeam?: { crewId: string; template?: CrewTemplate; cwd?: string; at: number };
+  /** A team saved as a file, or opened from one: under way, or how it went. */
+  teamFile?: { action: 'save' | 'import'; busy: boolean; ok?: boolean; error?: string; path?: string; template?: CrewTemplate; notes?: string[]; at: number };
   /** Adding or taking away a skill of yours: under way, or how it went. */
   skillEdit?: { action: 'add' | 'remove'; busy: boolean; ok?: boolean; error?: string; id?: string; at: number };
   /** The last change of a team or of the templates asked from a panel, and how it went. */
@@ -225,6 +230,25 @@ export class Store {
     if (message.type === 'customSkills') {
       setCustomSkills(message.skills);
       this.set({ customSkills: message.skills });
+      return;
+    }
+    if (message.type === 'crewTemplate') {
+      this.set({ liveTeam: { crewId: message.crewId, ...(message.template ? { template: message.template, cwd: message.cwd } : {}), at: Date.now() } });
+      return;
+    }
+    if (message.type === 'teamFile') {
+      this.set({
+        teamFile: {
+          action: message.action,
+          busy: false,
+          ok: message.ok,
+          ...(message.error ? { error: message.error } : {}),
+          ...(message.path ? { path: message.path } : {}),
+          ...(message.template ? { template: message.template } : {}),
+          ...(message.notes ? { notes: message.notes } : {}),
+          at: Date.now(),
+        },
+      });
       return;
     }
     if (message.type === 'skillEdited') {
@@ -492,6 +516,36 @@ export class Store {
     const app = shell();
     if (app) app.postMessage({ type: 'chooseFolder', folder });
     else this.send({ type: 'chooseFolder', folder });
+  }
+
+  /**
+   * A team as a file, to give to someone else. The app cannot save a file itself: the daemon puts it in your
+   * Downloads. In a browser the page downloads it.
+   */
+  exportTeam(template: CrewTemplate): void {
+    const text = `${JSON.stringify(teamFileOf(template), null, 2)}\n`;
+    if (shell()) {
+      this.set({ teamFile: { action: 'save', busy: true, at: Date.now() } });
+      this.send({ type: 'saveTeamFile', name: template.name, text });
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    link.download = teamFileName(template.name);
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+    this.set({ teamFile: { action: 'save', busy: false, ok: true, path: `your Downloads, as ${link.download}`, at: Date.now() } });
+  }
+
+  /** A running team in full, for the studio (liveTeam). */
+  requestCrewTemplate(crewId: string): void {
+    this.send({ type: 'crewTemplate', crewId });
+  }
+
+  /** Opens the text of a team file: the daemon checks it and adds the skills of GitHub it needs (teamFile). */
+  importTeam(text: string): void {
+    this.set({ teamFile: { action: 'import', busy: true, at: Date.now() } });
+    this.send({ type: 'importTeam', text });
   }
 
   /** A skill of yours from a link of GitHub or a folder; the daemon fetches it, and says how it went (skillEdit). */

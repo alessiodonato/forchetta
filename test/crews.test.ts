@@ -661,7 +661,7 @@ describe('templates saved by a session (the tools list_team_templates and save_t
     const save = (template: unknown) => (templateApi(store, 'template-save', { template }) as { body: { ok: boolean; error?: string } }).body;
     expect(save({ ...bakery, members: [{ name: 'baker', role: 'x'.repeat(1001) }] })).toEqual({
       ok: false,
-      error: '"baker": the role is 1001 characters, 1000 at most (the rules the whole team shares belong in a CLAUDE.md in its folder)',
+      error: '"baker": the role is 1001 characters, 1000 at most (what the whole team shares belongs in its rules)',
     });
     expect(save({ ...bakery, lead: { ...bakery.lead, role: `  ${'y'.repeat(1000)}\n` } }).ok).toBe(true);
     expect(save({ ...bakery, name: 'n'.repeat(41) }).error).toBe('the name of the team is 41 characters: 40 at most');

@@ -9,6 +9,7 @@ import { FilesPanel } from './Files.tsx';
 import { SubagentsPanel } from './Subagents.tsx';
 import { NewSessionPanel } from './NewSession.tsx';
 import { NewTeamPanel } from './NewTeam.tsx';
+import { type NewKind, NewMenu, newKindOf } from './NewMenu.tsx';
 import { Studio } from './Studio.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
 import { crewLineOf } from '../shared/crew.ts';
@@ -20,7 +21,7 @@ import { animateMove, onReducedMotionChange } from './motion.ts';
 import type { Store, UiState } from './store.ts';
 import { Workspace } from './Workspace.tsx';
 
-function useStore(store: Store): UiState {
+export function useStore(store: Store): UiState {
   const [state, setState] = useState(store.state);
   useEffect(() => {
     const unsubscribe = store.subscribe(() => setState(store.state));
@@ -152,6 +153,8 @@ export function App({ store }: { store: Store }) {
   const [view, setView] = useState<'grid' | 'org'>(savedView);
   /** The studio of teams, over everything else. */
   const [studio, setStudio] = useState(false);
+  /** The running team the studio shows, when it was opened on one from its panel. */
+  const [live, setLive] = useState<string | undefined>(undefined);
   const chooseView = (next: 'grid' | 'org'): void => {
     setView(next);
     try {
@@ -167,6 +170,31 @@ export function App({ store }: { store: Store }) {
     store.endCrewSpawn();
     setPanel(panel === which ? undefined : which);
   };
+  // "+ new": a session, a team from its panel, or a team in the studio; also from ⌘N, ⇧⌘N and ⌥⌘N anywhere.
+  const startNew = (kind: NewKind): void => {
+    store.endSpawn();
+    store.endCrewSpawn();
+    if (kind === 'studio') {
+      setPanel(undefined);
+      setLive(undefined);
+      setStudio(true);
+      return;
+    }
+    setStudio(false);
+    setPanel(kind === 'session' ? 'new' : 'team');
+  };
+  const startNewRef = useRef(startNew);
+  startNewRef.current = startNew;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const kind = newKindOf(event);
+      if (!kind || !store.state.ready) return;
+      event.preventDefault();
+      startNewRef.current(kind);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   // "Nuova sessione…" from the menu of the icon; the quick prompts from the menu of a selection.
   const requestedAt = state.panelRequest?.at;
   useEffect(() => {
@@ -211,39 +239,21 @@ export function App({ store }: { store: Store }) {
           )}
           {state.ready && <BroadcastButton agents={agents} open={panel === 'broadcast'} onToggle={() => toggle('broadcast')} />}
           {state.ready && (
-            <button type="button" class={`broadcast-toggle${panel === 'recall' ? ' active' : ''}`} title="Search the earlier sessions of a project (arricurdai recall)" onClick={() => toggle('recall')}>
+            <button type="button" class={`broadcast-toggle quiet${panel === 'recall' ? ' active' : ''}`} title="Search the earlier sessions of a project (arricurdai recall)" onClick={() => toggle('recall')}>
               search
             </button>
           )}
-          {state.ready && (
-            // One button for the teams: their thread when there are some, with "+ new team" in it; a new one otherwise.
+          {state.ready && state.crews.length > 0 && (
             <button
               type="button"
-              class={`broadcast-toggle${panel === 'crew' || panel === 'team' ? ' active' : ''}`}
-              title={state.crews.length > 0 ? 'Your teams: write a request to their members, see where the last ones stand, or start a new one' : 'Start a team of Claude Code sessions that work together: a lead and its members'}
-              onClick={() => (panel === 'crew' || panel === 'team' ? setPanel(undefined) : toggle(state.crews.length > 0 ? 'crew' : 'team'))}
+              class={`broadcast-toggle${panel === 'crew' ? ' active' : ''}`}
+              title="Your teams: write a request to their members, see where the last ones stand, what they cost"
+              onClick={() => toggle('crew')}
             >
-              {state.crews.length > 0 ? 'teams' : 'new team'}
+              teams
             </button>
           )}
-          {state.ready && (
-            <button
-              type="button"
-              class={`broadcast-toggle${studio ? ' active' : ''}`}
-              title="Draw a team: drag agents and teams onto a canvas, link them with arrows, then create it or keep it as a template"
-              onClick={() => {
-                store.endCrewSpawn();
-                setStudio(!studio);
-              }}
-            >
-              studio
-            </button>
-          )}
-          {state.ready && (
-            <button type="button" class={`broadcast-toggle primary${panel === 'new' ? ' active' : ''}`} title="Start a Claude Code session in a folder" onClick={() => toggle('new')}>
-              new session
-            </button>
-          )}
+          {state.ready && <NewMenu active={panel === 'new' || panel === 'team' || studio} onPick={startNew} />}
         </div>
       </header>
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
@@ -262,15 +272,28 @@ export function App({ store }: { store: Store }) {
       )}
       {state.ready && studio && (
         <Studio
+          key={live ?? 'draft'}
           agents={agents}
           store={store}
+          live={live}
           onClose={() => {
             store.endCrewSpawn();
             setStudio(false);
+            setLive(undefined);
           }}
         />
       )}
-      {state.ready && panel === 'crew' && <TeamPanel crews={state.crews} store={store} onClose={() => toggle('crew')} onNew={() => setPanel('team')} />}
+      {state.ready && panel === 'crew' && <TeamPanel
+          crews={state.crews}
+          store={store}
+          onClose={() => toggle('crew')}
+          onNew={() => setPanel('team')}
+          onStudio={(crewId) => {
+            setPanel(undefined);
+            setLive(crewId);
+            setStudio(true);
+          }}
+        />}
       {state.ready && panel === 'recall' && <RecallPanel agents={agents} store={store} onClose={() => toggle('recall')} />}
       {state.ready && panel === 'prompts' && <PromptsPanel store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && !state.connected && <p class="notice">Daemon unreachable: trying again…</p>}

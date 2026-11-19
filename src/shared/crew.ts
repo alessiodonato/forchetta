@@ -90,6 +90,11 @@ export interface CrewSpec {
   /** Each member in a git worktree of its own, unless it says otherwise (the lead stays in the folder). */
   worktrees?: boolean;
   members: CrewMemberSpec[];
+  /**
+   * What every agent of the team follows, whatever its role: the conventions of the project, how to commit, what
+   * never to do. In the system prompt of each session, so nothing is written in the folder of the project.
+   */
+  rules?: string;
 }
 
 /**
@@ -317,6 +322,11 @@ export const CREW_MAX_MEMBERS = 50;
 export const CREW_NAME_MAX = 40;
 export const MEMBER_NAME_MAX = 24;
 export const ROLE_MAX = 1000;
+/** The rules of a whole team: longer than a role, they go to every session. */
+export const RULES_MAX = 4000;
+/** The notes on the canvas of the studio, kept with a template. */
+export const NOTES_MAX = 30;
+export const NOTE_MAX = 600;
 /** The prompt of a relation, as long as a role. */
 export const RELATION_MAX = ROLE_MAX;
 /** Names: what reads well in a request and in Claude Code. A letter or a digit first, then also spaces, ".", "_", "-". */
@@ -380,6 +390,7 @@ export function cleanCrewSpec(input: unknown): { spec: CrewSpec } | { error: str
   if (!cwd) return { error: 'choose the folder of the team' };
   const talk: Talk = raw.talk === 'oneway' ? 'oneway' : 'twoway';
   const worktrees = raw.worktrees === true;
+  const rules = block(raw.rules, RULES_MAX);
 
   const taken = new Set<string>();
   const memberName = (value: unknown, what: string): string | { error: string } => {
@@ -430,7 +441,7 @@ export function cleanCrewSpec(input: unknown): { spec: CrewSpec } | { error: str
   }
   const levels = cleanReportsTo(raw.members as unknown[], members, lead);
   if (levels) return levels;
-  return { spec: { name, cwd, lead, talk, ...(worktrees ? { worktrees } : {}), members } };
+  return { spec: { name, cwd, lead, talk, ...(worktrees ? { worktrees } : {}), members, ...(rules ? { rules } : {}) } };
 }
 
 /**
@@ -523,9 +534,13 @@ export function leadPrompt(crew: CrewSpec): string {
     ...(crew.members.some((member) => effectiveWorktree(crew, member)) ? [WORKTREE_LEAD] : []),
     ...(crew.members.some((member) => member.paths) ? [FILES_LEAD] : []),
     ...(crew.members.some((member) => member.reviews) ? [REVIEW_LEAD] : []),
-    'The user sees every session of the team in Forchetta and can also write to the members.'
+    'The user sees every session of the team in Forchetta and can also write to the members.',
+    ...rulesLines(crew),
   ].join('\n');
 }
+
+/** The rules of the whole team, at the end of the system prompt of each session. */
+const rulesLines = (crew: Pick<CrewSpec, 'rules'>): string[] => (crew.rules ? ['', 'The rules of the whole team, for you as for every other session of it:', crew.rules] : []);
 
 /** What a member that reviews is told: how to record its verdicts, and what they are for. */
 const REVIEW_MEMBER =
@@ -590,6 +605,7 @@ export function memberPrompt(crew: CrewSpec, member: CrewMemberSpec): string {
           ),
         ]
       : []),
+    ...rulesLines(crew),
   ].join('\n');
 }
 
@@ -690,6 +706,10 @@ export interface CrewTemplate {
   members: CrewMemberSpec[];
   /** Where its boxes stand in the studio: by name ("you" for you), x and y. None: the studio lays them out. */
   layout?: Record<string, [number, number]>;
+  /** The rules of the whole team (CrewSpec). */
+  rules?: string;
+  /** The notes written on its canvas in the studio, where they stand. */
+  notes?: { x: number; y: number; text: string }[];
   /** One of the templates that come with Forchetta: it cannot be deleted. */
   builtin?: boolean;
   /** One of those, changed by you: deleting your version brings back the one of Forchetta. */
@@ -848,6 +868,20 @@ export const BUILTIN_TEMPLATES: readonly CrewTemplate[] = [
   },
 ];
 
+/** The notes of a canvas as sent: a place and a text each, the empty ones left out. */
+function cleanNotes(raw: unknown): { x: number; y: number; text: string }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: { x: number; y: number; text: string }[] = [];
+  for (const item of raw) {
+    const note = item as { x?: unknown; y?: unknown; text?: unknown } | undefined;
+    const text = block(note?.text, NOTE_MAX);
+    if (!text || typeof note?.x !== 'number' || typeof note.y !== 'number' || !Number.isFinite(note.x) || !Number.isFinite(note.y)) continue;
+    out.push({ x: Math.round(Math.min(Math.max(note.x, -10_000), 10_000)), y: Math.round(Math.min(Math.max(note.y, -10_000), 10_000)), text });
+    if (out.length >= NOTES_MAX) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 /** A template as the panel sends it, checked like a team (the folder aside); or what is wrong with it. */
 export function cleanTemplate(input: unknown): { template: CrewTemplate } | { error: string } {
   const checked = cleanCrewSpec({ ...((input ?? {}) as object), cwd: '/' });
@@ -855,7 +889,8 @@ export function cleanTemplate(input: unknown): { template: CrewTemplate } | { er
   const { cwd: _cwd, ...rest } = checked.spec;
   const names = ['you', ...(rest.lead.kind === 'claude' ? [rest.lead.name] : []), ...rest.members.map((member) => member.name)];
   const layout = cleanLayout((input as Record<string, unknown> | undefined)?.layout, names);
-  return { template: { ...rest, members: rest.members.map(memberOfTemplate), ...(layout ? { layout } : {}) } };
+  const notes = cleanNotes((input as Record<string, unknown> | undefined)?.notes);
+  return { template: { ...rest, members: rest.members.map(memberOfTemplate), ...(layout ? { layout } : {}), ...(notes ? { notes } : {}) } };
 }
 
 /**
@@ -869,6 +904,8 @@ export function tooLong(input: unknown): string | undefined {
   const blockLength = (value: unknown): number => (typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim().length : 0);
   const name = lineLength(raw.name);
   if (name > CREW_NAME_MAX) return `the name of the team is ${name} characters: ${CREW_NAME_MAX} at most`;
+  const rules = blockLength(raw.rules);
+  if (rules > RULES_MAX) return `the rules of the team are ${rules} characters: ${RULES_MAX} at most`;
   const people: [string, unknown][] = [['the lead', raw.lead], ...(Array.isArray(raw.members) ? raw.members.map((member, index): [string, unknown] => [`member ${index + 1}`, member]) : [])];
   for (const [what, item] of people) {
     if (!item || typeof item !== 'object') continue;
@@ -878,11 +915,11 @@ export function tooLong(input: unknown): string | undefined {
     if (nameLength > MEMBER_NAME_MAX) return `${label}: the name is ${nameLength} characters, ${MEMBER_NAME_MAX} at most`;
     const roleLength = blockLength(person.role);
     if (roleLength > ROLE_MAX) {
-      return `${label}: the role is ${roleLength} characters, ${ROLE_MAX} at most (the rules the whole team shares belong in a CLAUDE.md in its folder)`;
+      return `${label}: the role is ${roleLength} characters, ${ROLE_MAX} at most (what the whole team shares belongs in its rules)`;
     }
     const relationLength = blockLength(person.relation);
     if (relationLength > RELATION_MAX) {
-      return `${label}: the prompt of its relation is ${relationLength} characters, ${RELATION_MAX} at most (the rules the whole team shares belong in a CLAUDE.md in its folder)`;
+      return `${label}: the prompt of its relation is ${relationLength} characters, ${RELATION_MAX} at most (what the whole team shares belongs in its rules)`;
     }
   }
   return undefined;
@@ -895,4 +932,5 @@ export const templateOf = (spec: CrewSpec, name = spec.name): CrewTemplate => ({
   talk: spec.talk,
   ...(spec.worktrees ? { worktrees: true } : {}),
   members: spec.members.map(memberOfTemplate),
+  ...(spec.rules ? { rules: spec.rules } : {}),
 });

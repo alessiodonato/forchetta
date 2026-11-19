@@ -1,4 +1,5 @@
-// Builds docs/demo/: the page of the app (src/ui) with the daemon of the demo (src/demo), for forchetta.dev/demo.
+// Builds docs/demo/: the page of the app (src/ui) with the daemon of the demo (src/demo), for forchetta.dev/demo;
+// and docs/studio/: the studio alone with the same daemon (src/maker), for forchetta.dev/studio.
 // The modules of the daemon are the real ones; what they import of Node comes from src/demo/shims.
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -47,3 +48,25 @@ await build({
 copyFileSync('src/demo/index.html', 'docs/demo/index.html');
 copyFileSync('src/ui/fonts/OFL.txt', 'docs/demo/fonts/OFL.txt');
 console.log('docs/demo/ pronto');
+
+// The studio of forchetta.dev/studio (Studio Maker): the studio of the app alone, with the same daemon in the page.
+rmSync('docs/studio', { recursive: true, force: true });
+mkdirSync('docs/studio', { recursive: true });
+await build({
+  entryPoints: { maker: 'src/maker/main.ts' },
+  outdir: 'docs/studio',
+  bundle: true,
+  format: 'esm',
+  target: ['safari16', 'chrome110', 'firefox115'],
+  jsx: 'automatic',
+  jsxImportSource: 'preact',
+  loader: { '.woff2': 'file' },
+  assetNames: 'fonts/[name]-[hash]',
+  plugins: [nodeShims],
+  minify: true,
+  legalComments: 'none',
+  logLevel: 'warning',
+});
+copyFileSync('src/maker/index.html', 'docs/studio/index.html');
+copyFileSync('src/ui/fonts/OFL.txt', 'docs/studio/fonts/OFL.txt');
+console.log('docs/studio/ pronto');

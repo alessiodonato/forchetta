@@ -1,22 +1,29 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { Agent } from '../shared/agent.ts';
-import { CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, type Talk } from '../shared/crew.ts';
+import { type Agent, STATE_LABEL } from '../shared/agent.ts';
+import { crewUsage, shortTokens, tokensTotal, usdText } from '../shared/present.ts';
+import { type LinkKind, linkStates } from './org-lines.ts';
+import { CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, NOTE_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, RULES_MAX, type Talk } from '../shared/crew.ts';
 import { allSkills, SKILL_GROUPS, type SkillInfo, SKILLS_PER_AGENT_MAX, skillById, skillUrl } from '../shared/skills.ts';
 import { openLink } from './Artifacts.tsx';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { TALK_TEXT } from './NewTeam.tsx';
-import type { Store } from './store.ts';
+import { canOpen, type Store } from './store.ts';
 import {
   addNode,
+  addNote,
   addSkill,
   addTemplate,
   canvasSize,
+  clampZoom,
+  clipOf,
+  contentBox,
   connect,
   curve,
   docOfTemplate,
   emptyDoc,
   emptyHistory,
   fieldsOf,
+  fitZoom,
   type From,
   fromName,
   incoming,
@@ -24,18 +31,27 @@ import {
   linkEnds,
   NODE_H,
   NODE_W,
+  NOTE_W,
   nodeAt,
   nodeOf,
+  nodesIn,
+  pasteClip,
+  pathsOf,
+  reserveKeys,
+  noteOf,
   presetOfNode,
   problems,
   redoStep,
   remember,
   removeLink,
   removeNode,
+  removeNodes,
   skillsOf,
   specOfDoc,
+  type StudioClip,
   type StudioDoc,
   type StudioHistory,
+  type StudioLink,
   type StudioNode,
   templateOfDoc,
   tidy,
@@ -54,20 +70,44 @@ import {
 
 /** The canvas you were drawing, kept while the window lives: closing the studio does not lose it. */
 let draft: StudioDoc | undefined;
+/** The boxes copied (⌘C), for ⌘V here or in a canvas opened later; and how far the next paste goes. */
+let clipboard: StudioClip | undefined;
+let pasteShift = 0;
+/** The zoom of the canvas, kept until the page reloads. */
+let zoomSaved = 1;
+/** Told of every change of the canvas: the studio of forchetta.dev saves it in the browser. */
+let draftWatcher: ((doc: StudioDoc) => void) | undefined;
+
+/** A canvas kept elsewhere (the browser), to open the studio on. */
+export function restoreDraft(doc: StudioDoc): void {
+  const complete: StudioDoc = { ...emptyDoc(doc.folder ?? ''), ...doc, rules: doc.rules ?? '', notes: doc.notes ?? [] };
+  reserveKeys(complete);
+  draft = complete;
+}
+
+export function watchDraft(watch: (doc: StudioDoc) => void): void {
+  draftWatcher = watch;
+}
+/** The canvas of each running team opened in the studio: where you put its boxes, and the agents not added yet. */
+const liveDocs = new Map<string, StudioDoc>();
 /** Its undo and redo, kept with it until the page reloads. */
 let history: StudioHistory = emptyHistory();
 
-type Selection = { kind: 'node'; key: number } | { kind: 'link'; to: number } | { kind: 'role'; name: string } | { kind: 'new-role' } | { kind: 'team'; name: string } | { kind: 'skill'; id: string } | { kind: 'new-skill' } | undefined;
+type Selection = { kind: 'node'; key: number } | { kind: 'link'; to: number } | { kind: 'role'; name: string } | { kind: 'new-role' } | { kind: 'team'; name: string } | { kind: 'skill'; id: string } | { kind: 'new-skill' } | { kind: 'note'; key: number } | { kind: 'import' } | { kind: 'nodes'; keys: number[] } | undefined;
 
 /** "+ new agent" in the palette: dragged, a box to fill on the canvas; clicked, a preset of your own to write. */
 const BLANK_AGENT: RolePreset = { name: 'agent', role: '' };
 
 type Drag =
-  | { kind: 'move'; what: number | 'you'; dx: number; dy: number; x0: number; y0: number; moved: boolean }
+  | { kind: 'move'; what: number | 'you'; note?: boolean; dx: number; dy: number; x0: number; y0: number; moved: boolean }
   | { kind: 'link'; from: From; x: number; y: number }
   | { kind: 'role'; preset: RolePreset; x0: number; y0: number; x: number; y: number; moved: boolean }
   | { kind: 'team'; template: CrewTemplate; x0: number; y0: number; x: number; y: number; moved: boolean }
-  | { kind: 'skill'; skill: SkillInfo; x0: number; y0: number; x: number; y: number; moved: boolean };
+  | { kind: 'skill'; skill: SkillInfo; x0: number; y0: number; x: number; y: number; moved: boolean }
+  /** Several boxes moved together, from where each one was. */
+  | { kind: 'group'; key: number; starts: Map<number, { x: number; y: number }>; px: number; py: number; x0: number; y0: number; moved: boolean }
+  /** A rectangle drawn from an empty spot, to select the boxes it touches (canvas points). */
+  | { kind: 'band'; ax: number; ay: number; bx: number; by: number };
 
 /** Past this many pixels a press becomes a drag. */
 const SLOP = 4;
@@ -237,8 +277,155 @@ function SkillCard({ skill, store }: { skill: SkillInfo; store: Store }) {
   );
 }
 
+/** A member of a running team, selected: what it is doing and what it used; its files, or taking it away. */
+function LiveMember({
+  node,
+  lead,
+  above,
+  agent,
+  store,
+  onPaths,
+  onRemove,
+}: {
+  node: StudioNode;
+  lead: boolean;
+  above: string | undefined;
+  agent: Agent | undefined;
+  store: Store;
+  onPaths: (paths: string) => void;
+  onRemove: () => void;
+}) {
+  const [paths, setPaths] = useState(node.paths);
+  const [armed, setArmed] = useState(false);
+  useEffect(() => setPaths(node.paths), [node.key, node.paths]);
+  const used = agent ? crewUsage([agent]) : undefined;
+  const total = used ? tokensTotal(used.tokens) : 0;
+  return (
+    <>
+      <p class="studio-title">
+        {node.name.trim()}
+        {lead && <span class="studio-tag">lead</span>}
+        {agent && <span class="studio-tag">{STATE_LABEL[agent.state]}</span>}
+      </p>
+      <p class="studio-hint">{lead ? 'The lead of the running team.' : `In the running team, reporting to ${above ?? 'the lead'}.`}</p>
+      <ul class="studio-list">
+        {agent && (agent.state === 'working' ? <li>Now: {agent.action?.label ?? 'thinking…'}</li> : agent.summary?.text ? <li>Last: {agent.summary.text.slice(0, 140)}</li> : null)}
+        {used && (used.usd > 0 || total > 0) && (
+          <li>
+            Used {used.usd > 0 ? `≈ ${usdText(used.usd)}` : ''}
+            {total > 0 ? `${used.usd > 0 ? ', ' : ''}${shortTokens(total)} tokens (${shortTokens(used.tokens.output)} written)` : ''}
+          </li>
+        )}
+        <li>Model {node.model || 'default'}, permissions {node.mode || 'default'}</li>
+        {node.skills.length > 0 && <li>Skills: {node.skills.join(', ')}</li>}
+      </ul>
+      <p class="studio-hint studio-strong">{node.role}</p>
+      {!lead && (
+        <>
+          <label class="studio-field">
+            <span>Files</span>
+            <div class="studio-row">
+              <input class="command-input mono" type="text" value={paths} placeholder="src/ui/, *.css — empty: any file not of another member" spellcheck={false} onInput={(event) => setPaths((event.target as HTMLInputElement).value)} />
+              <button type="button" disabled={paths === node.paths} onClick={() => onPaths(paths)}>
+                Apply
+              </button>
+            </div>
+          </label>
+          <div class="studio-actions">
+            {agent && canOpen(agent) && (
+              <button type="button" onClick={() => store.open(agent.id)}>
+                Open its terminal
+              </button>
+            )}
+            {armed ? (
+              <button
+                type="button"
+                class="danger"
+                onClick={() => {
+                  setArmed(false);
+                  onRemove();
+                }}
+              >
+                close its session?
+              </button>
+            ) : (
+              <button type="button" class="quiet" onClick={() => setArmed(true)}>
+                Remove from the team
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {lead && agent && canOpen(agent) && (
+        <div class="studio-actions">
+          <button type="button" onClick={() => store.open(agent.id)}>
+            Open its terminal
+          </button>
+        </div>
+      )}
+      <p class="studio-hint">A running session keeps its role, model and skills: change them in a template, for the next start.</p>
+    </>
+  );
+}
+
+/** The whole canvas, small, in a corner, when it does not fit in the view: where you are, and a click to go elsewhere. */
+function Minimap({ doc, size, zoom, view }: { doc: StudioDoc; size: { width: number; height: number }; zoom: number; view: HTMLDivElement | null }) {
+  if (!view || doc.nodes.length === 0) return null;
+  const visible = { x: view.scrollLeft / zoom, y: view.scrollTop / zoom, width: view.clientWidth / zoom, height: view.clientHeight / zoom };
+  const box = contentBox(doc);
+  if (box.left >= visible.x && box.top >= visible.y && box.right <= visible.x + visible.width && box.bottom <= visible.y + visible.height) return null;
+  const scale = Math.min(170 / size.width, 120 / size.height);
+  const go = (event: PointerEvent): void => {
+    const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const x = (event.clientX - rect.left) / scale;
+    const y = (event.clientY - rect.top) / scale;
+    view.scrollLeft = (x - visible.width / 2) * zoom;
+    view.scrollTop = (y - visible.height / 2) * zoom;
+  };
+  return (
+    <svg
+      class="studio-minimap"
+      width={Math.round(size.width * scale)}
+      height={Math.round(size.height * scale)}
+      aria-label="Map of the canvas: click to go there"
+      onPointerDown={(event) => {
+        event.preventDefault();
+        (event.currentTarget as SVGSVGElement).setPointerCapture(event.pointerId);
+        go(event);
+      }}
+      onPointerMove={(event) => event.buttons === 1 && go(event)}
+    >
+      <rect class="studio-minimap-you" x={doc.you.x * scale} y={doc.you.y * scale} width={YOU_W * scale} height={YOU_H * scale} />
+      {doc.nodes.map((node) => (
+        <rect key={node.key} class="studio-minimap-node" x={node.x * scale} y={node.y * scale} width={NODE_W * scale} height={NODE_H * scale} />
+      ))}
+      <rect class="studio-minimap-view" x={visible.x * scale} y={visible.y * scale} width={visible.width * scale} height={visible.height * scale} />
+    </svg>
+  );
+}
+
+/** A team from its file: dropped on the studio, or its text pasted here. */
+function ImportTeam({ store }: { store: Store }) {
+  const [text, setText] = useState('');
+  const busy = store.state.teamFile?.action === 'import' && store.state.teamFile.busy;
+  return (
+    <>
+      <p class="studio-title">Open a team from its file</p>
+      <p class="studio-hint">
+        Drop the file of a team (<code>.forchetta-team.json</code>) anywhere on the studio, or paste its text here. It opens on the canvas, in place of what is there; ⌘Z brings that back. Skills of GitHub it needs are added; skills that were a folder of the other Mac are left out.
+      </p>
+      <Text label="Its text" area value={text} max={512 * 1024} placeholder='{ "kind": "forchetta-team", … }' onInput={setText} mono />
+      <div class="studio-actions">
+        <button type="button" class="primary" disabled={!text.trim() || busy} onClick={() => store.importTeam(text)}>
+          {busy ? 'Opening…' : 'Open'}
+        </button>
+      </div>
+    </>
+  );
+}
+
 /** A skill of yours: the link of its folder on GitHub, or a folder of this Mac. */
-function AddSkill({ store, onChoose, onAdded }: { store: Store; onChoose: (current: string, put: (path: string) => void) => void; onAdded: (id: string) => void }) {
+function AddSkill({ store, onChoose, onAdded }: { store: Store; onChoose?: (current: string, put: (path: string) => void) => void; onAdded: (id: string) => void }) {
   const [source, setSource] = useState('');
   const edit = store.state.skillEdit?.action === 'add' ? store.state.skillEdit : undefined;
   const [sentAt, setSentAt] = useState<number | undefined>(undefined);
@@ -269,9 +456,11 @@ function AddSkill({ store, onChoose, onAdded }: { store: Store; onChoose: (curre
             onInput={(event) => setSource((event.target as HTMLInputElement).value)}
             onKeyDown={(event) => event.key === 'Enter' && add()}
           />
-          <button type="button" title="Choose the folder of a skill in the panel of macOS" onClick={() => onChoose(source.startsWith('/') || source.startsWith('~') ? source : '', setSource)}>
-            Choose…
-          </button>
+          {onChoose && (
+            <button type="button" title="Choose the folder of a skill in the panel of macOS" onClick={() => onChoose(source.startsWith('/') || source.startsWith('~') ? source : '', setSource)}>
+              Choose…
+            </button>
+          )}
         </div>
       </label>
       <div class="studio-actions">
@@ -301,7 +490,22 @@ function MemberOptions({ fields, worktrees, onChange }: { fields: AgentFields; w
 }
 
 /** The relation an arrow carries: → / ⇄ and its prompt; for the arrow from You to the Claude lead, what that is. */
-function RelationForm({ doc, to, onChange, onRemove, onDone }: { doc: StudioDoc; to: number; onChange: (doc: StudioDoc) => void; onRemove: () => void; onDone?: () => void }) {
+function RelationForm({
+  doc,
+  to,
+  onChange,
+  onRemove,
+  onDone,
+  onTalk,
+}: {
+  doc: StudioDoc;
+  to: number;
+  onChange: (doc: StudioDoc) => void;
+  onRemove: () => void;
+  onDone?: () => void;
+  /** A member of a running team: → / ⇄ changes in the team itself; its prompt and its place stay. */
+  onTalk?: (talk: Talk) => void;
+}) {
   const link = incoming(doc, to);
   const target = nodeOf(doc, to);
   if (!link || !target) return null;
@@ -326,25 +530,41 @@ function RelationForm({ doc, to, onChange, onRemove, onDone }: { doc: StudioDoc;
           </p>
           <span class="view-switch" role="group" aria-label="How it talks">
             {(['twoway', 'oneway'] as const).map((value) => (
-              <button key={value} type="button" class={talk === value ? 'on' : undefined} onClick={() => onChange(updateLink(doc, to, { talk: value }))}>
+              <button
+                key={value}
+                type="button"
+                class={talk === value ? 'on' : undefined}
+                onClick={() => {
+                  onChange(updateLink(doc, to, { talk: value }));
+                  onTalk?.(value);
+                }}
+              >
                 {TALK_TEXT[value]}
               </button>
             ))}
           </span>
-          <Text
-            label="The prompt of the relation (optional)"
-            area
-            value={link.relation}
-            max={RELATION_MAX}
-            placeholder={`How ${below} works with ${above}: what is asked and how, what comes back and in what form, when to ask. Both read it.`}
-            onInput={(relation) => onChange(updateLink(doc, to, { relation }))}
-          />
+          {onTalk ? (
+            <p class="studio-hint">
+              {link.relation.trim() ? `Its prompt: ${link.relation.trim()}` : 'No prompt of its own.'} A running session keeps its prompt; → / ⇄ counts from the next request.
+            </p>
+          ) : (
+            <Text
+              label="The prompt of the relation (optional)"
+              area
+              value={link.relation}
+              max={RELATION_MAX}
+              placeholder={`How ${below} works with ${above}: what is asked and how, what comes back and in what form, when to ask. Both read it.`}
+              onInput={(relation) => onChange(updateLink(doc, to, { relation }))}
+            />
+          )}
         </>
       )}
       <div class="studio-actions">
-        <button type="button" class="quiet" onClick={onRemove}>
-          Remove arrow
-        </button>
+        {!onTalk && (
+          <button type="button" class="quiet" onClick={onRemove}>
+            Remove arrow
+          </button>
+        )}
         {onDone && (
           <button type="button" class="primary" onClick={onDone}>
             OK
@@ -483,6 +703,9 @@ function TeamCard({ template, store, onOpen, onAdd }: { template: CrewTemplate; 
         <button type="button" onClick={duplicate}>
           Duplicate
         </button>
+        <button type="button" title="Save it as a file, to give to someone else" onClick={() => store.exportTeam(template)}>
+          Export
+        </button>
         {(!template.builtin || template.modified) &&
           (armed === 'delete' ? (
             <button
@@ -505,17 +728,43 @@ function TeamCard({ template, store, onOpen, onAdd }: { template: CrewTemplate; 
   );
 }
 
-export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; store: Store; onClose: () => void }) {
+export function Studio({
+  agents,
+  store,
+  onClose,
+  live,
+  maker,
+}: {
+  agents: readonly Agent[];
+  store: Store;
+  onClose: () => void;
+  live?: string;
+  /** The studio of forchetta.dev: a team is made to be exported as a file, not started; no folder of a Mac. */
+  maker?: boolean;
+}) {
   const recent = useMemo(() => recentFolders(agents), [agents]);
-  const [doc, setDocState] = useState<StudioDoc>(() => draft ?? emptyDoc(recent[0] ?? ''));
+  const [doc, setDocState] = useState<StudioDoc>(() => (live ? liveDocs.get(live) : draft) ?? emptyDoc(live ? '' : (recent[0] ?? '')));
+  // A running team (live): its sessions, by the names of the boxes.
+  const crew = live ? store.state.crews.find((candidate) => candidate.id === live) : undefined;
+  const recipientOf = (node: { name: string }) => crew?.recipients?.find((recipient) => recipient.name.toLowerCase() === node.name.trim().toLowerCase());
+  const liveAgentOf = (node: { name: string }): Agent | undefined => {
+    const id = recipientOf(node)?.agentId;
+    return id ? store.state.agents.get(id) : undefined;
+  };
+  /** A box of a running team that is not in it yet: added on the canvas, to add to the team. */
+  const pending = (node: { name: string }): boolean => !!live && !recipientOf(node);
   /** A change of the canvas: kept for the next opening; the last note goes, unless the change sets its own after. */
-  const setDoc = (next: StudioDoc | ((current: StudioDoc) => StudioDoc)): void => {
+  const setDoc = (next: StudioDoc | ((current: StudioDoc) => StudioDoc), keepNote = false): void => {
     const value = typeof next === 'function' ? next(docRef.current) : next;
-    if (value !== docRef.current) history = remember(history, docRef.current, Date.now());
-    draft = value;
+    if (live) liveDocs.set(live, value);
+    else {
+      if (value !== docRef.current) history = remember(history, docRef.current, Date.now());
+      draft = value;
+      draftWatcher?.(value);
+    }
     docRef.current = value;
     setDocState(value);
-    setNote(undefined);
+    if (!keepNote) setNote(undefined);
   };
   const [selection, setSelection] = useState<Selection>(undefined);
   const [popover, setPopover] = useState<{ to: number; x: number; y: number } | undefined>(undefined);
@@ -531,9 +780,26 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
     dx = Math.max(dx, view.left + margin - box.left);
     let dy = Math.min(0, view.bottom - margin - box.bottom);
     dy = Math.max(dy, view.top + margin - box.top);
-    if (Math.abs(dx) >= 1 || Math.abs(dy) >= 1) setPopover({ ...popover, x: Math.round(popover.x + dx), y: Math.round(popover.y + dy) });
+    if (Math.abs(dx) >= 1 || Math.abs(dy) >= 1) setPopover({ ...popover, x: Math.round(popover.x + dx / zoomRef.current), y: Math.round(popover.y + dy / zoomRef.current) });
   }, [popover]);
   const [drag, setDrag] = useState<Drag | undefined>(undefined);
+  const [zoom, setZoomState] = useState(zoomSaved);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  /** Where the view should be after a zoom: the canvas point under `client` stays under it. */
+  const zoomAnchor = useRef<{ client: { x: number; y: number }; point: { x: number; y: number } } | undefined>(undefined);
+  const setZoom = (next: number, client?: { x: number; y: number }): void => {
+    const value = clampZoom(next);
+    const view = viewport.current?.getBoundingClientRect();
+    const at = client ?? (view ? { x: view.left + view.width / 2, y: view.top + view.height / 2 } : undefined);
+    if (at) zoomAnchor.current = { client: at, point: toCanvas(at.x, at.y) };
+    zoomSaved = value;
+    setZoomState(value);
+  };
+  const [menu, setMenu] = useState<{ x: number; y: number; items: { label: string; keys?: string; run: () => void }[] } | undefined>(undefined);
+  const section = useRef<HTMLElement>(null);
+  // The view follows the scroll, for the minimap.
+  const [, setScrolled] = useState(0);
   const [note, setNote] = useState<{ text: string; error?: boolean } | undefined>(undefined);
   const [clearArmed, setClearArmed] = useState(false);
   const [skillFilter, setSkillFilter] = useState('');
@@ -546,8 +812,10 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
 
   const spawn = store.state.crewSpawn;
   const edit = store.state.crewEdit;
-  const issues = problems(doc);
+  const issues = problems(maker ? { ...doc, folder: doc.folder.trim() || '/' } : doc);
   const lead = leadKey(doc);
+  // What goes on along each arrow of a running team: a request in the queue or at work, an answer, a question.
+  const lineStates = crew ? linkStates(crew) : new Map<string, LinkKind>();
   const size = canvasSize(doc);
   const members = doc.nodes.length - (lead !== undefined ? 1 : 0);
 
@@ -573,6 +841,102 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
     const timer = setTimeout(() => setClearArmed(false), 4000);
     return () => clearTimeout(timer);
   }, [clearArmed]);
+  // A running team: asked again whenever its members change; its canvas keeps where you put the boxes and the
+  // agents you added there that are not in the team yet.
+  const memberNames = (crew?.recipients ?? []).map((recipient) => recipient.name).join('\n');
+  // Who has been in the team: a box of one taken away goes, while one you added and not started yet stays.
+  const seenInTeam = useRef(new Set<string>());
+  for (const recipient of crew?.recipients ?? []) seenInTeam.current.add(recipient.name.toLowerCase());
+  useEffect(() => {
+    if (live) store.requestCrewTemplate(live);
+  }, [live, memberNames]);
+  const liveTeam = store.state.liveTeam;
+  useEffect(() => {
+    if (!live || liveTeam?.crewId !== live || !liveTeam.template) return;
+    const fresh = docOfTemplate(liveTeam.template, liveTeam.cwd ?? '');
+    const old = docRef.current;
+    if (old.nodes.length === 0) return setDoc(fresh, true);
+    const before = new Map(old.nodes.map((node) => [node.name.trim().toLowerCase(), node]));
+    const nodes = fresh.nodes.map((node) => {
+      const was = before.get(node.name.trim().toLowerCase());
+      return was ? { ...node, x: was.x, y: was.y } : node;
+    });
+    const inTeam = new Set(nodes.map((node) => node.name.trim().toLowerCase()));
+    const kept = old.nodes.filter((node) => !inTeam.has(node.name.trim().toLowerCase()) && !seenInTeam.current.has(node.name.trim().toLowerCase()));
+    const keyByName = new Map(nodes.map((node) => [node.name.trim().toLowerCase(), node.key]));
+    const keptLinks = old.links
+      .filter((link) => kept.some((node) => node.key === link.to))
+      .map((link) => {
+        if (link.from === 'you') return link;
+        const from = old.nodes.find((node) => node.key === link.from);
+        const key = from ? (keyByName.get(from.name.trim().toLowerCase()) ?? (kept.includes(from) ? from.key : undefined)) : undefined;
+        return key === undefined ? undefined : { ...link, from: key };
+      })
+      .filter((link): link is StudioLink => link !== undefined);
+    setDoc({ ...fresh, you: old.you, nodes: [...nodes, ...kept], links: [...fresh.links, ...keptLinks], notes: old.notes }, true);
+  }, [liveTeam?.at]);
+  /** The member of the running team that a box is, as the daemon names it (the lead included). */
+  const editLive = store.state.crewEdit;
+  useEffect(() => {
+    if (!live || !editLive || editLive.busy) return;
+    if (editLive.ok === false) setNote({ text: editLive.error ?? 'the team did not change', error: true });
+    else if (editLive.action === 'add') setNote({ text: 'Added: its session starts in the team, with the others.' });
+    else if (editLive.action === 'remove') setNote({ text: 'Taken away from the team: its session is closed.' });
+  }, [editLive?.at, editLive?.busy]);
+  const addToTeam = (node: StudioNode): void => {
+    if (!live) return;
+    const link = incoming(doc, node.key);
+    if (!link) return setNote({ text: `Draw an arrow onto ${node.name} from the one it reports to first.`, error: true });
+    const above = link.from === 'you' ? undefined : nodeOf(doc, link.from);
+    if (above && pending(above)) return setNote({ text: `Add ${above.name} to the team first: ${node.name} reports to it.`, error: true });
+    const isLead = above !== undefined && leadKey(doc) === above.key;
+    const paths = pathsOf(node.paths);
+    store.editCrew(live, {
+      action: 'add',
+      member: {
+        name: node.name.trim(),
+        role: node.role.trim(),
+        ...(link.talk ? { talk: link.talk } : {}),
+        ...(node.model ? { model: node.model } : {}),
+        ...(node.mode ? { mode: node.mode } : {}),
+        ...(node.worktree !== undefined ? { worktree: node.worktree } : {}),
+        ...(paths.length > 0 ? { paths } : {}),
+        ...(node.reviews ? { reviews: true } : {}),
+        ...(node.skills.length > 0 ? { skills: node.skills } : {}),
+        ...(above && !isLead ? { reportsTo: above.name.trim() } : {}),
+        ...(link.relation.trim() ? { relation: link.relation.trim() } : {}),
+      },
+    });
+  };
+
+  // A team file: saved (where), or opened (on the canvas, in place of what was there, which ⌘Z brings back).
+  const teamFile = store.state.teamFile;
+  useEffect(() => {
+    if (!teamFile || teamFile.busy) return;
+    if (!teamFile.ok) return setNote({ text: teamFile.error ?? 'it did not work', error: true });
+    if (teamFile.action === 'save') return setNote({ text: `Saved in ${teamFile.path}: give it to whoever should have the team.` });
+    if (teamFile.template) {
+      setDoc(docOfTemplate(teamFile.template, docRef.current.folder));
+      setSelection(undefined);
+      setNote({ text: [`Opened ${teamFile.template.name} from its file: "Save as template" keeps it, ⌘Z brings back what was on the canvas.`, ...(teamFile.notes ?? [])].join(' · ') });
+    }
+  }, [teamFile?.at, teamFile?.busy]);
+  const exportCanvas = (): void => {
+    const checked = templateOfDoc(doc);
+    if ('error' in checked) return setNote({ text: checked.error, error: true });
+    store.exportTeam(checked.template);
+  };
+  // A team file dropped anywhere on the studio opens.
+  const [dropping, setDropping] = useState(false);
+  const hasFiles = (event: DragEvent): boolean => [...(event.dataTransfer?.types ?? [])].includes('Files');
+  const dropFile = async (event: DragEvent): Promise<void> => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    setDropping(false);
+    const file = event.dataTransfer?.files[0];
+    if (file) store.importTeam(await file.text());
+  };
+
   // The result of saving a template or a preset, said once.
   useEffect(() => {
     if (!edit || edit.busy) return;
@@ -583,7 +947,29 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
   /** A point of the window on the canvas. */
   const toCanvas = (clientX: number, clientY: number): { x: number; y: number } => {
     const rect = surface.current?.getBoundingClientRect();
-    return rect ? { x: clientX - rect.left, y: clientY - rect.top } : { x: 0, y: 0 };
+    return rect ? { x: (clientX - rect.left) / zoomRef.current, y: (clientY - rect.top) / zoomRef.current } : { x: 0, y: 0 };
+  };
+  useLayoutEffect(() => {
+    const anchor = zoomAnchor.current;
+    const view = viewport.current;
+    zoomAnchor.current = undefined;
+    if (!anchor || !view) return;
+    const rect = view.getBoundingClientRect();
+    view.scrollLeft = anchor.point.x * zoom - (anchor.client.x - rect.left);
+    view.scrollTop = anchor.point.y * zoom - (anchor.client.y - rect.top);
+  }, [zoom]);
+  /** Everything in the view: the zoom that fits, and the scroll to its corner. */
+  const fit = (): void => {
+    const view = viewport.current;
+    if (!view) return;
+    const value = fitZoom(docRef.current, view.clientWidth, view.clientHeight);
+    const box = contentBox(docRef.current);
+    zoomSaved = value;
+    setZoomState(value);
+    requestAnimationFrame(() => {
+      view.scrollLeft = Math.max(0, box.left * value - 40);
+      view.scrollTop = Math.max(0, box.top * value - 40);
+    });
   };
   const overCanvas = (clientX: number, clientY: number): boolean => {
     const rect = viewport.current?.getBoundingClientRect();
@@ -632,8 +1018,31 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
         if (!moved) return;
         const x = Math.max(0, Math.round(point.x - current.dx));
         const y = Math.max(0, Math.round(point.y - current.dy));
-        setDoc((doc) => (current.what === 'you' ? { ...doc, you: { x, y } } : updateNode(doc, current.what, { x, y })));
+        setDoc((doc) =>
+          current.what === 'you'
+            ? { ...doc, you: { x, y } }
+            : current.note
+              ? { ...doc, notes: doc.notes.map((note) => (note.key === current.what ? { ...note, x, y } : note)) }
+              : updateNode(doc, current.what, { x, y }),
+        );
         update({ ...current, moved: true });
+      } else if (current.kind === 'group') {
+        const point = toCanvas(event.clientX, event.clientY);
+        const moved = current.moved || Math.abs(event.clientX - current.x0) + Math.abs(event.clientY - current.y0) > SLOP;
+        if (!moved) return;
+        const dx = point.x - current.px;
+        const dy = point.y - current.py;
+        setDoc((doc) => ({
+          ...doc,
+          nodes: doc.nodes.map((node) => {
+            const start = current.starts.get(node.key);
+            return start ? { ...node, x: Math.max(0, Math.round(start.x + dx)), y: Math.max(0, Math.round(start.y + dy)) } : node;
+          }),
+        }));
+        update({ ...current, moved: true });
+      } else if (current.kind === 'band') {
+        const point = toCanvas(event.clientX, event.clientY);
+        update({ ...current, bx: point.x, by: point.y });
       } else if (current.kind === 'link') {
         const point = toCanvas(event.clientX, event.clientY);
         update({ ...current, x: point.x, y: point.y });
@@ -647,8 +1056,19 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
       update(undefined);
       if (!current) return;
       const doc = docRef.current;
+      if (current.kind === 'group') {
+        if (!current.moved) setSelection({ kind: 'node', key: current.key });
+        return;
+      }
+      if (current.kind === 'band') {
+        // A click on an empty spot selects nothing; a rectangle, the boxes it touches.
+        if (Math.abs(current.bx - current.ax) + Math.abs(current.by - current.ay) < 6) return;
+        const keys = nodesIn(doc, { x: current.ax, y: current.ay }, { x: current.bx, y: current.by });
+        setSelection(keys.length === 0 ? undefined : keys.length === 1 ? { kind: 'node', key: keys[0]! } : { kind: 'nodes', keys });
+        return;
+      }
       if (current.kind === 'move') {
-        if (!current.moved && current.what !== 'you') setSelection({ kind: 'node', key: current.what });
+        if (!current.moved && current.what !== 'you') setSelection(current.note ? { kind: 'note', key: current.what } : { kind: 'node', key: current.what });
         if (!current.moved && current.what === 'you') setSelection(undefined);
         return;
       }
@@ -656,6 +1076,7 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
         const point = toCanvas(event.clientX, event.clientY);
         const target = nodeAt(doc, point.x, point.y);
         if (!target) return;
+        if (live && !pending(target)) return setNote({ text: `${target.name} is in the running team: it keeps the one it reports to. An arrow goes to an agent you are adding.`, error: true });
         const result = connect(doc, current.from, target.key);
         if ('error' in result) {
           setNote({ text: result.error, error: true });
@@ -683,6 +1104,7 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
       const point = toCanvas(event.clientX, event.clientY);
       if (current.kind === 'skill') {
         const target = nodeAt(doc, point.x, point.y);
+        if (target && live && !pending(target)) return setNote({ text: `${target.name} is running: its session keeps the skills it started with.`, error: true });
         const result = target ? addSkill(doc, target.key, current.skill.id) : { error: 'Drop a skill on an agent: it is for that agent only.' };
         if ('error' in result) return setNote({ text: result.error, error: true });
         setDoc(result.doc);
@@ -706,13 +1128,37 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
     window.addEventListener('pointerup', up);
   };
 
-  const startMove = (event: PointerEvent, what: number | 'you'): void => {
+  const startMove = (event: PointerEvent, what: number | 'you', note = false): void => {
     if (event.button !== 0) return;
     event.preventDefault();
+    section.current?.focus({ preventScroll: true });
+    // ⇧-click: a box more in the selection, or one less.
+    if (event.shiftKey && what !== 'you' && !note) {
+      const keys = selectedKeys.includes(what) ? selectedKeys.filter((key) => key !== what) : [...selectedKeys, what];
+      setSelection(keys.length === 0 ? undefined : keys.length === 1 ? { kind: 'node', key: keys[0]! } : { kind: 'nodes', keys });
+      return;
+    }
+    if (what !== 'you' && !note && selectedKeys.length > 1 && selectedKeys.includes(what)) {
+      const point = toCanvas(event.clientX, event.clientY);
+      const starts = new Map(doc.nodes.filter((node) => selectedKeys.includes(node.key)).map((node) => [node.key, { x: node.x, y: node.y }]));
+      setPopover(undefined);
+      begin({ kind: 'group', key: what, starts, px: point.x, py: point.y, x0: event.clientX, y0: event.clientY, moved: false });
+      return;
+    }
     const point = toCanvas(event.clientX, event.clientY);
-    const at = what === 'you' ? doc.you : nodeOf(doc, what)!;
+    const at = what === 'you' ? doc.you : note ? noteOf(doc, what)! : nodeOf(doc, what)!;
     setPopover(undefined);
-    begin({ kind: 'move', what, dx: point.x - at.x, dy: point.y - at.y, x0: event.clientX, y0: event.clientY, moved: false });
+    begin({ kind: 'move', what, ...(note ? { note: true } : {}), dx: point.x - at.x, dy: point.y - at.y, x0: event.clientX, y0: event.clientY, moved: false });
+  };
+  /** A note where there is room, in the part of the canvas you see; it is selected, to write it. */
+  const newNote = (): void => {
+    const view = viewport.current;
+    const z = zoomRef.current;
+    const x = ((view?.scrollLeft ?? 0) + Math.max(24, (view?.clientWidth ?? 800) - NOTE_W * z - 48)) / z;
+    const y = ((view?.scrollTop ?? 0) + 40) / z + (docRef.current.notes.length % 6) * 24;
+    const added = addNote(docRef.current, x, y);
+    setDoc(added.doc);
+    setSelection({ kind: 'note', key: added.key });
   };
   const startLink = (event: PointerEvent, from: From): void => {
     if (event.button !== 0) return;
@@ -730,7 +1176,20 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
   };
 
   const remove = (): void => {
-    if (selection?.kind === 'node') {
+    const running = (key: number): boolean => {
+      const node = nodeOf(doc, key);
+      return !!node && !!live && !pending(node);
+    };
+    if (live && ((selection?.kind === 'node' && running(selection.key)) || (selection?.kind === 'nodes' && selection.keys.some(running)) || (selection?.kind === 'link' && running(selection.to)))) {
+      return setNote({ text: 'A member of the running team is taken away from its panel ("Remove from the team"): its session closes.', error: true });
+    }
+    if (selection?.kind === 'nodes') {
+      setDoc(removeNodes(doc, selection.keys));
+      setSelection(undefined);
+    } else if (selection?.kind === 'note') {
+      setDoc({ ...doc, notes: doc.notes.filter((note) => note.key !== selection.key) });
+      setSelection(undefined);
+    } else if (selection?.kind === 'node') {
       setDoc(removeNode(doc, selection.key));
       setSelection(undefined);
     } else if (selection?.kind === 'link') {
@@ -738,17 +1197,105 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
       setSelection(undefined);
     }
   };
+  // ⌘C, ⌘V, ⌘D, ⌘A: the selected boxes with the arrows between them; a paste comes a little lower each time.
+  const selectedKeys = selection?.kind === 'nodes' ? selection.keys : selection?.kind === 'node' ? [selection.key] : [];
+  const copy = (): void => {
+    const clip = clipOf(docRef.current, selectedKeys);
+    if (!clip) return;
+    clipboard = clip;
+    pasteShift = 0;
+    setNote({ text: `Copied ${clip.nodes.length === 1 ? clip.nodes[0]!.name : `${clip.nodes.length} agents`}: ⌘V puts ${clip.nodes.length === 1 ? 'it' : 'them'} on the canvas.` });
+  };
+  const put = (clip: StudioClip, shift: number): void => {
+    const pasted = pasteClip(docRef.current, clip, shift, shift);
+    setDoc(pasted.doc);
+    setSelection(pasted.keys.length === 1 ? { kind: 'node', key: pasted.keys[0]! } : { kind: 'nodes', keys: pasted.keys });
+  };
+  const paste = (): void => {
+    if (!clipboard) return setNote({ text: 'Nothing copied yet: select boxes, then ⌘C.' });
+    pasteShift += 32;
+    put(clipboard, pasteShift);
+  };
+  const duplicate = (): void => {
+    const clip = clipOf(docRef.current, selectedKeys);
+    if (clip) put(clip, 32);
+  };
+  const selectAll = (): void => {
+    const keys = docRef.current.nodes.map((node) => node.key);
+    if (keys.length > 0) setSelection(keys.length === 1 ? { kind: 'node', key: keys[0]! } : { kind: 'nodes', keys });
+  };
+  /** The menu of the right button: on a box, a note, or an empty spot. */
+  const openMenu = (event: MouseEvent, target: { node: number } | { note: number } | 'canvas'): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPopover(undefined);
+    const items: { label: string; keys?: string; run: () => void }[] = [];
+    if (target === 'canvas') {
+      const at = toCanvas(event.clientX, event.clientY);
+      if (clipboard) items.push({ label: 'Paste', keys: '⌘V', run: paste });
+      items.push({
+        label: 'Add a note here',
+        run: () => {
+          const added = addNote(docRef.current, at.x, at.y);
+          setDoc(added.doc);
+          setSelection({ kind: 'note', key: added.key });
+        },
+      });
+      if (docRef.current.nodes.length > 0) items.push({ label: 'Select all', keys: '⌘A', run: selectAll }, { label: 'Tidy up', run: () => setDoc(tidy(docRef.current)) }, { label: 'Fit to the view', run: fit });
+    } else if ('note' in target) {
+      setSelection({ kind: 'note', key: target.note });
+      items.push({ label: 'Remove note', keys: '⌫', run: () => setDoc({ ...docRef.current, notes: docRef.current.notes.filter((note) => note.key !== target.note) }) });
+    } else {
+      const keys = selectedKeys.includes(target.node) ? selectedKeys : [target.node];
+      if (!selectedKeys.includes(target.node)) setSelection({ kind: 'node', key: target.node });
+      const one = keys.length === 1 ? nodeOf(docRef.current, keys[0]!) : undefined;
+      items.push(
+        { label: keys.length === 1 ? 'Duplicate' : `Duplicate ${keys.length} agents`, keys: '⌘D', run: () => {
+          const clip = clipOf(docRef.current, keys);
+          if (clip) put(clip, 32);
+        } },
+        { label: 'Copy', keys: '⌘C', run: () => {
+          clipboard = clipOf(docRef.current, keys);
+          pasteShift = 0;
+        } },
+      );
+      if (one) items.push({ label: 'Save as preset', run: () => store.saveRole(presetOfNode(one)) });
+      items.push({ label: keys.length === 1 ? 'Remove' : `Remove ${keys.length} agents`, keys: '⌫', run: () => {
+        setDoc(removeNodes(docRef.current, keys));
+        setSelection(undefined);
+      } });
+    }
+    setMenu({ x: event.clientX, y: event.clientY, items });
+  };
+  useEffect(() => {
+    if (!menu) return;
+    const close = (): void => setMenu(undefined);
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('blur', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('blur', close);
+    };
+  }, [menu]);
+
   // ⌘Z and ⇧⌘Z: the canvas a step back or forward. What is selected stays, if it is still there.
   const step = (back: boolean): void => {
+    if (live) return;
     const moved = back ? undoStep(history, docRef.current) : redoStep(history, docRef.current);
     if (!moved) return;
     history = moved.history;
     draft = moved.doc;
+    draftWatcher?.(moved.doc);
     docRef.current = moved.doc;
     setDocState(moved.doc);
     setPopover(undefined);
     setSelection((current) =>
-      current?.kind === 'node' && !nodeOf(moved.doc, current.key) ? undefined : current?.kind === 'link' && !incoming(moved.doc, current.to) ? undefined : current,
+      (current?.kind === 'node' && !nodeOf(moved.doc, current.key)) ||
+      (current?.kind === 'link' && !incoming(moved.doc, current.to)) ||
+      (current?.kind === 'note' && !noteOf(moved.doc, current.key)) ||
+      (current?.kind === 'nodes' && current.keys.some((key) => !nodeOf(moved.doc, key)))
+        ? undefined
+        : current,
     );
     setNote({ text: back ? 'Undone: ⇧⌘Z does it again.' : 'Done again.' });
   };
@@ -759,6 +1306,19 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
     if (!field && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
       event.preventDefault();
       step(!event.shiftKey);
+      return;
+    }
+    if (!field && (event.metaKey || event.ctrlKey)) {
+      const key = event.key.toLowerCase();
+      const act: Record<string, () => void> = { c: copy, v: paste, d: duplicate, a: selectAll, '=': () => setZoom(zoom * 1.2), '+': () => setZoom(zoom * 1.2), '-': () => setZoom(zoom / 1.2), '0': () => setZoom(1) };
+      if (act[key]) {
+        event.preventDefault();
+        act[key]();
+        return;
+      }
+    }
+    if (event.key === 'Escape' && menu) {
+      setMenu(undefined);
       return;
     }
     if (event.key === 'Escape') {
@@ -797,7 +1357,20 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
   })()) : undefined;
 
   return (
-    <section class="broadcast studio" aria-label="Team studio" onKeyDown={onKey} tabIndex={-1}>
+    <section
+      ref={section}
+      class={`broadcast studio${dropping ? ' dropping' : ''}`}
+      aria-label="Team studio"
+      onKeyDown={onKey}
+      tabIndex={-1}
+      onDragOver={(event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={(event) => event.target === event.currentTarget && setDropping(false)}
+      onDrop={(event) => void dropFile(event)}
+    >
       <header class="studio-top">
         <span class="studio-name">Team studio</span>
         <input
@@ -815,16 +1388,23 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
           {members} {members === 1 ? 'member' : 'members'}
         </span>
         <span class="studio-spacer" />
-        <button type="button" class="quiet studio-undo" title="Undo the last change of the canvas (⌘Z)" aria-label="Undo" disabled={history.past.length === 0} onClick={() => step(true)}>
-          ↶
-        </button>
-        <button type="button" class="quiet studio-undo" title="Redo (⇧⌘Z)" aria-label="Redo" disabled={history.future.length === 0} onClick={() => step(false)}>
-          ↷
+        {!live && (
+          <button type="button" class="quiet studio-undo" title="Undo the last change of the canvas (⌘Z)" aria-label="Undo" disabled={history.past.length === 0} onClick={() => step(true)}>
+            ↶
+          </button>
+        )}
+        {!live && (
+          <button type="button" class="quiet studio-undo" title="Redo (⇧⌘Z)" aria-label="Redo" disabled={history.future.length === 0} onClick={() => step(false)}>
+            ↷
+          </button>
+        )}
+        <button type="button" class="quiet" title="A note on the canvas, for whoever opens the team after you" onClick={newNote}>
+          + note
         </button>
         <button type="button" title="Lay the boxes out as a tree, each one under the one that leads it" disabled={doc.nodes.length === 0} onClick={() => setDoc(tidy(doc))}>
           Tidy up
         </button>
-        {clearArmed ? (
+        {live ? null : clearArmed ? (
           <button
             type="button"
             class="danger"
@@ -842,15 +1422,31 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
             New
           </button>
         )}
+        {!live && (
+          <button type="button" class="quiet" title="Open a team from its file: drop the file on the studio, or paste it" onClick={() => setSelection({ kind: 'import' })}>
+            Import
+          </button>
+        )}
+        <button type="button" class={maker ? 'primary' : 'quiet'} disabled={doc.nodes.length === 0 || !doc.name.trim()} title="Save this team as a file, to open in Forchetta or give to someone else" onClick={exportCanvas}>
+          Export
+        </button>
         <button type="button" disabled={doc.nodes.length === 0 || !doc.name.trim()} title="Keep this team, with where its boxes stand, among the teams on the left and in 'Start from'" onClick={saveTemplate}>
           Save as template
         </button>
-        <button type="button" class="primary" disabled={issues.length > 0 || spawn?.busy === true || !doc.folder.trim()} onClick={create}>
-          {spawn?.busy ? 'Starting…' : 'Create team'}
-        </button>
-        <button type="button" class="quiet" title="Close the studio: the canvas stays as it is until you come back" onClick={onClose}>
-          Close
-        </button>
+        {!live && !maker && (
+          <button type="button" class="primary" disabled={issues.length > 0 || spawn?.busy === true || !doc.folder.trim()} onClick={create}>
+            {spawn?.busy ? 'Starting…' : 'Create team'}
+          </button>
+        )}
+        {maker ? (
+          <a class="quiet studio-home" href="../">
+            forchetta.dev
+          </a>
+        ) : (
+          <button type="button" class="quiet" title="Close the studio: the canvas stays as it is until you come back" onClick={onClose}>
+            Close
+          </button>
+        )}
       </header>
 
       <aside class="studio-palette" aria-label="Presets">
@@ -938,18 +1534,34 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
         })}
       </aside>
 
+      <div class="studio-stage">
       <div
         ref={viewport}
         class="studio-canvas"
         onPointerDown={(event) => {
-          // An empty spot of the canvas: the surface, or the layer of the arrows over all of it, not an arrow.
+          // An empty spot of the canvas: the surface, or the layer of the arrows over all of it, not an arrow. A drag
+          // from there draws a rectangle that selects the boxes it touches.
           if (event.target === surface.current || event.target === links.current) {
             setSelection(undefined);
             setPopover(undefined);
+            if (event.button !== 0) return;
+            event.preventDefault();
+            section.current?.focus({ preventScroll: true });
+            const point = toCanvas(event.clientX, event.clientY);
+            begin({ kind: 'band', ax: point.x, ay: point.y, bx: point.x, by: point.y });
           }
         }}
+        onContextMenu={(event) => (event.target === surface.current || event.target === links.current) && openMenu(event, 'canvas')}
+        onWheel={(event) => {
+          // A pinch on the trackpad, or ⌘ and the wheel: zoom where the pointer is.
+          if (!event.ctrlKey && !event.metaKey) return;
+          event.preventDefault();
+          setZoom(zoomRef.current * Math.exp(-event.deltaY / 300), { x: event.clientX, y: event.clientY });
+        }}
+        onScroll={() => setScrolled((n) => n + 1)}
       >
-        <div ref={surface} class="studio-surface" style={{ width: `${size.width}px`, height: `${size.height}px` }}>
+        <div class="studio-sizer" style={{ width: `${size.width * zoom}px`, height: `${size.height * zoom}px` }}>
+        <div ref={surface} class="studio-surface" style={{ width: `${size.width}px`, height: `${size.height}px`, transform: zoom === 1 ? undefined : `scale(${zoom})` }}>
           <svg ref={links} class="studio-links" width={size.width} height={size.height} aria-hidden="true">
             <defs>
               <marker id="studio-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -964,9 +1576,11 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
               if (!ends) return null;
               const on = (selection?.kind === 'link' && selection.to === link.to) || popover?.to === link.to;
               const d = curve(ends.x1, ends.y1, ends.x2, ends.y2);
+              const target = nodeOf(doc, link.to);
+              const flowing = crew && target ? lineStates.get(recipientOf(target)?.agentId ?? '') : undefined;
               return (
                 <g key={link.to}>
-                  <path d={d} class={`studio-link${on ? ' on' : ''}${(link.talk ?? doc.talk) === 'oneway' ? ' oneway' : ''}`} marker-end={`url(#${on ? 'studio-arrow-on' : 'studio-arrow'})`} />
+                  <path d={d} class={`studio-link${on ? ' on' : ''}${(link.talk ?? doc.talk) === 'oneway' ? ' oneway' : ''}${flowing ? ` live-${flowing}` : ''}`} marker-end={`url(#${on ? 'studio-arrow-on' : 'studio-arrow'})`} />
                   <path
                     d={d}
                     class="studio-link-hit"
@@ -1019,10 +1633,18 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
               node.skills.length > 0 ? `${node.skills.length} ${node.skills.length === 1 ? 'skill' : 'skills'}` : undefined,
             ].filter(Boolean);
             const loose = !incoming(doc, node.key);
+            const running = live ? liveAgentOf(node) : undefined;
+            const waiting = live && pending(node);
+            if (running) {
+              const used = crewUsage([running]);
+              const total = used ? tokensTotal(used.tokens) : 0;
+              traits.splice(0, traits.length, STATE_LABEL[running.state], ...(used && used.usd > 0 ? [`≈ ${usdText(used.usd)}`] : []), ...(total > 0 ? [`${shortTokens(total)} tok`] : []));
+            } else if (waiting) traits.splice(0, traits.length, 'not in the team yet');
             return (
               <div
                 key={node.key}
-                class={`studio-node${selection?.kind === 'node' && selection.key === node.key ? ' on' : ''}${loose ? ' loose' : ''}`}
+                class={`studio-node${selectedKeys.includes(node.key) ? ' on' : ''}${loose ? ' loose' : ''}${waiting ? ' pending' : ''}`}
+                data-live={running?.state}
                 style={{ left: `${node.x}px`, top: `${node.y}px`, width: `${NODE_W}px`, height: `${NODE_H}px` }}
                 data-target={
                   (drawing && nodeAt(doc, drawing.x, drawing.y)?.key === node.key) || (ghost?.kind === 'skill' && (() => {
@@ -1033,6 +1655,7 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
                     : undefined
                 }
                 onPointerDown={(event) => startMove(event, node.key)}
+                onContextMenu={(event) => openMenu(event, { node: node.key })}
               >
                 <div class="studio-node-head">
                   <strong>{node.name.trim() || 'unnamed'}</strong>
@@ -1044,11 +1667,23 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
               </div>
             );
           })}
+          {doc.notes.map((note) => (
+            <div
+              key={note.key}
+              class={`studio-sticky${selection?.kind === 'note' && selection.key === note.key ? ' on' : ''}`}
+              style={{ left: `${note.x}px`, top: `${note.y}px`, width: `${NOTE_W}px` }}
+              onPointerDown={(event) => startMove(event, note.key, true)}
+              onContextMenu={(event) => openMenu(event, { note: note.key })}
+            >
+              {note.text.trim() || <span class="studio-hint">An empty note: click it to write it.</span>}
+            </div>
+          ))}
           {popover && nodeOf(doc, popover.to) && incoming(doc, popover.to) && (
             <div ref={popoverBox} class="studio-popover" style={{ left: `${popover.x}px`, top: `${popover.y}px` }} onPointerDown={(event) => event.stopPropagation()}>
               <RelationForm
                 doc={doc}
                 to={popover.to}
+                {...(live && !pending(nodeOf(doc, popover.to)!) ? { onTalk: (talk: Talk) => store.editCrew(live, { action: 'talk', name: nodeOf(doc, popover.to)!.name.trim(), talk }) } : {})}
                 onChange={setDoc}
                 onRemove={() => {
                   setDoc(removeLink(doc, popover.to));
@@ -1063,15 +1698,90 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
               Drag an agent or a whole team from the left. Then pull an arrow from the dot under You, or under a box, onto the agent it leads.
             </div>
           )}
+          {drag?.kind === 'band' && (
+            <div
+              class="studio-band"
+              style={{ left: `${Math.min(drag.ax, drag.bx)}px`, top: `${Math.min(drag.ay, drag.by)}px`, width: `${Math.abs(drag.bx - drag.ax)}px`, height: `${Math.abs(drag.by - drag.ay)}px` }}
+            />
+          )}
         </div>
+        </div>
+      </div>
+      <div class="studio-zoom" role="group" aria-label="Zoom">
+        <button type="button" class="quiet" title="Zoom out (⌘−)" onClick={() => setZoom(zoom / 1.2)}>
+          −
+        </button>
+        <button type="button" class="quiet studio-zoom-value" title="Back to 100% (⌘0)" onClick={() => setZoom(1)}>
+          {Math.round(zoom * 100)}%
+        </button>
+        <button type="button" class="quiet" title="Zoom in (⌘+); a pinch on the trackpad works too" onClick={() => setZoom(zoom * 1.2)}>
+          +
+        </button>
+        <button type="button" class="quiet" title="Everything in the view" disabled={doc.nodes.length === 0} onClick={fit}>
+          Fit
+        </button>
+      </div>
+      <Minimap doc={doc} size={size} zoom={zoom} view={viewport.current} />
       </div>
 
       <aside class="studio-props" aria-label="Properties">
-        {selectedNode ? (
+        {selection?.kind === 'nodes' ? (
+          <>
+            <p class="studio-title">{selection.keys.length} agents</p>
+            <ul class="studio-list">
+              {selection.keys.map((key) => (
+                <li key={key}>{nodeOf(doc, key)?.name ?? ''}</li>
+              ))}
+            </ul>
+            <p class="studio-hint">Drag one of them to move them all. ⇧-click adds a box or takes it away; a rectangle from an empty spot selects the boxes it touches.</p>
+            <div class="studio-actions">
+              <button type="button" onClick={duplicate}>
+                Duplicate
+              </button>
+              <button type="button" onClick={copy}>
+                Copy
+              </button>
+              <button type="button" class="quiet" onClick={remove}>
+                Remove
+              </button>
+            </div>
+          </>
+        ) : selection?.kind === 'import' ? (
+          <ImportTeam store={store} />
+        ) : selection?.kind === 'note' && noteOf(doc, selection.key) ? (
+          <>
+            <p class="studio-title">Note</p>
+            <Text
+              label="Text"
+              area
+              value={noteOf(doc, selection.key)!.text}
+              max={NOTE_MAX}
+              placeholder="What whoever opens this team should know: why it is made so, how to start it"
+              onInput={(text) => setDoc({ ...doc, notes: doc.notes.map((note) => (note.key === selection.key ? { ...note, text } : note)) })}
+            />
+            <p class="studio-hint">Kept with the template, where it stands; the agents do not read it. The rules for them are in the panel of the team.</p>
+            <div class="studio-actions">
+              <button type="button" class="quiet" onClick={remove}>
+                Remove note
+              </button>
+            </div>
+          </>
+        ) : selectedNode && live && !pending(selectedNode) ? (
+          <LiveMember
+            node={selectedNode}
+            lead={lead === selectedNode.key}
+            above={incoming(doc, selectedNode.key) ? fromName(doc, incoming(doc, selectedNode.key)!.from) : undefined}
+            agent={liveAgentOf(selectedNode)}
+            store={store}
+            onPaths={(paths) => live && store.editCrew(live, { action: 'paths', name: selectedNode.name.trim(), paths })}
+            onRemove={() => live && store.editCrew(live, { action: 'remove', name: selectedNode.name.trim() })}
+          />
+        ) : selectedNode ? (
           <>
             <p class="studio-title">
               {selectedNode.name.trim() || 'Agent'}
               {lead === selectedNode.key && <span class="studio-tag">lead</span>}
+              {live && <span class="studio-tag">not in the team yet</span>}
             </p>
             <p class="studio-hint">
               {incoming(doc, selectedNode.key)
@@ -1096,10 +1806,23 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
               >
                 Save as preset
               </button>
+              {live && (
+                <button type="button" class="primary" disabled={!selectedNode.name.trim() || editLive?.busy === true} title="Start its session in the running team, under the one its arrow comes from" onClick={() => addToTeam(selectedNode)}>
+                  Add to the team
+                </button>
+              )}
             </div>
           </>
         ) : selection?.kind === 'link' && incoming(doc, selection.to) ? (
-          <RelationForm doc={doc} to={selection.to} onChange={setDoc} onRemove={remove} />
+          <RelationForm
+            doc={doc}
+            to={selection.to}
+            onChange={setDoc}
+            onRemove={remove}
+            {...(live && nodeOf(doc, selection.to) && !pending(nodeOf(doc, selection.to)!)
+              ? { onTalk: (talk: Talk) => store.editCrew(live, { action: 'talk', name: nodeOf(doc, selection.to)!.name.trim(), talk }) }
+              : {})}
+          />
         ) : selection?.kind === 'new-role' ? (
           <RoleEditor preset={BLANK_AGENT} fresh store={store} onAdd={(preset) => addPreset(preset)} onRenamed={(name) => setSelection({ kind: 'role', name })} />
         ) : selectedRole ? (
@@ -1107,12 +1830,33 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
         ) : selectedTeam ? (
           <TeamCard template={selectedTeam} store={store} onOpen={() => openTeam(selectedTeam)} onAdd={() => addTeam(selectedTeam)} />
         ) : selection?.kind === 'new-skill' ? (
-          <AddSkill store={store} onChoose={chooseFolder} onAdded={(id) => setSelection({ kind: 'skill', id })} />
+          <AddSkill store={store} onChoose={maker ? undefined : chooseFolder} onAdded={(id) => setSelection({ kind: 'skill', id })} />
         ) : selectedSkill ? (
           <SkillCard skill={selectedSkill} store={store} />
+        ) : live ? (
+          <>
+            <p class="studio-title">
+              Team {crew?.name ?? doc.name}
+              <span class="studio-tag">running</span>
+            </p>
+            <p class="studio-hint">
+              Its sessions, as they work: each box says what its agent is doing and what it used, each arrow what goes along it (orange, a request; green, an answer coming back; amber, a question).
+            </p>
+            <ul class="studio-list">
+              <li>
+                Folder <span class="studio-path">{doc.folder || '—'}</span>
+              </li>
+            </ul>
+            {doc.rules.trim() && <p class="studio-hint">Its rules: {doc.rules.trim()}</p>}
+            <p class="studio-hint">
+              While it runs you can add an agent (drag it here, draw its arrow, "Add to the team"), change → / ⇄ on an arrow, change the files of a member, or take one away. Roles, models and skills stay as they started: "Save as template" keeps the team, with your changes, for its next start.
+            </p>
+          </>
         ) : (
           <>
             <p class="studio-title">The team</p>
+            {maker && <p class="studio-hint">Make it here, then "Export": the file opens in Forchetta ("Import" in its studio, or drop the file there), where you choose its folder and start it.</p>}
+            {!maker && (
             <label class="studio-field">
               <span>Folder</span>
               <div class="studio-row">
@@ -1129,7 +1873,8 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
                 </button>
               </div>
             </label>
-            {recent.length > 0 && (
+            )}
+            {!maker && recent.length > 0 && (
               <div class="studio-chips">
                 {recent.map((path) => (
                   <button key={path} type="button" class={`chip${path === doc.folder ? ' on' : ''}`} title={path} onClick={() => setDoc({ ...doc, folder: path })}>
@@ -1138,6 +1883,15 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
                 ))}
               </div>
             )}
+            <Text
+              label="Rules of the team"
+              area
+              value={doc.rules}
+              max={RULES_MAX}
+              placeholder="What every agent follows, whatever its role: the conventions of the project, how to commit, what never to do"
+              onInput={(rules) => setDoc({ ...doc, rules })}
+            />
+            <p class="studio-hint">Every session of the team gets them with its role. Nothing is written in the folder of the project.</p>
             <label class="studio-field">
               <span>An arrow, by default</span>
               <span class="view-switch" role="group" aria-label="How an agent talks with the one above it, by default">
@@ -1176,13 +1930,39 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
 
       <footer class="studio-foot">
         <span class={`broadcast-note${spawn?.error || note?.error ? ' error' : ''}`}>
-          {spawn?.error ?? note?.text ?? (issues.length > 0 ? issues[0] : 'Ready: "Create team" starts it, "Save as template" keeps it.')}
+          {spawn?.error ??
+            note?.text ??
+            (live
+              ? 'Running: a box says what its agent does, an arrow what goes along it. Add an agent by dragging it here and drawing its arrow.'
+              : issues.length > 0
+                ? issues[0]
+                : maker
+                  ? 'Ready: "Export" saves it as a file; in Forchetta, "Import" opens it. This browser keeps the canvas as you go.'
+                  : 'Ready: "Create team" starts it, "Save as template" keeps it.')}
         </span>
       </footer>
 
       {ghost && (
         <div class="studio-ghost" style={{ left: `${ghost.x}px`, top: `${ghost.y}px` }}>
           {ghost.kind === 'role' ? ghost.preset.name : ghost.kind === 'team' ? `${ghost.template.name} (team)` : `${ghost.skill.id} (skill)`}
+        </div>
+      )}
+      {menu && (
+        <div class="studio-menu" role="menu" style={{ left: `${menu.x}px`, top: `${menu.y}px` }} onPointerDown={(event) => event.stopPropagation()}>
+          {menu.items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenu(undefined);
+                item.run();
+              }}
+            >
+              <span>{item.label}</span>
+              {item.keys && <kbd>{item.keys}</kbd>}
+            </button>
+          ))}
         </div>
       )}
     </section>

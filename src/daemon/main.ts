@@ -28,6 +28,7 @@ import { Teams } from './teams.ts';
 import { crewApi, CrewTemplates, Crews, RolePresets, templateApi } from './crews.ts';
 import { CustomSkills, skillUsers } from './custom-skills.ts';
 import { FolderChooser } from './folder-chooser.ts';
+import { importTeam, saveTeamFile } from './team-files.ts';
 import { TokenCounter } from './token-usage.ts';
 import { gitRunner, SkillCache } from './skills.ts';
 import { cleanCrewSpec, templateOf } from '../shared/crew.ts';
@@ -461,6 +462,15 @@ function main(): void {
     onRole: (message) => (message.type === 'deleteRolePreset' ? roles.delete(message.name) : roles.save(message.preset, message.previous)),
     onChooseFolder: (folder) => folderChooser.choose(folder),
     customSkills: () => yourSkills.list(),
+    crewTemplate: (crewId) => {
+      const crew = crews.get(crewId);
+      return crew ? { template: templateOf(crew), cwd: crew.cwd } : undefined;
+    },
+    onSaveTeamFile: (name, text) => {
+      const saved = saveTeamFile(name, text);
+      return saved.ok ? { ok: true, path: saved.path.replace(homedir(), '~') } : saved;
+    },
+    onImportTeam: (text) => importTeam(text, (link) => yourSkills.add(link)),
     onAddSkill: async (source) => {
       const result = await yourSkills.add(source);
       return result.ok ? { ok: true, id: result.skill.id } : result;

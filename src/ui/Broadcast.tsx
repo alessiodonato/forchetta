@@ -21,8 +21,8 @@ export const overThreshold = (agents: readonly Agent[], threshold = CONTEXT_THRE
 export function BroadcastButton({ agents, open, onToggle }: { agents: readonly Agent[]; open: boolean; onToggle: () => void }) {
   if (commandable(agents).length < 2 && !open) return null;
   return (
-    <button type="button" class={`broadcast-toggle${open ? ' active' : ''}`} title="One command to several sessions" onClick={onToggle}>
-      command to several
+    <button type="button" class={`broadcast-toggle quiet${open ? ' active' : ''}`} title="One command to several sessions: /compact, /clear, /btw or a question" onClick={onToggle}>
+      to several
     </button>
   );
 }

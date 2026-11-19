@@ -439,6 +439,8 @@
 
   /* The studio, in four clips: a step for each, the one playing lit, with how far it got. */
   .clips { margin: 36px 0 0; }
+  .studio-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 20px; }
+  .studio-cta span { font-size: 14px; color: var(--text-3); }
   .clip-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 14px; padding: 0; list-style: none; }
   .clip-step { position: relative; display: flex; gap: 10px; align-items: flex-start; width: 100%; height: 100%; padding: 12px 14px 15px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-2); font: inherit; text-align: left; cursor: pointer; }
   .clip-step:hover { border-color: var(--line-strong); }
@@ -630,6 +632,7 @@
     </a>
     <nav aria-label="Page">
       <a href="demo/">Demo</a>
+      <a class="optional" href="studio/">Studio</a>
       <a class="optional" href="manual.html">Manual</a>
       <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
       <a class="nav-install" href="#install">Install</a>
@@ -863,6 +866,7 @@
       <div class="text">
         <h2 id="studio-title">Draw a team in the studio</h2>
         <p>Drag agents onto a canvas, pull an arrow from each one to the agents it leads, give them their skills, and start the team. A junior can report to a senior that reports to a manager, on as many levels as you need.</p>
+        <p class="studio-cta"><a class="button primary" href="studio/">Open the Studio Maker</a> <span>The same studio in your browser: make a team, export it as a file, open it in Forchetta. What you draw stays in this browser.</span></p>
       </div>
       <div class="clips">
         <ol class="clip-steps" aria-label="The studio, step by step">

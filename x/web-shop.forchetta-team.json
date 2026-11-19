@@ -1,0 +1,67 @@
+{
+  "kind": "forchetta-team",
+  "version": 1,
+  "template": {
+    "name": "web shop",
+    "lead": {
+      "kind": "claude",
+      "name": "manager",
+      "role": "Turn the goal into clear tasks for the senior, with the why and what done means; check what comes back against the goal, and tell the user what is done and what is left. Leave how to build it to the senior.",
+      "skills": [
+        "brainstorming",
+        "planning-and-task-breakdown"
+      ]
+    },
+    "talk": "twoway",
+    "members": [
+      {
+        "name": "senior",
+        "role": "Plan the technical work of each task, give the junior well-scoped steps, review every change of the junior (git diff), fix or send back what is wrong, and report to the manager when the whole task is done and reviewed.",
+        "skills": [
+          "writing-plans",
+          "code-review-and-quality",
+          "systematic-debugging"
+        ],
+        "relation": "The manager says what is needed and why; the senior decides how. The senior reports when the task is done and reviewed: what changed, how it was checked, what is left. It asks the manager only about the goal, never about the code."
+      },
+      {
+        "name": "junior",
+        "role": "Write the code of the steps the senior gives, small, with a test for each, following the conventions of the project.",
+        "skills": [
+          "test-driven-development",
+          "verification-before-completion",
+          "karpathy-guidelines",
+          "brand-guidelines"
+        ],
+        "relation": "The senior gives one step at a time, with the files to touch and what done means. The junior reports what it changed and how it tested it, and asks the senior before any change outside its step.",
+        "reportsTo": "senior"
+      }
+    ],
+    "layout": {
+      "you": [
+        84,
+        32
+      ],
+      "manager": [
+        32,
+        148
+      ],
+      "senior": [
+        32,
+        324
+      ],
+      "junior": [
+        32,
+        500
+      ]
+    }
+  },
+  "skills": [
+    {
+      "id": "brand-guidelines",
+      "repo": "anthropics/skills",
+      "path": "skills/brand-guidelines",
+      "commit": "e4bb5d960d87126ff3b3a8af1a104b7db67560ba"
+    }
+  ]
+}

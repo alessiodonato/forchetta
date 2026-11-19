@@ -185,6 +185,7 @@ describe('the tools of templates, for a session not in a team', () => {
       lead: { kind: 'claude', name: 'l', role: 'r', model: 'opus', mode: 'plan', skills: ['brainstorming'] },
       talk: 'oneway',
       worktrees: true,
+      rules: 'Small commits.',
       members: [
         { name: 'boss', role: 'r' },
         { name: 'm', role: 'r', talk: 'twoway', model: 'haiku', mode: 'auto', worktree: false, paths: ['src/'], reviews: true, reportsTo: 'boss', relation: 'How the two work.', skills: ['pdf'] },

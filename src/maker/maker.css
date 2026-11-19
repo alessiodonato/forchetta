@@ -1,0 +1,40 @@
+/* The studio of forchetta.dev: the studio of the app over the whole page; a note for small screens. */
+.maker-small {
+  display: none;
+}
+
+.studio-home {
+  padding: 2px 8px;
+  font: 11px var(--mono);
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.studio-home:hover {
+  color: var(--text);
+}
+
+@media (max-width: 860px) {
+  #app {
+    display: none;
+  }
+
+  .maker-small {
+    display: block;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 48px 20px;
+    font: 16px/1.55 var(--ui);
+    color: var(--text-2);
+  }
+
+  .maker-small strong {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .maker-small a {
+    color: var(--text);
+  }
+}

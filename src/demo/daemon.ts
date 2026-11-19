@@ -5,7 +5,7 @@
 import type { Agent, GuardHold, SubagentStep } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
 import { addArtifact, artifactOf } from '../shared/artifacts.ts';
-import { cleanCrewSpec, reportsOf } from '../shared/crew.ts';
+import { cleanCrewSpec, reportsOf, templateOf } from '../shared/crew.ts';
 import { subagentKey } from '../shared/present.ts';
 import { tmuxSessionName } from '../shared/tmux.ts';
 import { Attention } from '../daemon/attention.ts';
@@ -24,6 +24,8 @@ import { applySubagentHook, subagentResultOf } from '../daemon/subagents.ts';
 import { Teams } from '../daemon/teams.ts';
 import { type ClaudeHost, FakeClaude, type PermissionHandle, type SubagentScript, type TeamTools } from './claude.ts';
 import { commit, repoRoot } from './git.ts';
+import { importTeam } from '../daemon/team-files.ts';
+import { customSkills, skillUsers } from '../shared/skills.ts';
 import { DEMO_DIR } from './project.ts';
 import { existsSync, filesUnder, isDir, putFile, readText } from './shims/fs.ts';
 import { type DemoSocket, HubSide, routeSockets } from './socket.ts';
@@ -63,6 +65,8 @@ class HookResponse {
 export interface DemoEvents {
   /** A notification of macOS, as the app would show it. */
   notify?: (notice: { agentId: string; kind: string; title: string; body: string }) => void;
+  /** Skills of yours, where the page can add them (the studio of forchetta.dev, from GitHub); none in the demo. */
+  skills?: { add: (source: string) => Promise<{ ok: boolean; error?: string; id?: string }>; remove: (id: string) => { ok: boolean; error?: string } };
 }
 
 export class DemoDaemon {
@@ -178,8 +182,25 @@ export class DemoDaemon {
       roles: () => this.roles.list(),
       onRole: (message) => (message.type === 'deleteRolePreset' ? this.roles.delete(message.name) : this.roles.save(message.preset, message.previous)),
       // No git and no folders of yours in a browser: the demo says what it would do.
-      customSkills: () => [],
-      onAddSkill: async () => ({ ok: false, error: 'Not in the demo: on your Mac, Forchetta fetches the folder of the skill from GitHub at the commit of now, or uses your folder where it is.' }),
+      customSkills: () => (this.events.skills ? customSkills() : []),
+      ...(this.events.skills
+        ? {
+            onRemoveSkill: (id: string) => {
+              const users = skillUsers(id, this.roles.list(), this.templates.list(), []);
+              return users.length > 0 ? { ok: false, error: `${id} is used by ${users.join(', ')}: take it away from them first` } : this.events.skills!.remove(id);
+            },
+          }
+        : {}),
+      crewTemplate: (crewId) => {
+        const crew = this.crews.get(crewId);
+        return crew ? { template: templateOf(crew), cwd: crew.cwd } : undefined;
+      },
+      // In a browser the page downloads the file itself; opening one works as on a Mac, without skills to fetch.
+      onImportTeam: (text) => importTeam(text, async () => ({ ok: false, error: 'skills of yours are not added in the demo' })),
+      onAddSkill: async (source) =>
+        this.events.skills
+          ? this.events.skills.add(source)
+          : { ok: false, error: 'Not in the demo: on your Mac, Forchetta fetches the folder of the skill from GitHub at the commit of now, or uses your folder where it is.' },
       // No panel of macOS in a browser: the demo "chooses" the folder written, if it is a project, or the first one.
       onChooseFolder: async (folder) => {
         await new Promise((resolve) => setTimeout(resolve, 350));

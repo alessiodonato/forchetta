@@ -74,7 +74,7 @@ Avvia una sessione con `forchetta run claude`, o dall'app, e Forchetta può anch
 
 ### I team, quando servono
 
-Un capo, che è una sessione Claude oppure tu, e quanti membri servono, su quanti livelli servono: un junior può rispondere a un senior che risponde al capo, e ogni relazione ha un suo prompt. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree. Le richieste scendono lungo l'organigramma attraverso un server MCP; i membri rispondono, o fanno una domanda a chi sta sopra quando sono bloccati, e la risposta di un senior sale solo quando il lavoro del suo junior è finito. Dai a un membro i suoi file, e il vigile lo tiene lì dentro e gli altri fuori. Un membro che fa la revisione approva i commit, e il vigile ti chiede conferma prima del merge di qualcosa che non ha approvato. I token e il costo di ogni agente, e del team, si vedono mentre lavorano. Disegna un team nello studio, trascinando agenti, team interi e skill (open source, o tue) su una tela e tirando frecce tra loro (una skill si scarica solo quando un team la usa, fuori dal progetto); salvalo come modello e riavvialo in un altro progetto, oppure descrivi i tuoi team in un documento e chiedi a una sessione qualsiasi di prepararli: salva i modelli, e tu li avvii dall'app. [I team nel manuale](https://forchetta.dev/manual.html#teams).
+Un capo, che è una sessione Claude oppure tu, e quanti membri servono, su quanti livelli servono: un junior può rispondere a un senior che risponde al capo, e ogni relazione ha un suo prompt. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree. Le richieste scendono lungo l'organigramma attraverso un server MCP; i membri rispondono, o fanno una domanda a chi sta sopra quando sono bloccati, e la risposta di un senior sale solo quando il lavoro del suo junior è finito. Dai a un membro i suoi file, e il vigile lo tiene lì dentro e gli altri fuori. Un membro che fa la revisione approva i commit, e il vigile ti chiede conferma prima del merge di qualcosa che non ha approvato. I token e il costo di ogni agente, e del team, si vedono mentre lavorano. Disegna un team nello studio, trascinando agenti, team interi e skill (open source, o tue) su una tela e tirando frecce tra loro (una skill si scarica solo quando un team la usa, fuori dal progetto); salvalo come modello e riavvialo in un altro progetto, oppure descrivi i tuoi team in un documento e chiedi a una sessione qualsiasi di prepararli: salva i modelli, e tu li avvii dall'app. Un team si può anche disegnare nel browser con lo [Studio Maker](https://forchetta.dev/studio/) e aprirne il file in Forchetta. [I team nel manuale](https://forchetta.dev/manual.html#teams).
 
 ## Rispetto ad altri strumenti
 
@@ -100,7 +100,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.9.11. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.9.12. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 

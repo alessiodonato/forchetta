@@ -80,6 +80,10 @@ export function startTour(daemon: DemoDaemon): void {
     }, 28);
   };
 
+  /** In the menu "+ new" when it is open, the item of that kind; the menu itself otherwise. */
+  const newItem = (name: 'session' | 'team'): Element | null | undefined =>
+    [...document.querySelectorAll<HTMLElement>('.new-menu-list button')].find((item) => item.querySelector('.new-menu-name')?.firstChild?.textContent === name) ?? $('.new-menu > button');
+
   const prefillNewSession = (prompt: string): void => {
     const panel = $('.new-session');
     if (!panel || panel.dataset.tour === prompt) return;
@@ -118,8 +122,8 @@ export function startTour(daemon: DemoDaemon): void {
     },
     {
       title: 'Start a session',
-      body: 'Click **new session**, at the top right. The folder and a first message are filled in for you: press **start**.\n\nForchetta starts `claude` in a terminal of its own, so later it can type into it for you.',
-      target: () => ($('.new-session') ? $('.new-session button.primary') : $('header.top .broadcast-toggle.primary')),
+      body: 'Click **+ new**, at the top right, then **session** (or press ⌘N). The folder and a first message are filled in for you: press **start**.\n\nForchetta starts `claude` in a terminal of its own, so later it can type into it for you.',
+      target: () => ($('.new-session') ? $('.new-session button.primary') : newItem('session')),
       enter: () => undefined,
       done: () => agents().length > 0,
       after: 'The session started. On the left, its **box**; on the right, its **terminal**.',
@@ -171,7 +175,7 @@ export function startTour(daemon: DemoDaemon): void {
             }),
         },
       ],
-      target: () => ($('.new-session') ? $('.new-session button.primary') : $('header.top .broadcast-toggle.primary')),
+      target: () => ($('.new-session') ? $('.new-session button.primary') : newItem('session')),
       enter: () => {
         // Two sessions in one folder have the same name: the tour names them, as ✎ in a box does.
         const one = first();
@@ -195,8 +199,8 @@ export function startTour(daemon: DemoDaemon): void {
     },
     {
       title: 'A team of agents',
-      body: 'Last, a team: a lead and its members, each a Claude Code session. Click **new team**, keep **developer + reviewer** and the folder, and start it.\n\nThen click **teams** and write a goal to the lead, like **add a countOrders function**. The lead hands out the work and collects the answers.',
-      target: () => byText('header.top .broadcast-toggle', (store()?.state.crews.length ?? 0) > 0 ? 'teams' : 'new team'),
+      body: 'Last, a team: a lead and its members, each a Claude Code session. Click **+ new**, then **team**, keep **developer + reviewer** and the folder, and start it.\n\nThen click **teams** and write a goal to the lead, like **add a countOrders function**. The lead hands out the work and collects the answers.',
+      target: () => ((store()?.state.crews.length ?? 0) > 0 ? byText('header.top .broadcast-toggle', 'teams') : newItem('team')),
       done: () => {
         const crew = store()?.state.crews[0];
         if (!crew || (crew.requests?.length ?? 0) < 2) return false;
@@ -204,7 +208,7 @@ export function startTour(daemon: DemoDaemon): void {
         const leadAgent = lead ? store()?.state.agents.get(lead) : undefined;
         return leadAgent?.state === 'idle' && (crew.requests ?? []).every((request) => request.deliveries.every((delivery) => delivery.status === 'done' || delivery.status === 'failed' || delivery.status === 'cancelled'));
       },
-      after: 'The lead gave the work to developer, then had reviewer check it, and reported back. Every request is in the thread of the team. To draw a team instead, open **studio**: drag agents, whole teams and skills onto a canvas, and pull an arrow from one box to another.',
+      after: 'The lead gave the work to developer, then had reviewer check it, and reported back. Every request is in the thread of the team. To draw a team instead, choose **draw a team** in **+ new**: drag agents, whole teams and skills onto a canvas, and pull an arrow from one box to another.',
     },
     {
       title: 'That is Forchetta',

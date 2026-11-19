@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
-import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, RELATION_MAX, ROLE_MAX, type Talk, treeOrder } from '../shared/crew.ts';
+import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, RELATION_MAX, ROLE_MAX, RULES_MAX, type Talk, treeOrder } from '../shared/crew.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import type { Store } from './store.ts';
 
@@ -111,6 +111,7 @@ export function specOf(input: {
   leadSkills?: readonly string[];
   talk: Talk;
   worktrees?: boolean;
+  rules?: string;
   members: readonly (Pick<MemberDraft, 'name' | 'role' | 'talk' | 'model' | 'mode' | 'worktree' | 'reviews'> & { paths?: string; key?: number; reportsTo?: number; relation?: string; skills?: readonly string[] })[];
 }): CrewSpec {
   const nameOf = new Map(input.members.filter((draft) => draft.key !== undefined).map((draft) => [draft.key!, draft.name.trim()]));
@@ -130,6 +131,7 @@ export function specOf(input: {
           },
     talk: input.talk,
     ...(input.worktrees ? { worktrees: true } : {}),
+    ...(input.rules?.trim() ? { rules: input.rules.trim() } : {}),
     members: input.members.map((draft) => ({
       name: draft.name.trim(),
       role: draft.role.trim(),
@@ -176,6 +178,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
   // Each member in a git worktree of its own: on by default, the members do not touch each other's files.
   const [worktrees, setWorktrees] = useState(true);
   const [members, setMembers] = useState<MemberDraft[]>(() => [member('developer'), member('reviewer')]);
+  const [rules, setRules] = useState('');
   const first = useRef<HTMLInputElement>(null);
   /** The member just added with "+ report" or "+ member": its name field takes the focus. */
   const added = useRef<number | undefined>(undefined);
@@ -211,6 +214,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
     setTalk(template.talk);
     setWorktrees(template.worktrees === true);
     setMembers(draftsOf(template));
+    setRules(template.rules ?? '');
   };
 
   useEffect(() => {
@@ -233,7 +237,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
   const full = members.length >= CREW_MAX_MEMBERS;
   const create = (): void => {
     if (busy || !ready) return;
-    store.createCrew(specOf({ name, folder, leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, talk, worktrees, members }));
+    store.createCrew(specOf({ name, folder, leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, talk, worktrees, rules, members }));
   };
   const onKey = (event: KeyboardEvent): void => {
     if (event.key === 'Escape') onClose();
@@ -242,7 +246,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
 
   const saveTemplate = (): void => {
     if (!ready && !(name.trim() && members.every((draft) => draft.name.trim()))) return;
-    const { cwd: _cwd, ...template } = specOf({ name, folder: folder || '/', leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, talk, worktrees, members });
+    const { cwd: _cwd, ...template } = specOf({ name, folder: folder || '/', leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, talk, worktrees, rules, members });
     store.saveTemplate({ template });
   };
 
@@ -505,6 +509,17 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
             or draw it in the studio
           </button>
         )}
+      </div>
+      <div class="broadcast-row top">
+        <span class="broadcast-label">Rules</span>
+        <textarea
+          class="command-input prompt-input"
+          rows={2}
+          maxLength={RULES_MAX}
+          value={rules}
+          placeholder="Optional: what every agent follows, whatever its role (conventions, how to commit, what never to do). Each session gets them; nothing is written in the project."
+          onInput={(event) => setRules((event.target as HTMLTextAreaElement).value)}
+        />
       </div>
 
       <div class="broadcast-row end">

@@ -2,25 +2,32 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CrewTemplates, RolePresets } from '../src/daemon/crews.ts';
-import { BUILTIN_ROLES, BUILTIN_TEMPLATES, cleanRolePreset, cleanTemplate } from '../src/shared/crew.ts';
+import { BUILTIN_ROLES, BUILTIN_TEMPLATES, cleanCrewSpec, cleanRolePreset, cleanTemplate, type CrewSpec, leadPrompt, memberPrompt, RULES_MAX, tooLong } from '../src/shared/crew.ts';
 import {
   addNode,
+  addNote,
   addTemplate,
+  clampZoom,
+  clipOf,
   connect,
   docOfTemplate,
   emptyDoc,
   emptyHistory,
   fieldsOf,
+  fitZoom,
   HISTORY_MAX,
   HISTORY_PAUSE_MS,
   leadKey,
   NODE_H,
   NODE_W,
   nodeAt,
+  nodesIn,
+  pasteClip,
   problems,
   redoStep,
   remember,
   removeNode,
+  removeNodes,
   specOfDoc,
   type StudioDoc,
   templateOfDoc,
@@ -252,5 +259,85 @@ describe('undo and redo in the studio', () => {
     for (const [i, doc] of docs.entries()) history = remember(history, doc, i * 10_000);
     expect(history.past).toHaveLength(HISTORY_MAX);
     expect(history.past[0]!.name).toBe('step 20');
+  });
+});
+
+describe('the rules of a team, and the notes on its canvas', () => {
+  it('every session gets the rules, after what it is told about the team; nothing is written in the project', () => {
+    const checked = cleanCrewSpec({ name: 'shop', cwd: '/Users/dev/shop', talk: 'twoway', rules: '  Commit with Conventional Commits.\nNever touch infra/.  ', lead: { kind: 'claude', name: 'lead', role: 'Leads.' }, members: [{ name: 'dev', role: 'Codes.' }] });
+    const spec = (checked as { spec: CrewSpec }).spec;
+    expect(spec.rules).toBe('Commit with Conventional Commits.\nNever touch infra/.');
+    for (const prompt of [leadPrompt(spec), memberPrompt(spec, spec.members[0]!)]) {
+      expect(prompt.endsWith('The rules of the whole team, for you as for every other session of it:\nCommit with Conventional Commits.\nNever touch infra/.')).toBe(true);
+    }
+    const none = (cleanCrewSpec({ name: 'shop', cwd: '/x', lead: { kind: 'you' }, members: [{ name: 'dev' }] }) as { spec: CrewSpec }).spec;
+    expect(none.rules).toBeUndefined();
+    expect(memberPrompt(none, none.members[0]!)).not.toContain('rules of the whole team');
+    expect(tooLong({ name: 'shop', rules: 'x'.repeat(RULES_MAX + 1) })).toBe(`the rules of the team are ${RULES_MAX + 1} characters: ${RULES_MAX} at most`);
+  });
+
+  it('a template keeps the rules and the notes of its canvas, and the studio opens them again', () => {
+    let { doc } = canvas('manager', 'senior');
+    doc = linked(doc, ['you', doc.nodes[0]!.key], [doc.nodes[0]!.key, doc.nodes[1]!.key]);
+    doc = { ...doc, name: 'shop', rules: 'Small commits.' };
+    doc = addNote(doc, 900, 40, '  Start it on a fresh branch.  ').doc;
+    doc = addNote(doc, 900, 200).doc;
+    const made = templateOfDoc(doc);
+    if ('error' in made) throw new Error(made.error);
+    expect(made.template.rules).toBe('Small commits.');
+    expect(made.template.notes).toEqual([{ x: 900, y: 40, text: 'Start it on a fresh branch.' }]);
+    const saved = cleanTemplate(made.template);
+    if ('error' in saved) throw new Error(saved.error);
+    expect(saved.template.rules).toBe('Small commits.');
+    expect(saved.template.notes).toEqual([{ x: 900, y: 40, text: 'Start it on a fresh branch.' }]);
+    const opened = docOfTemplate(saved.template, '/Users/dev/shop');
+    expect(opened.rules).toBe('Small commits.');
+    expect(opened.notes.map(({ x, y, text }) => ({ x, y, text }))).toEqual([{ x: 900, y: 40, text: 'Start it on a fresh branch.' }]);
+    expect(specOfDoc(opened)).toMatchObject({ spec: { rules: 'Small commits.' } });
+    // Notes with nothing in them, or in no place, are left out; 30 at most.
+    const many = cleanTemplate({ ...saved.template, notes: [{ x: 1, y: 1, text: ' ' }, { x: 'a', y: 1, text: 'x' }, ...Array.from({ length: 40 }, (_, i) => ({ x: i, y: i, text: `n${i}` }))] });
+    expect((many as { template: { notes: unknown[] } }).template.notes).toHaveLength(30);
+  });
+});
+
+describe('a canvas for large teams', () => {
+  it('copies boxes with the arrows between them, and pastes them with names of their own', () => {
+    let { doc, keys } = canvas('manager', 'senior', 'junior');
+    doc = linked(doc, ['you', keys[0]!], [keys[0]!, keys[1]!], [keys[1]!, keys[2]!]);
+    doc = updateLink(doc, keys[2]!, { talk: 'oneway', relation: 'One step at a time.' });
+    // The senior and its junior: the arrow between them comes, the one from the manager does not.
+    const clip = clipOf(doc, [keys[1]!, keys[2]!])!;
+    expect(clip.nodes.map((node) => node.name)).toEqual(['senior', 'junior']);
+    expect(clip.links).toEqual([{ from: 0, to: 1, talk: 'oneway', relation: 'One step at a time.' }]);
+    const pasted = pasteClip(doc, clip, 40, 40);
+    const [senior2, junior2] = pasted.keys.map((key) => pasted.doc.nodes.find((node) => node.key === key)!);
+    expect([senior2!.name, junior2!.name]).toEqual(['senior 2', 'junior 2']);
+    expect(senior2!.x).toBe(doc.nodes[1]!.x + 40);
+    expect(pasted.doc.links.find((link) => link.to === junior2!.key)).toEqual({ from: senior2!.key, to: junior2!.key, talk: 'oneway', relation: 'One step at a time.' });
+    expect(pasted.doc.links.find((link) => link.to === senior2!.key)).toBeUndefined();
+    expect(clipOf(doc, [])).toBeUndefined();
+    // A copy of a copy takes the next number, not a second one.
+    const again = pasteClip(pasted.doc, clipOf(pasted.doc, [senior2!.key])!, 40, 40);
+    expect(again.doc.nodes.find((node) => node.key === again.keys[0])!.name).toBe('senior 3');
+  });
+
+  it('selects the boxes a rectangle touches, and takes several away at once', () => {
+    const { doc, keys } = canvas('manager', 'senior', 'junior');
+    // Boxes at x 100, 400, 700, y 200.
+    expect(nodesIn(doc, { x: 650, y: 250 }, { x: 150, y: 210 })).toEqual([keys[0], keys[1]]);
+    expect(nodesIn(doc, { x: 0, y: 0 }, { x: 50, y: 50 })).toEqual([]);
+    const left = removeNodes(linked(doc, ['you', keys[0]!], [keys[0]!, keys[1]!], [keys[1]!, keys[2]!]), [keys[0]!, keys[1]!]);
+    expect(left.nodes.map((node) => node.name)).toEqual(['junior']);
+    expect(left.links).toEqual([expect.objectContaining({ from: 'you', to: keys[2] })]);
+  });
+
+  it('zooms between 30% and 160%, and fits everything in the view', () => {
+    expect(clampZoom(0.1)).toBe(0.3);
+    expect(clampZoom(2)).toBe(1.6);
+    expect(clampZoom(0.756)).toBe(0.76);
+    const { doc } = canvas('manager', 'senior', 'junior', 'developer', 'reviewer', 'tester');
+    expect(fitZoom(doc, 5000, 3000)).toBe(1);
+    expect(fitZoom(doc, 900, 600)).toBeLessThan(1);
+    expect(fitZoom(doc, 100, 100)).toBe(0.3);
   });
 });

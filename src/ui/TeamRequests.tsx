@@ -356,7 +356,7 @@ function UsageTable({ rows }: { rows: { name: string; lead?: boolean; agent?: Ag
   );
 }
 
-export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly CrewSummary[]; store: Store; onClose: () => void; onNew: () => void }) {
+export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: readonly CrewSummary[]; store: Store; onClose: () => void; onNew: () => void; onStudio?: (crewId: string) => void }) {
   const [crewId, setCrewId] = useState(crews.at(-1)?.id);
   const crew = crews.find((candidate) => candidate.id === crewId) ?? crews.at(-1);
   const [to, setTo] = useState<string[]>([]);
@@ -433,6 +433,11 @@ export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly Cr
           <button type="button" class={`quiet${usageOpen ? ' on' : ''}`} title="What the team used, agent by agent" onClick={() => setUsageOpen(!usageOpen)}>
             {used.usd > 0 ? `${used.usd >= 0.01 ? '≈ ' : ''}${usdText(used.usd)}` : ''}
             {usedTokens > 0 ? `${used.usd > 0 ? ' · ' : ''}${shortTokens(usedTokens)} tok` : ''}
+          </button>
+        )}
+        {onStudio && (
+          <button type="button" class="quiet" title="The team on the canvas of the studio, live: what each one does, what goes along each arrow; add or take away a member there" onClick={() => onStudio(crew.id)}>
+            studio
           </button>
         )}
         <button type="button" class={`quiet${editing ? ' on' : ''}`} title="Members, → / ⇄, template" onClick={() => setEditing(!editing)}>

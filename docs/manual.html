@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.11. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.12. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -240,6 +240,7 @@ forchetta setup</pre>
           <li>1: the whole area; 2: side by side; 3: the one you activated last, large on the left, the other two stacked; 4: two by two.</li>
           <li>The fifth click replaces the pane used longest ago. To choose every time, set <code>"panes": { "replace": "chiedi" }</code> in the <a href="#config">configuration</a>.</li>
           <li><strong>✕ closes the pane only</strong>: the session goes on in tmux and stays in the column.</li>
+          <li>The sessions of a team are one box in the column, with the name of the team, how many they are, how they are doing (<span class="ui">2 working</span>, <span class="ui">1 waits for you</span> in amber) and what they used. Click it to show its sessions under it, the lead first; again to hide them. Forchetta remembers which teams you opened.</li>
           <li><span class="ui">‹</span>, at the top of the column, hides it and gives its room to the panes; <span class="ui">›</span> brings it back. Hidden, the column is a thin strip with one square per session: its initial in its color, amber when it waits for you, red on an error, a green dot when it finished since you last looked. Click a square to open its terminal; hover it for its name and state. The window remembers the choice.</li>
         </ul>
         <h3>Inside a terminal</h3>
@@ -289,7 +290,7 @@ forchetta setup</pre>
         <p>A command still in the queue can be cancelled from the box. <code>/compact</code> is confirmed by its hook; <code>/clear</code> by the end and the start of the conversation.</p>
         <p>A prompt a hook refused starts no turn. Claude Code tells the hooks of the prompt all the same, and says it was refused only in the transcript: Forchetta reads it there within a few seconds, and the box goes back to what it was.</p>
         <h3>One command to several sessions</h3>
-        <p>With at least two sessions you can act on, <span class="ui">command to several</span> appears at the top. Choose <code>/compact</code>, <code>/clear</code> or <code>/btw</code>, then the sessions: one by one, <span class="ui">context ≥ 80%</span>, all or none. Each one gets its command as if it came from its own box, with the same queue and the same checks.</p>
+        <p>With at least two sessions you can act on, <span class="ui">to several</span> appears at the top. Choose <code>/compact</code>, <code>/clear</code> or <code>/btw</code>, then the sessions: one by one, <span class="ui">context ≥ 80%</span>, all or none. Each one gets its command as if it came from its own box, with the same queue and the same checks.</p>
       </section>
 
       <section id="permissions">
@@ -310,7 +311,7 @@ forchetta setup</pre>
 
       <section id="new-session">
         <h2>New session</h2>
-        <p><span class="ui">new session</span>, at the top, opens a panel. Type the folder (<code>~/</code> works), pick one of the recent ones, or use <span class="ui">Choose…</span>. The first prompt is optional; <kbd>⌘</kbd><kbd>↩</kbd> starts.</p>
+        <p><span class="ui">+ new</span>, at the top, then <span class="ui">session</span> (or <kbd>⌘</kbd><kbd>N</kbd>, anywhere in the window) opens a panel. Type the folder (<code>~/</code> works), pick one of the recent ones, or use <span class="ui">Choose…</span>. The first prompt is optional; <kbd>⌘</kbd><kbd>↩</kbd> starts.</p>
         <ul>
           <li><strong>model</strong>: Opus, Sonnet, Haiku or Fable, for that session only (<code>--model</code>). It does not change your default model.</li>
           <li><strong>permissions</strong>: asks every time, accepts edits, auto or plan (<code>--permission-mode</code>).</li>
@@ -333,7 +334,7 @@ forchetta setup</pre>
           <figcaption>The panel of a new team, from the <em>feature squad</em> template.</figcaption>
         </figure>
         <ol class="steps">
-          <li>Click <span class="ui">new team</span> at the top.</li>
+          <li>Click <span class="ui">+ new</span> at the top, then <span class="ui">team</span> (or <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd>).</li>
           <li>Optionally, <span class="ui">Start from</span> a template: <em>developer + reviewer</em>, <em>feature squad</em> (frontend, backend, tester), <em>manager › senior › junior</em> (three <a href="#team-levels">levels</a>), <em>research + writing</em>, or one you saved.</li>
           <li>Give the team a <strong>name</strong> (it becomes its group in the org chart) and a <strong>folder</strong>: type it, pick a recent one, or use <span class="ui">Choose…</span>.</li>
           <li>Choose the <strong>lead</strong>: <span class="ui">Claude</span>, with a name, a role, a model and a permission mode, or <span class="ui">you</span>.</li>
@@ -345,7 +346,7 @@ forchetta setup</pre>
         <p>Every session starts in the tmux of Forchetta, the lead first. From its system prompt each one knows who it is, its role, its lead and the other members. Its name shows in its box, in its pane and in Claude Code. <span class="ui">Save as template</span> keeps the team without its folder, to start it again elsewhere.</p>
 
         <h3 id="studio">The studio: draw a team</h3>
-        <p><span class="ui">studio</span>, at the top (or <span class="ui">or draw it in the studio</span> in the panel of a new team), opens a canvas over the whole window. On the left the presets: <strong>agents</strong> (manager, senior, junior, developer, reviewer, tester, frontend, backend, researcher, writer, and yours) and whole <strong>teams</strong> (the templates). On the right, whatever you selected. <span class="ui">+ new agent</span>, under the agents, is one of your own: drag it onto the canvas and fill its box there, or click it to write a preset for every team, with its name, role, model, permissions and skills.</p>
+        <p><span class="ui">+ new</span> › <span class="ui">draw a team</span>, at the top (or <kbd>⌥</kbd><kbd>⌘</kbd><kbd>N</kbd>, or <span class="ui">or draw it in the studio</span> in the panel of a new team), opens a canvas over the whole window. On the left the presets: <strong>agents</strong> (manager, senior, junior, developer, reviewer, tester, frontend, backend, researcher, writer, and yours) and whole <strong>teams</strong> (the templates). On the right, whatever you selected. <span class="ui">+ new agent</span>, under the agents, is one of your own: drag it onto the canvas and fill its box there, or click it to write a preset for every team, with its name, role, model, permissions and skills.</p>
         <figure>
           <img src="img/studio.png" width="2400" height="1520" loading="lazy" alt="The studio: on the left the agents and the teams to drag; on the canvas You, the manager that leads, the senior and the reviewer under it, the junior under the senior; on the right the junior, selected, with its role, model, permissions, files and three skills.">
           <figcaption>The <em>manager › senior › junior</em> team opened on the canvas, with a reviewer added under the manager.</figcaption>
@@ -367,6 +368,31 @@ forchetta setup</pre>
         </ul>
         <p><strong>Skills of your own.</strong> <span class="ui">+ add a skill</span>, at the top of the skills, takes the link of the folder of a skill on GitHub (<code>…/tree/main/skills/name</code>, with its <code>SKILL.md</code>), or a folder of this Mac (<span class="ui">Choose…</span>). From GitHub, Forchetta finds the commit the link points at now and keeps it, so the skill does not change by itself, and fetches only that folder into its own. A folder of yours is used where it is, never copied: what you change in it counts from the next session that has it. They show under <strong>Yours</strong>, and an agent takes them like the others; a session that sets up teams from a document can use them too. <span class="ui">Take away</span> on its card removes one, unless an agent, a template or a team still uses it.</p>
         <p>Every preset can be changed and duplicated. Click an agent on the left to edit it: saving one of Forchetta makes it your version, marked with a dot, and <span class="ui">Restore</span> brings theirs back. <span class="ui">Save as preset</span>, on a box, keeps an agent you set up. Click a team to <span class="ui">Open</span> it on the canvas (it replaces what is there), add it, duplicate it, or delete it; saved with the same name, a team of Forchetta becomes your version too. Closing the studio keeps the canvas until you come back.</p>
+
+        <h4 id="studio-rules">Rules and notes</h4>
+        <p>In the right column, with nothing selected, <strong>Rules of the team</strong>: what every agent follows, whatever its role (the conventions of the project, how to commit, what never to do). Each session of the team gets them in its system prompt, after its role; nothing is written in the folder of the project, and a <code>CLAUDE.md</code> of yours stays as it is. The panel of a new team has the same field, and a session that sets up teams from a document can write them too. <span class="ui">+ note</span>, at the top, puts a note on the canvas, for whoever opens the team after you; the agents do not read it. Rules and notes are kept with the template.</p>
+
+        <h4 id="studio-canvas">A canvas for large teams</h4>
+        <ul>
+          <li><strong>Zoom</strong>: <span class="ui">−</span>, <span class="ui">+</span> and <span class="ui">Fit</span> at the bottom right, a pinch on the trackpad, or <kbd>⌘</kbd><kbd>+</kbd>, <kbd>⌘</kbd><kbd>−</kbd>, <kbd>⌘</kbd><kbd>0</kbd>. When the team does not fit, a map at the bottom left shows where you are; click it to go elsewhere.</li>
+          <li><strong>Several boxes</strong>: a rectangle drawn from an empty spot selects the boxes it touches; <kbd>⇧</kbd>-click adds one or takes it away; <kbd>⌘</kbd><kbd>A</kbd> selects them all. Drag one of them to move them all, <kbd>Delete</kbd> to take them away.</li>
+          <li><kbd>⌘</kbd><kbd>C</kbd> and <kbd>⌘</kbd><kbd>V</kbd> copy and paste boxes with the arrows between them, <kbd>⌘</kbd><kbd>D</kbd> duplicates them; a copy gets a name of its own (<em>senior 2</em>, <em>senior 3</em>).</li>
+          <li>The right button, on a box or an empty spot, has the same: duplicate, copy, paste, save as preset, remove, add a note there, tidy up, fit.</li>
+          <li><kbd>⌘</kbd><kbd>Z</kbd> undoes the last change of the canvas, <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd> does it again (also ↶ and ↷, at the top). In a text field they are the field's own.</li>
+        </ul>
+
+        <h4 id="studio-files">A team as a file</h4>
+        <p><span class="ui">Export</span>, at the top (or on a team of the palette), saves the team as a file, <code>&lt;name&gt;.forchetta-team.json</code>, in your Downloads: roles, models, relations, rules, skills, where the boxes and the notes stand. <span class="ui">Import</span> opens one: drop the file anywhere on the studio, or paste its text. It opens on the canvas in place of what is there (<kbd>⌘</kbd><kbd>Z</kbd> brings that back). The skills of GitHub it needs and this Mac does not have are added at their commit; a skill that was a folder of the other Mac is left out, and the studio says so. Forchetta opens only files of its own format.</p>
+        <p>The <a href="studio/">Studio Maker</a>, on this site, is the same studio in a browser: make a team there, export it, and open the file here. It keeps what you draw in the browser as you go; it has no folder and starts nothing.</p>
+
+        <h4 id="studio-live">The studio on a running team</h4>
+        <p><span class="ui">studio</span>, in the panel of a team, opens that team on the canvas while it works. Each box says what its agent is doing and what it used; each arrow, what goes along it: orange, a request in the queue (dashed) or at work; green, an answer coming back; amber, a question. While it runs you can:</p>
+        <ul>
+          <li>add an agent: drag it onto the canvas (it says <span class="ui">not in the team yet</span>), draw its arrow from the one it reports to, then <span class="ui">Add to the team</span>: its session starts with the others;</li>
+          <li>change <a href="#talk">⇄ or →</a> on an arrow (it counts from the next request), or the files of a member;</li>
+          <li>take a member away (<span class="ui">Remove from the team</span>, in its panel): its session closes.</li>
+        </ul>
+        <p>A running session keeps its role, model, skills and the prompt of its relation: change them in a template (<span class="ui">Save as template</span> keeps the team with where its boxes stand) for its next start.</p>
 
         <h3 id="team-from-document">A team from a document</h3>
         <p>Every session Forchetta starts, from the app or with <code>forchetta run claude</code>, has two tools of the MCP server <code>forchetta</code>: <code>list_team_templates</code> and <code>save_team_template</code>. So a team can come from a description. Ask any session “Set up in Forchetta the teams described in roles.md”, or point it at an artifact, or describe the team in your own words. Claude reads the description and saves one template per team, with the name, the role, the model and the permissions of the lead and of each member, and for each member whether it answers or executes only (<a href="#talk">⇄ or →</a>): as the document says, or as Claude judges from the role. When the document has more levels, each member also gets who it reports to, and the prompt of that relation (the formats of requests and reports, the rules of that link): see <a href="#team-levels">More levels</a>.</p>
@@ -416,7 +442,7 @@ forchetta setup</pre>
           <img src="img/team.png" width="2400" height="1418" loading="lazy" alt="The panel of the team checkout: the thread of requests, answers and a question, then the field to write a new request.">
           <figcaption>The thread of the team, and the field to write to it.</figcaption>
         </figure>
-        <p><span class="ui">teams</span>, at the top, takes the place of <span class="ui">new team</span> when there is at least one team; <span class="ui">+ new team</span> is inside. It shows the thread of the team, oldest first:</p>
+        <p><span class="ui">teams</span>, at the top, shows when there is at least one team; <span class="ui">+ new team</span> is inside, and <span class="ui">studio</span> opens the team on the canvas of the studio, live (see <a href="#studio-live">The studio on a running team</a>). It shows the thread of the team, oldest first:</p>
         <ul>
           <li>each request, with who sent it, to whom, and how it goes for each one: in the queue, working, passed on (to the members below it), done; a request a senior sends while working on #3 says <span class="ui">for #3</span>;</li>
           <li>the answers, and where they went: <span class="ui">delivered to lead</span>, <span class="ui">collected by lead (waiting for it)</span>, <span class="ui">for you</span>, or <span class="ui">not sent back</span> (a member that executes only, or one that asked a question instead);</li>

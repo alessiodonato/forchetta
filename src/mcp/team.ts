@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { CREW_MAX_MEMBERS, CREW_NAME_MAX, MEMBER_NAME_MAX, MODELS, MODES, PATHS_MAX, RELATION_MAX, ROLE_MAX, type TeamTool, TEMPLATE_TOOLS } from '../shared/crew.ts';
+import { CREW_MAX_MEMBERS, CREW_NAME_MAX, MEMBER_NAME_MAX, MODELS, MODES, PATHS_MAX, RELATION_MAX, ROLE_MAX, RULES_MAX, type TeamTool, TEMPLATE_TOOLS } from '../shared/crew.ts';
 import { SKILLS, SKILLS_PER_AGENT_MAX } from '../shared/skills.ts';
 import { paths } from '../shared/paths.ts';
 import { VERSION } from '../shared/version.ts';
@@ -93,7 +93,7 @@ export const TOOLS: Record<TeamTool, Tool> = {
     description: [
       'Save a team of agents as a template of Forchetta: a lead and its members, each one a Claude Code session with its role, model and permissions. Use it when the user asks to create or set up a team in Forchetta, also from a document that describes the roles and their prompts: read the document, then save one template per team.',
       'A template starts nothing: the user starts the team from the Forchetta app, choosing its folder, and sees the roles and permissions there first. Tell the user so.',
-      'Forchetta adds by itself who the lead and the members are and how requests, answers and questions travel between them (the tools send_request, wait_for_answers and ask_lead): the roles say only what each one does. Rules the whole team shares, longer than a role, belong in a CLAUDE.md in the folder of the team (Claude Code loads it in every session there): write that file yourself, it is not part of the template.',
+      'Forchetta adds by itself who the lead and the members are and how requests, answers and questions travel between them (the tools send_request, wait_for_answers and ask_lead): the roles say only what each one does. Rules the whole team shares, longer than a role (the conventions of the project, how to commit, what never to do), go in rules: every session of the team gets them in its system prompt, and nothing is written in the folder of the project.',
       'The org chart can have more levels: a member reports to the lead, or to another member (reportsTo), which then leads it, gives it requests and gets its answers; a junior under a senior under the lead. Each one talks only with the one it reports to and with those that report to it: follow the chart of the document. The relation of a member with the one it reports to can have its own prompt (relation): how the two work together, what goes down, what comes back, when to ask; both read it. Put there what the document says about that link (formats of requests and reports, rules), not in the roles.',
       'Forchetta checks the template as its panel does: what is wrong comes back as an error, to fix and save again.',
     ].join(' '),
@@ -133,6 +133,11 @@ export const TOOLS: Record<TeamTool, Tool> = {
             'How the members talk with the one they report to, unless a member says otherwise: "twoway", the final message of each request goes back and the member can ask questions; "oneway", the member executes only. Default "twoway". Follow the document when it says; otherwise choose for each member (its own talk).',
         },
         worktrees: { type: 'boolean', description: 'Each member in a git worktree of its own (only in a git repository), unless a member says otherwise; the lead merges their branches. Default false: all in the folder of the team.' },
+        rules: {
+          type: 'string',
+          maxLength: RULES_MAX,
+          description: `What every agent of the team follows, whatever its role: the conventions, how to commit, what never to do, the shared context of the document. Every session gets them in its system prompt. ${RULES_MAX} characters at most; leave it out when there is nothing shared.`,
+        },
         members: {
           type: 'array',
           minItems: 1,

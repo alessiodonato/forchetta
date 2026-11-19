@@ -121,3 +121,18 @@ export function cleanSkills(raw: unknown): { skills?: string[] } | { error: stri
   if (out.length > SKILLS_PER_AGENT_MAX) return { error: `${SKILLS_PER_AGENT_MAX} skills at most for one agent` };
   return out.length > 0 ? { skills: out } : {};
 }
+
+/** Who uses a skill: the presets, the templates and the teams that give it to an agent, by name. */
+export function skillUsers(
+  id: string,
+  presets: readonly { name: string; skills?: string[] }[],
+  templates: readonly { name: string; lead: { kind: string; skills?: string[] }; members: readonly { skills?: string[] }[] }[],
+  teams: readonly { name: string; lead: { kind: string; skills?: string[] }; members: readonly { skills?: string[] }[] }[],
+): string[] {
+  const inTeam = (team: (typeof templates)[number]): boolean => !!team.lead.skills?.includes(id) || team.members.some((member) => member.skills?.includes(id));
+  return [
+    ...presets.filter((preset) => preset.skills?.includes(id)).map((preset) => `the agent ${preset.name}`),
+    ...templates.filter(inTeam).map((template) => `the template ${template.name}`),
+    ...teams.filter(inTeam).map((team) => `the team ${team.name}`),
+  ];
+}

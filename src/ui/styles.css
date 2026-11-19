@@ -3823,3 +3823,351 @@ html[data-hidden] *::after {
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+
+/* The quieter buttons at the top: tools you reach for now and then. */
+.broadcast-toggle.quiet {
+  border-color: transparent;
+}
+
+.broadcast-toggle.quiet:hover,
+.broadcast-toggle.quiet.active {
+  border-color: var(--line-strong);
+}
+
+/* "+ new": what to start, with its shortcut. */
+.new-menu {
+  position: relative;
+  flex: none;
+}
+
+.new-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.new-menu-list button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: 12.5px var(--ui);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.new-menu-list button:hover,
+.new-menu-list button:focus-visible {
+  background: var(--claude-soft);
+}
+
+.new-menu-name small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.new-menu-list kbd {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+/* A note on the canvas of the studio: a sticky, below the boxes and their arrows in weight. */
+.studio-sticky {
+  position: absolute;
+  z-index: 1;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(240, 164, 60, 0.45);
+  border-radius: 8px;
+  background: rgba(240, 164, 60, 0.12);
+  font: 12px/1.45 var(--ui);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: grab;
+  user-select: none;
+}
+
+.studio-sticky.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* A team in the column of sessions: one box with its name; open, its sessions under it. */
+.rail-team {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.rail-team[data-open] {
+  border-color: rgba(217, 119, 87, 0.55);
+}
+
+.rail-team[data-state='waiting'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(240, 164, 60, 0.35);
+}
+
+.rail-team-head {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: 600 13px var(--ui);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rail-team-chevron {
+  width: 10px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.rail-team-name {
+  overflow: hidden;
+  flex: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rail-team-count {
+  font: 400 11px var(--mono);
+  color: var(--text-3);
+}
+
+.rail-team-line {
+  padding-left: 16px;
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.rail-team[data-state='waiting'] .rail-team-line {
+  color: var(--accent);
+}
+
+.rail-team[data-state='working'] .rail-team-line {
+  color: var(--claude);
+}
+
+.rail-team-members {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* A file of a team dragged over the studio: it opens where you drop it. */
+.broadcast.studio.dropping {
+  outline: 2px dashed var(--claude);
+  outline-offset: -6px;
+}
+
+/* The canvas of the studio with what floats on it: the zoom, the map. The canvas scrolls under them. */
+.studio-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-stage > .studio-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.studio-sizer {
+  position: relative;
+}
+
+.studio-surface {
+  transform-origin: 0 0;
+}
+
+/* The rectangle that selects the boxes it touches. */
+.studio-band {
+  position: absolute;
+  z-index: 4;
+  border: 1px solid var(--claude);
+  background: var(--claude-soft);
+  pointer-events: none;
+}
+
+.studio-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.studio-zoom button {
+  min-width: 26px;
+  padding: 2px 6px;
+  font: 12px var(--mono);
+}
+
+.studio-zoom .studio-zoom-value {
+  min-width: 48px;
+  color: var(--text-2);
+}
+
+.studio-minimap {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.studio-minimap-node {
+  fill: var(--line-strong);
+}
+
+.studio-minimap-you {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-dasharray: 2 2;
+}
+
+.studio-minimap-view {
+  fill: var(--claude-soft);
+  stroke: var(--claude);
+}
+
+/* The menu of the right button on the canvas. */
+.studio-menu {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.studio-menu button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font: 12.5px var(--ui);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-menu button:hover {
+  background: var(--claude-soft);
+}
+
+.studio-menu kbd {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+/* The studio on a running team: each box with the state of its session, each arrow with what goes along it. */
+.studio-node[data-live='working'] {
+  border-color: var(--claude);
+}
+
+.studio-node[data-live='waiting'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(240, 164, 60, 0.35);
+}
+
+.studio-node[data-live='error'] {
+  border-color: var(--red, #ef5b5b);
+}
+
+.studio-node.pending {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.studio-link.live-queued {
+  stroke: var(--claude);
+  stroke-dasharray: 5 4;
+}
+
+.studio-link.live-working {
+  stroke: var(--claude);
+  stroke-width: 2;
+}
+
+.studio-link.live-answer {
+  stroke: var(--green, #46c48a);
+  stroke-width: 2;
+}
+
+.studio-link.live-question {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* The top bar of the studio in a narrow window: the buttons keep their line; the name and the count give way. */
+.studio-top > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+.broadcast.studio .studio-top .studio-team-name {
+  flex: 0 1 240px;
+  min-width: 110px;
+}
+
+.studio-top .studio-count {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-top .studio-spacer {
+  flex: 1 1 0;
+}

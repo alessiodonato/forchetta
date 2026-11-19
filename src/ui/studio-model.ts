@@ -53,12 +53,38 @@ export interface StudioDoc {
   you: { x: number; y: number };
   nodes: StudioNode[];
   links: StudioLink[];
+  /** The rules of the whole team: every session gets them (CrewSpec.rules). */
+  rules: string;
+  /** Notes on the canvas, for whoever opens the team after you. */
+  notes: StudioNote[];
 }
+
+/** A note on the canvas: a text where you put it. */
+export interface StudioNote {
+  key: number;
+  x: number;
+  y: number;
+  text: string;
+}
+
+export const NOTE_W = 200;
 
 let lastKey = 0;
 export const newKey = (): number => ++lastKey;
+/** A canvas brought back from elsewhere (the browser): the next boxes get keys after its own. */
+export function reserveKeys(doc: Pick<StudioDoc, 'nodes' | 'notes'>): void {
+  lastKey = Math.max(lastKey, ...doc.nodes.map((node) => node.key), ...(doc.notes ?? []).map((note) => note.key));
+}
 
-export const emptyDoc = (folder = ''): StudioDoc => ({ name: '', folder, talk: 'twoway', worktrees: true, you: { x: 400, y: MARGIN }, nodes: [], links: [] });
+export const emptyDoc = (folder = ''): StudioDoc => ({ name: '', folder, talk: 'twoway', worktrees: true, you: { x: 400, y: MARGIN }, nodes: [], links: [], rules: '', notes: [] });
+
+/** A note added at a place; its key. */
+export function addNote(doc: StudioDoc, x: number, y: number, text = ''): { doc: StudioDoc; key: number } {
+  const key = newKey();
+  return { doc: { ...doc, notes: [...doc.notes, { key, x: Math.round(x), y: Math.round(y), text }] }, key };
+}
+
+export const noteOf = (doc: StudioDoc, key: number): StudioNote | undefined => doc.notes.find((note) => note.key === key);
 
 export const nodeOf = (doc: StudioDoc, key: number): StudioNode | undefined => doc.nodes.find((node) => node.key === key);
 /** The arrow that comes into a box: from the one it reports to. */
@@ -78,8 +104,10 @@ export const fromName = (doc: StudioDoc, from: From): string => (from === 'you' 
 export function uniqueName(doc: Pick<StudioDoc, 'nodes'>, base: string, except?: number): string {
   const taken = new Set(doc.nodes.filter((node) => node.key !== except).map((node) => node.name.trim().toLowerCase()));
   taken.add('you');
-  const root = base.trim().slice(0, MEMBER_NAME_MAX) || 'agent';
-  if (!taken.has(root.toLowerCase())) return root;
+  const whole = base.trim().slice(0, MEMBER_NAME_MAX) || 'agent';
+  if (!taken.has(whole.toLowerCase())) return whole;
+  // "senior 2" taken too: "senior 3", not "senior 2 2".
+  const root = whole.replace(/ \d+$/, '') || whole;
   for (let n = 2; ; n++) {
     const name = `${root.slice(0, MEMBER_NAME_MAX - String(n).length - 1)} ${n}`;
     if (!taken.has(name.toLowerCase())) return name;
@@ -129,7 +157,7 @@ export function presetOfNode(node: StudioNode): Omit<RolePreset, 'builtin' | 'mo
   };
 }
 
-const pathsOf = (text: string): string[] =>
+export const pathsOf = (text: string): string[] =>
   text
     .split(/[,\n]/)
     .map((path) => path.trim())
@@ -233,6 +261,7 @@ export function specOfDoc(doc: StudioDoc): { spec: CrewSpec } | { error: string 
     cwd: doc.folder,
     talk: doc.talk,
     ...(doc.worktrees ? { worktrees: true } : {}),
+    ...(doc.rules.trim() ? { rules: doc.rules } : {}),
     lead: leadNode
       ? {
           kind: 'claude',
@@ -254,7 +283,8 @@ export function templateOfDoc(doc: StudioDoc): { template: Omit<CrewTemplate, 'b
   const { cwd: _cwd, ...rest } = checked.spec;
   const layout: Record<string, [number, number]> = { you: [doc.you.x, doc.you.y] };
   for (const node of doc.nodes) layout[node.name.trim()] = [node.x, node.y];
-  return { template: { ...rest, layout } };
+  const notes = doc.notes.filter((note) => note.text.trim()).map((note) => ({ x: note.x, y: note.y, text: note.text.trim() }));
+  return { template: { ...rest, layout, ...(notes.length > 0 ? { notes } : {}) } };
 }
 
 /**
@@ -304,7 +334,14 @@ function savedPositions(template: Pick<CrewTemplate, 'layout'>, keys: ReadonlyMa
 
 /** A template opened in the studio: its boxes and arrows on an empty canvas, where it keeps them, with its name and choices. */
 export function docOfTemplate(template: CrewTemplate, folder = ''): StudioDoc {
-  const base: StudioDoc = { ...emptyDoc(folder), name: template.name, talk: template.talk, worktrees: template.worktrees === true };
+  const base: StudioDoc = {
+    ...emptyDoc(folder),
+    name: template.name,
+    talk: template.talk,
+    worktrees: template.worktrees === true,
+    rules: template.rules ?? '',
+    notes: (template.notes ?? []).map((note) => ({ ...note, key: newKey() })),
+  };
   const you = template.layout?.you;
   const doc = addTemplate(base, template, 0, 0);
   const keys = new Map(doc.nodes.map((node) => [node.name.toLowerCase(), node.key]));
@@ -392,8 +429,8 @@ export const nodeAt = (doc: StudioDoc, x: number, y: number): StudioNode | undef
 
 /** How big the canvas is: what it holds, and room around. */
 export function canvasSize(doc: StudioDoc): { width: number; height: number } {
-  const right = Math.max(doc.you.x + YOU_W, ...doc.nodes.map((node) => node.x + NODE_W));
-  const bottom = Math.max(doc.you.y + YOU_H, ...doc.nodes.map((node) => node.y + NODE_H));
+  const right = Math.max(doc.you.x + YOU_W, ...doc.nodes.map((node) => node.x + NODE_W), ...doc.notes.map((note) => note.x + NOTE_W));
+  const bottom = Math.max(doc.you.y + YOU_H, ...doc.nodes.map((node) => node.y + NODE_H), ...doc.notes.map((note) => note.y + 120));
   return { width: Math.max(1200, right + 480), height: Math.max(800, bottom + 360) };
 }
 
@@ -431,4 +468,75 @@ export function redoStep(history: StudioHistory, current: StudioDoc): { doc: Stu
   const doc = history.future.at(-1);
   if (!doc) return undefined;
   return { doc, history: { past: [...history.past, current].slice(-HISTORY_MAX), future: history.future.slice(0, -1), at: 0 } };
+}
+
+// ---- Copy, paste, duplicate; the boxes in a rectangle; zoom ----
+
+/** Boxes copied: their fields where they stood, and the arrows between them (by their place in `nodes`). */
+export interface StudioClip {
+  nodes: Omit<StudioNode, 'key'>[];
+  links: { from: number; to: number; talk?: Talk; relation: string }[];
+}
+
+/** The boxes of these keys, with the arrows that go from one of them to another. */
+export function clipOf(doc: StudioDoc, keys: readonly number[]): StudioClip | undefined {
+  const chosen = doc.nodes.filter((node) => keys.includes(node.key));
+  if (chosen.length === 0) return undefined;
+  const index = new Map(chosen.map((node, at) => [node.key, at]));
+  return {
+    nodes: chosen.map(({ key: _key, ...fields }) => ({ ...fields, skills: [...fields.skills] })),
+    links: doc.links
+      .filter((link) => link.from !== 'you' && index.has(link.from) && index.has(link.to))
+      .map((link) => ({ from: index.get(link.from as number)!, to: index.get(link.to)!, ...(link.talk ? { talk: link.talk } : {}), relation: link.relation })),
+  };
+}
+
+/** The boxes of a clip on the canvas, moved by dx and dy, with names of their own; their keys. */
+export function pasteClip(doc: StudioDoc, clip: StudioClip, dx: number, dy: number): { doc: StudioDoc; keys: number[] } {
+  let next = doc;
+  const keys: number[] = [];
+  for (const node of clip.nodes) {
+    const added = addNode(next, { ...node, skills: [...node.skills] }, Math.max(0, node.x + dx), Math.max(0, node.y + dy));
+    next = added.doc;
+    keys.push(added.key);
+  }
+  for (const link of clip.links) {
+    const result = connect(next, keys[link.from]!, keys[link.to]!);
+    if ('error' in result) continue;
+    next = updateLink(result.doc, keys[link.to]!, { relation: link.relation, ...(link.talk ? { talk: link.talk } : {}) });
+  }
+  return { doc: next, keys };
+}
+
+/** The boxes a rectangle of the canvas touches, in any direction it was drawn. */
+export function nodesIn(doc: StudioDoc, a: { x: number; y: number }, b: { x: number; y: number }): number[] {
+  const left = Math.min(a.x, b.x);
+  const right = Math.max(a.x, b.x);
+  const top = Math.min(a.y, b.y);
+  const bottom = Math.max(a.y, b.y);
+  return doc.nodes.filter((node) => node.x < right && node.x + NODE_W > left && node.y < bottom && node.y + NODE_H > top).map((node) => node.key);
+}
+
+/** Takes away several boxes; those they led go up to the one above them, as for one. */
+export function removeNodes(doc: StudioDoc, keys: readonly number[]): StudioDoc {
+  return keys.reduce((current, key) => (nodeOf(current, key) ? removeNode(current, key) : current), doc);
+}
+
+export const ZOOM_MIN = 0.3;
+export const ZOOM_MAX = 1.6;
+export const clampZoom = (zoom: number): number => Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom)) * 100) / 100;
+
+/** Where everything on the canvas is: You, the boxes, the notes. */
+export function contentBox(doc: StudioDoc): { left: number; top: number; right: number; bottom: number } {
+  const xs = [doc.you.x, ...doc.nodes.map((node) => node.x), ...doc.notes.map((note) => note.x)];
+  const ys = [doc.you.y, ...doc.nodes.map((node) => node.y), ...doc.notes.map((note) => note.y)];
+  const rights = [doc.you.x + YOU_W, ...doc.nodes.map((node) => node.x + NODE_W), ...doc.notes.map((note) => note.x + NOTE_W)];
+  const bottoms = [doc.you.y + YOU_H, ...doc.nodes.map((node) => node.y + NODE_H), ...doc.notes.map((note) => note.y + 80)];
+  return { left: Math.min(...xs), top: Math.min(...ys), right: Math.max(...rights), bottom: Math.max(...bottoms) };
+}
+
+/** The zoom that shows everything in a view of this size, with a margin; never larger than 1. */
+export function fitZoom(doc: StudioDoc, width: number, height: number, margin = 40): number {
+  const box = contentBox(doc);
+  return clampZoom(Math.min(1, (width - 2 * margin) / Math.max(1, box.right - box.left), (height - 2 * margin) / Math.max(1, box.bottom - box.top)));
 }

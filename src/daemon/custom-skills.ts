@@ -2,8 +2,11 @@ import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileS
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { ensurePrivateDir } from '../shared/paths.ts';
-import { customSkills, setCustomSkills, type SkillInfo, skillById } from '../shared/skills.ts';
+import { customSkills, setCustomSkills, type SkillInfo, skillById, skillUsers } from '../shared/skills.ts';
+import { describeSkill, githubLink } from '../shared/skill-links.ts';
 import { bytesOf, type Git, gitRunner, type SkillCache, slug } from './skills.ts';
+
+export { describeSkill, githubLink, skillUsers };
 
 // The skills you add in the studio, next to the catalog (shared/skills.ts). From GitHub: the link of the folder of a
 // skill; Forchetta finds the commit the link points at now, keeps it (so the skill does not change by itself), and
@@ -12,38 +15,6 @@ import { bytesOf, type Git, gitRunner, type SkillCache, slug } from './skills.ts
 // so it is read before them.
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-
-/** A link of GitHub to a folder: owner/repo, then the branch, tag or commit and the path, still together. */
-export function githubLink(text: string): { repo: string; rest: string[] } | { error: string } | undefined {
-  const match = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/(tree|blob)\/(.+?))?\/?(?:[?#].*)?$/i.exec(text.trim());
-  if (!match) return undefined;
-  const [, owner, name, , tail] = match;
-  const rest = (tail ?? '').split('/').filter(Boolean).map((part) => decodeURIComponent(part));
-  // The link of a SKILL.md: its folder.
-  if (rest.at(-1)?.toLowerCase() === 'skill.md') rest.pop();
-  if (rest.length < 2) return { error: 'give the link of the folder of the skill on GitHub (…/tree/<branch>/<folder>, with its SKILL.md), not of the whole repository' };
-  return { repo: `${owner}/${name}`, rest };
-}
-
-/** What a SKILL.md says of itself: its description, in one line. */
-export function describeSkill(text: string): string {
-  const head = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '';
-  const lines = head.split(/\r?\n/);
-  const at = lines.findIndex((line) => /^description:/.test(line));
-  if (at < 0) return '';
-  let value = lines[at]!.replace(/^description:\s*/, '').trim();
-  // A folded or literal block: the indented lines after it.
-  if (/^[|>][-+]?$/.test(value) || value === '') {
-    const block: string[] = [];
-    for (const line of lines.slice(at + 1)) {
-      if (!/^\s+\S/.test(line)) break;
-      block.push(line.trim());
-    }
-    value = block.join(' ');
-  }
-  value = value.replace(/^(["'])([\s\S]*)\1$/, '$2').replace(/\s+/g, ' ').trim();
-  return value.length > 200 ? `${value.slice(0, 199)}…` : value;
-}
 
 function filesOf(dir: string): number {
   let total = 0;
@@ -73,21 +44,6 @@ const clean = (raw: unknown): SkillInfo | undefined => {
     ...(item.local ? { local: item.local } : {}),
   };
 };
-
-/** Who uses a skill: the presets, the templates and the teams that give it to an agent, by name. */
-export function skillUsers(
-  id: string,
-  presets: readonly { name: string; skills?: string[] }[],
-  templates: readonly { name: string; lead: { kind: string; skills?: string[] }; members: readonly { skills?: string[] }[] }[],
-  teams: readonly { name: string; lead: { kind: string; skills?: string[] }; members: readonly { skills?: string[] }[] }[],
-): string[] {
-  const inTeam = (team: (typeof templates)[number]): boolean => !!team.lead.skills?.includes(id) || team.members.some((member) => member.skills?.includes(id));
-  return [
-    ...presets.filter((preset) => preset.skills?.includes(id)).map((preset) => `the agent ${preset.name}`),
-    ...templates.filter(inTeam).map((template) => `the template ${template.name}`),
-    ...teams.filter(inTeam).map((team) => `the team ${team.name}`),
-  ];
-}
 
 export class CustomSkills {
   constructor(
