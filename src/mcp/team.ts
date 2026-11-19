@@ -137,7 +137,7 @@ export const TOOLS: Record<TeamTool, Tool> = {
           type: 'array',
           minItems: 1,
           maxItems: CREW_MAX_MEMBERS,
-          description: `The members, ${CREW_MAX_MEMBERS} at most, the lead aside: a bigger organization is several teams, one template each.`,
+          description: 'The members, the lead aside: as many as the team needs, on as many levels as it has (reportsTo).',
           items: {
             type: 'object',
             properties: {

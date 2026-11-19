@@ -57,7 +57,7 @@ describe('the spec of a team', () => {
     expect(error(spec({ name: ' ' }))).toContain('name');
     expect(error(spec({ cwd: '' }))).toContain('folder');
     expect(error(spec({ members: [] }))).toContain('at least one');
-    expect(error(spec({ members: Array.from({ length: 7 }, (_, i) => ({ name: `m${i}` })) }))).toContain('6 members');
+    expect(error(spec({ members: Array.from({ length: 51 }, (_, i) => ({ name: `m${i}` })) }))).toContain('50 members');
     expect(error(spec({ members: [{ name: 'Tester' }, { name: 'tester' }] }))).toContain('two members');
     expect(error(spec({ members: [{ name: 'lead' }] }))).toContain('two members');
     expect(error(spec({ members: [{ name: '-x' }] }))).toContain('start with a letter');
@@ -666,7 +666,9 @@ describe('templates saved by a session (the tools list_team_templates and save_t
     expect(save({ ...bakery, lead: { ...bakery.lead, role: `  ${'y'.repeat(1000)}\n` } }).ok).toBe(true);
     expect(save({ ...bakery, name: 'n'.repeat(41) }).error).toBe('the name of the team is 41 characters: 40 at most');
     expect(save({ ...bakery, members: [{ name: 'a-very-long-name-for-a-member', role: 'x' }] }).error).toBe('"a-very-long-name-for-a-member": the name is 29 characters, 24 at most');
-    expect(save({ ...bakery, members: Array.from({ length: 7 }, (_, i) => ({ name: `m${i}`, role: 'x' })) }).error).toBe('6 members at most');
+    // No limit of how to organize a team: 14 members on three levels; only a ceiling against a template gone wrong.
+    expect(save({ ...bakery, name: 'Big bakery', members: Array.from({ length: 14 }, (_, i) => ({ name: `m${i}`, role: 'x', ...(i > 0 ? { reportsTo: `m${Math.floor((i - 1) / 3)}` } : {}) })) }).ok).toBe(true);
+    expect(save({ ...bakery, members: Array.from({ length: 51 }, (_, i) => ({ name: `m${i}`, role: 'x' })) }).error).toBe('50 members at most');
     expect(save({ ...bakery, members: [{ name: 'a', role: 'x', model: 'claude-opus-5-5' }] }).error).toBe('a: invalid model');
     expect(save({ ...bakery, members: [{ name: 'a', role: 'x', mode: 'bypassPermissions' }] }).error).toBe('a: invalid permission mode');
     expect(save({ ...bakery, members: [{ name: 'a', role: 'x', paths: ['../outside'] }] }).error).toContain('must be inside the folder of the team');

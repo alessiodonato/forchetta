@@ -327,6 +327,7 @@ export class DemoDaemon {
       const agent = this.registry.agents.get(claude.id);
       if (!agent || !claude.sessionId) return;
       const tokens = claude.contextTokens;
+      if (agent.team?.crew) agent.tokens = { ...claude.usedTokens };
       this.registry.status(claude.sessionId, { pid: claude.pid, pane: claude.pane, agentId: claude.id }, { usd: claude.usd, context: tokens === null ? null : { tokens, window: claude.contextWindow, percent: Math.min(100, Math.round((tokens / claude.contextWindow) * 100)) } });
     },
     team: (claude) => this.teamTools(claude),

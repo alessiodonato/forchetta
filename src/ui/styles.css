@@ -3751,3 +3751,61 @@ html[data-hidden] *::after {
 .studio-row > button {
   flex: none;
 }
+
+/* What a team used: next to its name in the org chart, and agent by agent in its panel. */
+.org-usage {
+  margin-left: auto;
+  font: 11px var(--mono);
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.crew-usage {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.crew-usage table {
+  width: 100%;
+  max-width: 640px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.crew-usage th,
+.crew-usage td {
+  padding: 3px 10px 3px 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.crew-usage th:first-child,
+.crew-usage td:first-child {
+  text-align: left;
+}
+
+.crew-usage th {
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.crew-usage td {
+  font-family: var(--mono);
+  color: var(--text-2);
+}
+
+.crew-usage td:first-child {
+  font-family: var(--ui);
+  color: var(--text);
+}
+
+.crew-usage tfoot td {
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.crew-usage .usage-note {
+  max-width: 640px;
+  margin: 6px 0 0;
+}

@@ -304,7 +304,11 @@ export const ownsPath = (paths: readonly string[] | undefined, rel: string): boo
 /** "src/ui/, docs/": the files of a member, in a line. */
 export const pathsText = (paths: readonly string[]): string => paths.join(', ');
 
-export const CREW_MAX_MEMBERS = 6;
+/**
+ * Not a rule of how to organize a team (as many members and levels as you like): a ceiling against a team gone wrong,
+ * say a template a session wrote with hundreds of members, that would start as many sessions on this Mac.
+ */
+export const CREW_MAX_MEMBERS = 50;
 export const CREW_NAME_MAX = 40;
 export const MEMBER_NAME_MAX = 24;
 export const ROLE_MAX = 1000;
@@ -744,7 +748,7 @@ export const BUILTIN_ROLES: readonly RolePreset[] = [
   { name: 'writer', builtin: true, model: 'sonnet', role: 'Writes the text it is asked for, clear and short, from what the request gives it.' },
 ];
 
-/** At most this many boxes in the layout of a template: a lead, 6 members, you. */
+/** At most this many boxes in the layout of a template: a lead, the members, you. */
 const LAYOUT_MAX = CREW_MAX_MEMBERS + 2;
 
 /** The layout of a template as it was sent: names of the team (and "you"), each with two numbers. */

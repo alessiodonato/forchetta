@@ -19,6 +19,8 @@ import {
   stallText,
   shortTokens,
   subagentTime,
+  tokensDetail,
+  tokensTotal,
   usdText,
   waitingText,
 } from '../shared/present.ts';
@@ -102,10 +104,13 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
     : undefined;
   const usage = agent.usage;
   const today = agent.today;
+  // In a team, its own tokens since it started; otherwise today's, when arricurdAI says them.
+  const tokens = agent.tokens && tokensTotal(agent.tokens) > 0 ? agent.tokens : undefined;
   const usageTitle = [
     usage
       ? `Cost of the session since it started: about ${usdText(usage.usd)} at API prices, computed by Claude Code as for /cost.`
       : 'The cost comes from the status line of Claude Code with the next message of the session.',
+    tokens ? `Since it started, with its subagents: ${tokensDetail(tokens)}` : '',
     today
       ? `Today, with its subagents: ${today.tokens.toLocaleString('en-US')} tokens in ${today.calls.toLocaleString('en-US')} calls, about ${usdText(today.usd)} (data from arricurdAI).`
       : '',
@@ -117,10 +122,14 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
   const stopped = cache !== undefined && left <= 0 && cache.guardWillStop === true;
   return (
     <footer class="meta">
-      {(usage || (today && today.tokens > 0)) && (
+      {(usage || tokens || (today && today.tokens > 0)) && (
         <span class="usage" title={usageTitle}>
           {usage ? `${usage.usd >= 0.01 ? '≈ ' : ''}${usdText(usage.usd)}` : ''}
-          {today && today.tokens > 0 ? `${usage ? ' · ' : ''}today ${shortTokens(today.tokens)} tok` : ''}
+          {tokens
+            ? `${usage ? ' · ' : ''}${shortTokens(tokensTotal(tokens))} tok`
+            : today && today.tokens > 0
+              ? `${usage ? ' · ' : ''}today ${shortTokens(today.tokens)} tok`
+              : ''}
         </span>
       )}
       {cache && (soon || stopped) && (

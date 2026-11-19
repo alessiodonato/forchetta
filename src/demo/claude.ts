@@ -116,6 +116,8 @@ export class FakeClaude {
   session = '';
   /** What the status line says. */
   usd = 0;
+  /** The tokens of the session, by kind, as a real one reads them from its transcript (daemon/token-usage.ts). */
+  usedTokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
   contextTokens: number | null = null;
   readonly contextWindow = 200_000;
 
@@ -171,6 +173,7 @@ export class FakeClaude {
       this.hook('SessionStart', { source: 'startup', model: this.model });
       this.contextTokens = null;
       this.usd = 0;
+      this.usedTokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
       this.host.status(this);
       if (this.queue.length > 0) void this.next();
     }, 500);
@@ -449,6 +452,11 @@ export class FakeClaude {
 
   /** The context grows by about this many tokens, and the cost with it. */
   private grow(tokens: number): void {
+    // Each call reads the context so far from the cache, writes what is new, and answers.
+    this.usedTokens.cacheRead += this.contextTokens ?? 18_400;
+    this.usedTokens.cacheWrite += Math.round(tokens);
+    this.usedTokens.output += Math.round(tokens * 0.2);
+    this.usedTokens.input += 6;
     this.contextTokens = (this.contextTokens ?? 18_400) + Math.round(tokens);
     this.usd += tokens * 0.000045 + 0.012;
     this.host.status(this);

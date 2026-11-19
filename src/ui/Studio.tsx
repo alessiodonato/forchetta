@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
-import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, type Talk } from '../shared/crew.ts';
+import { CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, type Talk } from '../shared/crew.ts';
 import { SKILL_GROUPS, type SkillInfo, SKILLS, SKILLS_PER_AGENT_MAX, skillById, skillUrl } from '../shared/skills.ts';
 import { openLink } from './Artifacts.tsx';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
@@ -692,7 +692,7 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
         />
         <span class="studio-count">
           {lead !== undefined ? `${nodeOf(doc, lead)?.name} leads · ` : doc.links.some((link) => link.from === 'you') ? 'you lead · ' : ''}
-          {members} {members === 1 ? 'member' : 'members'} of {CREW_MAX_MEMBERS}
+          {members} {members === 1 ? 'member' : 'members'}
         </span>
         <span class="studio-spacer" />
         <button type="button" title="Lay the boxes out as a tree, each one under the one that leads it" disabled={doc.nodes.length === 0} onClick={() => setDoc(tidy(doc))}>

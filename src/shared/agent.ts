@@ -102,6 +102,17 @@ export interface UsageInfo {
   at: number;
 }
 
+/**
+ * The tokens a session of a team used since it started, with its subagents, read from their transcripts
+ * (daemon/token-usage.ts): each answer of the model once, by kind. Cache reads are most of them and the cheapest.
+ */
+export interface TokenUsage {
+  input: number;
+  cacheWrite: number;
+  cacheRead: number;
+  output: number;
+}
+
 /** One passage of an earlier session that `arricurdai recall` found. */
 export interface RecallMatch {
   sessionId: string;
@@ -422,6 +433,10 @@ export interface Agent {
   context?: ContextInfo;
   cache?: CacheInfo;
   usage?: UsageInfo;
+  /** For a session of a team of agents: its tokens since it started (TokenUsage), every transcript it had together. */
+  tokens?: TokenUsage;
+  /** The same by transcript: a /clear starts another one, and what the first one used still counts. */
+  tokensByTranscript?: Record<string, TokenUsage>;
   today?: SessionTodayInfo;
   /** For the optional one-line summary: the last request, the recent actions and the last reply. */
   lastPrompt?: string;

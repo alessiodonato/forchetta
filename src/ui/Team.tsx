@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type Agent, SESSION_COLOR_HEX, SESSION_COLORS, type SessionColor, TEAM_TEXT_MAX } from '../shared/agent.ts';
+import { crewUsage, shortTokens, tokensDetail, tokensTotal, usdText } from '../shared/present.ts';
 import { type CrewSummary, treeOrder } from '../shared/crew.ts';
 import type { Store } from './store.ts';
 import { OrgLinks } from './OrgLinks.tsx';
@@ -204,6 +205,26 @@ export const ledByYou = (group: Group, crews: readonly CrewSummary[]): boolean =
  * The chart: one section per group, its heads above, the others below. A team led by you has you on top; a team
  * whose members report to other members is a tree, each one above the ones that report to it.
  */
+/** What a team used so far, next to its name: its sessions together, at API prices and in tokens. */
+export function CrewUsage({ agents }: { agents: readonly Agent[] }) {
+  const used = crewUsage(agents);
+  if (!used) return null;
+  const total = tokensTotal(used.tokens);
+  const title = [
+    `What the ${used.sessions} ${used.sessions === 1 ? 'session' : 'sessions'} of the team used since they started, with their subagents.`,
+    used.usd > 0 ? `About ${usdText(used.usd)} at API prices, as Claude Code computes it for /cost.` : '',
+    total > 0 ? tokensDetail(used.tokens) : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return (
+    <span class="org-usage" title={title}>
+      {used.usd > 0 ? `${used.usd >= 0.01 ? '≈ ' : ''}${usdText(used.usd)}` : ''}
+      {total > 0 ? `${used.usd > 0 ? ' · ' : ''}${shortTokens(total)} tok` : ''}
+    </span>
+  );
+}
+
 export function OrgChart({ agents, crews = [], render }: { agents: readonly Agent[]; crews?: readonly CrewSummary[]; render: (agent: Agent) => preact.ComponentChild }) {
   const groups = groupsOf(agents);
   const node = (item: OrgNode): preact.ComponentChild => (
@@ -226,6 +247,7 @@ export function OrgChart({ agents, crews = [], render }: { agents: readonly Agen
             <h3 class="org-title">
               {group.name ?? 'No group'}
               <span class="org-count">{group.leads.length + group.members.length}</span>
+              {crew && <CrewUsage agents={[...group.leads, ...group.members]} />}
             </h3>
             {(group.leads.length > 0 || you) && (
               <div class="org-leads">

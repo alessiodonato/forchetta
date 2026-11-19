@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.9. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.10. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -337,7 +337,7 @@ forchetta setup</pre>
           <li>Optionally, <span class="ui">Start from</span> a template: <em>developer + reviewer</em>, <em>feature squad</em> (frontend, backend, tester), <em>manager › senior › junior</em> (three <a href="#team-levels">levels</a>), <em>research + writing</em>, or one you saved.</li>
           <li>Give the team a <strong>name</strong> (it becomes its group in the org chart) and a <strong>folder</strong>: type it, pick a recent one, or use <span class="ui">Choose…</span>.</li>
           <li>Choose the <strong>lead</strong>: <span class="ui">Claude</span>, with a name, a role, a model and a permission mode, or <span class="ui">you</span>.</li>
-          <li>Add the <strong>members</strong>, up to 6: a name and, in one sentence, what each one does. <span class="ui">more</span> holds the model, the permissions and the worktree of a member, <a href="#team-files">its files</a>, and whether it <a href="#team-reviews">reviews</a>.</li>
+          <li>Add the <strong>members</strong>, as many as you need: a name and, in one sentence, what each one does. <span class="ui">more</span> holds the model, the permissions and the worktree of a member, <a href="#team-files">its files</a>, and whether it <a href="#team-reviews">reviews</a>.</li>
           <li>Under each member, its relation with the one above it: who it <span class="ui">reports to</span> (the lead, or another member: see <a href="#team-levels">More levels</a>), how it talks with it (<a href="#talk">⇄ or →</a>), and, if you like, the prompt of the relation. <span class="ui">+ report</span> adds a member under it.</li>
           <li>Choose whether the members work in their own worktree.</li>
           <li><span class="ui">Create team</span>, or <kbd>⌘</kbd><kbd>↩</kbd>.</li>
@@ -372,7 +372,7 @@ forchetta setup</pre>
         <ul>
           <li>Saving starts nothing. You start the team as usual: <span class="ui">new team</span>, <span class="ui">Start from</span> the template, its folder, <span class="ui">Create team</span>. There you see the roles and the permissions before anything runs.</li>
           <li>Claude Code asks you before each save, as for any tool. Reading the templates needs no permission.</li>
-          <li>Forchetta checks a template as the panel does. A role longer than 1,000 characters, a seventh member, a model or a permission mode it does not know go back to Claude as an error, and Claude fixes them. A template of yours with the same name is replaced only when you asked for it.</li>
+          <li>Forchetta checks a template as the panel does. A role longer than 1,000 characters, a model or a permission mode it does not know go back to Claude as an error, and Claude fixes them. A template of yours with the same name is replaced only when you asked for it.</li>
           <li>Rules the whole team shares, too long for a role, belong in a <code>CLAUDE.md</code> in the folder of the team: Claude Code loads it in every session there. Claude can write it in the same request.</li>
         </ul>
         <p>A session started with a plain <code>claude</code>, or with <code>forchetta run claude</code> followed by a prompt or a subcommand, does not have these tools.</p>
@@ -424,6 +424,14 @@ forchetta setup</pre>
         </ul>
         <p>Below the thread, write a request yourself, to the lead, to one member or to all; it arrives as “Request #n from the user:”. In the grid and in the org chart, the box of each session says what it works on (<span class="ui">#4 from lead: Write the tests…</span>), and the box of a Claude lead says which requests it still waits for.</p>
         <p>In the org chart a line runs to each member from the one it reports to, and says what goes on between the two: <strong>orange</strong>, a request the member works on (dashed while it waits in its queue); <strong>green</strong>, an answer on its way back up; <strong>amber</strong>, a question going up. When something arrives, a request at a member, an answer or a question at the one above it, its line flashes twice and a dot runs along it, the way it went. A team with <a href="#team-levels">levels</a> is drawn as a tree, each member under the one it reports to.</p>
+
+        <h4 id="team-usage">What a team costs</h4>
+        <p>Next to the name of a team in the org chart, and at the top of its panel: what its sessions used together, about so many dollars and so many tokens. In the box of each session, its own. Click the figure in the panel for the table, agent by agent: tokens, output tokens, cost and share of the team, then the team.</p>
+        <ul>
+          <li><strong>Tokens</strong> are read from the transcripts of the sessions and of their subagents, each answer of the model once, since each session started (a <code>/clear</code> does not start them from zero). Most are cache reads, the cheapest kind; the tooltip splits them by kind.</li>
+          <li><strong>The cost</strong> is the one Claude Code computes for <code>/cost</code>, at API prices. On a Claude plan you do not pay it: it shows what weighs on your limits.</li>
+          <li>They count again every few seconds while a session works. A team has no limit of members or levels; only a ceiling of 50 members, against a template gone wrong.</li>
+        </ul>
 
         <h3>Change a team while it works</h3>
         <p><span class="ui">edit team</span>, in the team panel:</p>

@@ -27,6 +27,7 @@ import { folderOf, inGitRepo, spawnSession } from './spawn.ts';
 import { Teams } from './teams.ts';
 import { crewApi, CrewTemplates, Crews, RolePresets, templateApi } from './crews.ts';
 import { FolderChooser } from './folder-chooser.ts';
+import { TokenCounter } from './token-usage.ts';
 import { gitRunner, SkillCache } from './skills.ts';
 import { cleanCrewSpec, templateOf } from '../shared/crew.ts';
 import { mcpConfigFile } from '../shared/mcp-config.ts';
@@ -39,7 +40,7 @@ import { addArtifact, mergeArtifacts } from '../shared/artifacts.ts';
 import { artifactsInTranscript } from './transcript-artifacts.ts';
 import { promptEndingIn, transcriptTail } from './prompt-ending.ts';
 import { anySubagentActive, applySubagentHook, checkSubagents, readSubagentThread } from './subagents.ts';
-import { subagentKey } from '../shared/present.ts';
+import { sameTokens, subagentKey, sumTokens } from '../shared/present.ts';
 import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
 import { type Agent, startsTurn } from './state.ts';
 import { displayName, type GuardHold } from '../shared/agent.ts';
@@ -61,6 +62,8 @@ const SWEEP_MS = 60_000;
 const SCROLL_CHECK_MS = 1_000;
 /** How often the meta.json of the subagents at work are read: the end of one in the background shows only there. */
 const SUBAGENT_CHECK_MS = 5_000;
+/** How often the tokens of the sessions of the teams are counted again (only those with new events). */
+const TOKENS_CHECK_MS = 10_000;
 /** After a prompt, while nothing else comes, when to look whether a hook refused it (daemon/prompt-ending.ts). */
 const REFUSAL_CHECKS_MS = [1_000, 3_000, 8_000];
 
@@ -141,6 +144,31 @@ function main(): void {
   crews.inGit = inGitRepo;
   // The panel of macOS for a folder, for a page in a browser (the app has its own).
   const folderChooser = new FolderChooser();
+  // The tokens of the sessions of the teams, from their transcripts: counted again when a session had new events.
+  const tokenCounter = new TokenCounter();
+  const tokensCountedAt = new Map<string, number>();
+  let countingTokens = false;
+  const countTokens = async (): Promise<void> => {
+    if (countingTokens) return;
+    countingTokens = true;
+    try {
+      for (const agent of [...registry.agents.values()]) {
+        const file = agent.transcriptPath;
+        if (!agent.team?.crew || !file || agent.state === 'ended') continue;
+        if (tokensCountedAt.get(agent.id) === agent.lastEvent.at && agent.tokensByTranscript?.[file]) continue;
+        tokensCountedAt.set(agent.id, agent.lastEvent.at);
+        const tokens = await tokenCounter.of(file);
+        if (!tokens || sameTokens(agent.tokensByTranscript?.[file], tokens)) continue;
+        agent.tokensByTranscript = { ...agent.tokensByTranscript, [file]: tokens };
+        agent.tokens = sumTokens(Object.values(agent.tokensByTranscript));
+        registry.touch(agent);
+      }
+    } catch (error) {
+      log(`token dei team: ${String(error)}`);
+    } finally {
+      countingTokens = false;
+    }
+  };
   // The skills of the agents: fetched from GitHub the first time a team uses them, kept in var/skills.
   const skillCache = new SkillCache(join(paths.varDir, 'skills'), gitRunner(), log);
   crews.skills = { ensure: (ids) => skillCache.ensure(ids), plugin: (key, ids) => skillCache.plugin(key, ids) };
@@ -216,6 +244,7 @@ function main(): void {
       summarizer?.forget(ids);
       attention.forget(ids);
       for (const id of ids) conflicts.forget(id);
+      for (const id of ids) tokensCountedAt.delete(id);
       coherence.forget(ids);
       loops.forget(ids);
       teams.forget(ids);
@@ -798,6 +827,7 @@ function main(): void {
         });
       }, QUIET_CHECK_MS),
       setInterval(() => void reconcile('periodica'), config.reconcileIntervalMin * 60_000),
+      setInterval(() => void countTokens(), TOKENS_CHECK_MS),
       setInterval(() => void checkScroll().catch((error: unknown) => log(`copy mode: ${String(error)}`)), SCROLL_CHECK_MS),
       setInterval(() => {
         if (!anySubagentActive(registry.agents.values())) return;

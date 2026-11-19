@@ -1,4 +1,4 @@
-import type { Agent, CacheInfo, Conflict, ContextInfo, LoopInfo, Subagent, UsageLimits } from './agent.ts';
+import type { Agent, CacheInfo, Conflict, ContextInfo, LoopInfo, Subagent, TokenUsage, UsageLimits } from './agent.ts';
 
 // How an agent reads, in English, for `forchetta ls` and for the boxes of the app. No Node module here.
 
@@ -71,6 +71,46 @@ export function shortTokens(tokens: number): string {
   if (tokens >= 1e6) return `${(tokens / 1e6).toFixed(tokens >= 1e7 ? 0 : 1)}M`;
   if (tokens >= 1e3) return `${Math.round(tokens / 1e3)}k`;
   return String(tokens);
+}
+
+// ---- The tokens of the sessions of a team (daemon/token-usage.ts) ----
+
+export const noTokens = (): TokenUsage => ({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0 });
+
+export function addTokens(to: TokenUsage, more: TokenUsage): void {
+  to.input += more.input;
+  to.cacheWrite += more.cacheWrite;
+  to.cacheRead += more.cacheRead;
+  to.output += more.output;
+}
+
+export const sameTokens = (a: TokenUsage | undefined, b: TokenUsage): boolean =>
+  !!a && a.input === b.input && a.cacheWrite === b.cacheWrite && a.cacheRead === b.cacheRead && a.output === b.output;
+
+export function sumTokens(all: readonly TokenUsage[]): TokenUsage {
+  const total = noTokens();
+  for (const tokens of all) addTokens(total, tokens);
+  return total;
+}
+
+/** Every token, of every kind. */
+export const tokensTotal = (tokens: TokenUsage): number => tokens.input + tokens.cacheWrite + tokens.cacheRead + tokens.output;
+
+/** "1,284,330 tokens: 2,104 input, 210,880 cache writes, 1,030,400 cache reads, 40,946 output." */
+export function tokensDetail(tokens: TokenUsage): string {
+  const n = (value: number): string => value.toLocaleString('en-US');
+  return `${n(tokensTotal(tokens))} tokens: ${n(tokens.input)} input, ${n(tokens.cacheWrite)} cache writes, ${n(tokens.cacheRead)} cache reads, ${n(tokens.output)} output.`;
+}
+
+/** What the sessions of a team used together: their tokens, and the cost of those whose status line said it. */
+export function crewUsage(agents: readonly Agent[]): { tokens: TokenUsage; usd: number; sessions: number } | undefined {
+  const counted = agents.filter((agent) => agent.tokens || agent.usage);
+  if (counted.length === 0) return undefined;
+  return {
+    tokens: sumTokens(counted.flatMap((agent) => (agent.tokens ? [agent.tokens] : []))),
+    usd: counted.reduce((sum, agent) => sum + (agent.usage?.usd ?? 0), 0),
+    sessions: counted.length,
+  };
 }
 
 /**

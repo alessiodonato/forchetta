@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { type CrewSummary, type DeliveryStatus, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, ROLE_MAX, type Talk, type ThreadEntry, threadOf } from '../shared/crew.ts';
+import type { Agent } from '../shared/agent.ts';
+import { crewUsage, shortTokens, tokensDetail, tokensTotal, usdText } from '../shared/present.ts';
 import { MODELS } from './NewSession.tsx';
 import type { Store } from './store.ts';
 
@@ -299,12 +301,68 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
   );
 }
 
+/** What each session of a team used since it started, and the team together: tokens from the transcripts, cost from Claude Code. */
+function UsageTable({ rows }: { rows: { name: string; lead?: boolean; agent?: Agent }[] }) {
+  const all = crewUsage(rows.flatMap((row) => (row.agent ? [row.agent] : [])));
+  const teamTokens = all ? tokensTotal(all.tokens) : 0;
+  const usd = (value: number | undefined): string => (!value ? '—' : `${value >= 0.01 ? '≈ ' : ''}${usdText(value)}`);
+  return (
+    <div class="crew-usage">
+      <table>
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th title="Every token of every kind: input, cache writes, cache reads, output">Tokens</th>
+            <th title="The tokens the model wrote: the most expensive kind">Output</th>
+            <th title="At API prices, as Claude Code computes it for /cost">Cost</th>
+            <th title="Its share of the tokens of the team">Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const tokens = row.agent?.tokens;
+            const total = tokens ? tokensTotal(tokens) : 0;
+            return (
+              <tr key={row.name}>
+                <td>
+                  {row.name}
+                  {row.lead && row.name !== 'lead' ? <span class="team-hint"> · lead</span> : null}
+                </td>
+                <td title={total > 0 ? tokensDetail(tokens!) : 'Nothing yet: it counts from its first answer.'}>{total > 0 ? shortTokens(total) : '—'}</td>
+                <td>{total > 0 ? shortTokens(tokens!.output) : '—'}</td>
+                <td>{usd(row.agent?.usage?.usd)}</td>
+                <td>{teamTokens > 0 && total > 0 ? `${Math.round((100 * total) / teamTokens)}%` : '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        {all && (
+          <tfoot>
+            <tr>
+              <td>Team</td>
+              <td title={tokensDetail(all.tokens)}>{shortTokens(teamTokens)}</td>
+              <td>{shortTokens(all.tokens.output)}</td>
+              <td>{usd(all.usd)}</td>
+              <td />
+            </tr>
+          </tfoot>
+        )}
+      </table>
+      <p class="team-hint usage-note">
+        Since each session started, with its subagents. Tokens are read from the transcripts, each answer once; most are cache reads, the cheapest kind. The cost is at API prices: on a Claude
+        plan you do not pay it, but it shows what weighs on your limits.
+      </p>
+    </div>
+  );
+}
+
 export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly CrewSummary[]; store: Store; onClose: () => void; onNew: () => void }) {
   const [crewId, setCrewId] = useState(crews.at(-1)?.id);
   const crew = crews.find((candidate) => candidate.id === crewId) ?? crews.at(-1);
   const [to, setTo] = useState<string[]>([]);
   const [text, setText] = useState('');
   const [editing, setEditing] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const list = useRef<HTMLOListElement>(null);
   /** Whether the thread shows its end: new steps scroll it only then, not while you read above. */
@@ -333,6 +391,9 @@ export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly Cr
 
   if (!crew) return null;
   const recipients = crew.recipients ?? [];
+  const usageRows = recipients.map((recipient) => ({ name: recipient.name, lead: recipient.lead, agent: recipient.agentId ? store.state.agents.get(recipient.agentId) : undefined }));
+  const used = crewUsage(usageRows.flatMap((row) => (row.agent ? [row.agent] : [])));
+  const usedTokens = used ? tokensTotal(used.tokens) : 0;
   const members = recipients.filter((recipient) => !recipient.lead).map((recipient) => recipient.name);
   const send = (): void => {
     if (busy || !text.trim()) return;
@@ -368,10 +429,17 @@ export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly Cr
           + new team
         </button>
         <span class="team-hint thread-count">{thread ? `${thread.length} ${thread.length === 1 ? 'request' : 'requests'}` : ''}</span>
+        {used && (used.usd > 0 || usedTokens > 0) && (
+          <button type="button" class={`quiet${usageOpen ? ' on' : ''}`} title="What the team used, agent by agent" onClick={() => setUsageOpen(!usageOpen)}>
+            {used.usd > 0 ? `${used.usd >= 0.01 ? '≈ ' : ''}${usdText(used.usd)}` : ''}
+            {usedTokens > 0 ? `${used.usd > 0 ? ' · ' : ''}${shortTokens(usedTokens)} tok` : ''}
+          </button>
+        )}
         <button type="button" class={`quiet${editing ? ' on' : ''}`} title="Members, → / ⇄, template" onClick={() => setEditing(!editing)}>
           edit team
         </button>
       </div>
+      {usageOpen && <UsageTable rows={usageRows} />}
       {editing && <EditTeam crew={crew} store={store} />}
       {thread && entries.length === 0 && <p class="team-hint thread-empty">Nothing yet: the first request starts the thread of the team.</p>}
       {entries.length > 0 && (

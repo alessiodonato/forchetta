@@ -1054,7 +1054,7 @@ export class Crews {
   }
 
   /**
-   * A new member: checked with the rest of the team (names, at most 6), then started like the others. It can report
+   * A new member: checked with the rest of the team (names, the ceiling of members), then started like the others. It can report
    * to the lead, or to a member whose session started with the tools to lead (the tools of a session are fixed when
    * it starts).
    */
