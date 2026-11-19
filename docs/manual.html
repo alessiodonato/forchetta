@@ -335,7 +335,7 @@ forchetta setup</pre>
         <ol class="steps">
           <li>Click <span class="ui">new team</span> at the top.</li>
           <li>Optionally, <span class="ui">Start from</span> a template: <em>developer + reviewer</em>, <em>feature squad</em> (frontend, backend, tester), <em>manager › senior › junior</em> (three <a href="#team-levels">levels</a>), <em>research + writing</em>, or one you saved.</li>
-          <li>Give the team a <strong>name</strong> (it becomes its group in the org chart) and a <strong>folder</strong>.</li>
+          <li>Give the team a <strong>name</strong> (it becomes its group in the org chart) and a <strong>folder</strong>: type it, pick a recent one, or use <span class="ui">Choose…</span>.</li>
           <li>Choose the <strong>lead</strong>: <span class="ui">Claude</span>, with a name, a role, a model and a permission mode, or <span class="ui">you</span>.</li>
           <li>Add the <strong>members</strong>, up to 6: a name and, in one sentence, what each one does. <span class="ui">more</span> holds the model, the permissions and the worktree of a member, <a href="#team-files">its files</a>, and whether it <a href="#team-reviews">reviews</a>.</li>
           <li>Under each member, its relation with the one above it: who it <span class="ui">reports to</span> (the lead, or another member: see <a href="#team-levels">More levels</a>), how it talks with it (<a href="#talk">⇄ or →</a>), and, if you like, the prompt of the relation. <span class="ui">+ report</span> adds a member under it.</li>
@@ -345,7 +345,7 @@ forchetta setup</pre>
         <p>Every session starts in the tmux of Forchetta, the lead first. From its system prompt each one knows who it is, its role, its lead and the other members. Its name shows in its box, in its pane and in Claude Code. <span class="ui">Save as template</span> keeps the team without its folder, to start it again elsewhere.</p>
 
         <h3 id="studio">The studio: draw a team</h3>
-        <p><span class="ui">studio</span>, at the top (or <span class="ui">or draw it in the studio</span> in the panel of a new team), opens a canvas over the whole window. On the left the presets: <strong>agents</strong> (manager, senior, junior, developer, reviewer, tester, frontend, backend, researcher, writer, and yours) and whole <strong>teams</strong> (the templates). On the right, whatever you selected.</p>
+        <p><span class="ui">studio</span>, at the top (or <span class="ui">or draw it in the studio</span> in the panel of a new team), opens a canvas over the whole window. On the left the presets: <strong>agents</strong> (manager, senior, junior, developer, reviewer, tester, frontend, backend, researcher, writer, and yours) and whole <strong>teams</strong> (the templates). On the right, whatever you selected. <span class="ui">+ new agent</span>, under the agents, is one of your own: drag it onto the canvas and fill its box there, or click it to write a preset for every team, with its name, role, model, permissions and skills.</p>
         <figure>
           <img src="img/studio.png" width="2400" height="1520" loading="lazy" alt="The studio: on the left the agents and the teams to drag; on the canvas You, the manager that leads, the senior and the reviewer under it, the junior under the senior; on the right the junior, selected, with its role, model, permissions, files and three skills.">
           <figcaption>The <em>manager › senior › junior</em> team opened on the canvas, with a reviewer added under the manager.</figcaption>
@@ -355,7 +355,7 @@ forchetta setup</pre>
           <li>Pull an arrow from the dot under <strong>You</strong> or under a box, and drop it on the agent it leads. On release you choose the relation: <a href="#talk">⇄ answers or → executes</a>, and its prompt. An agent has one arrow coming in; a new one moves it under someone else, and a circle is refused.</li>
           <li>If You point at one agent only, and it leads others, it is the Claude lead of the team (its arrow says <span class="ui">lead</span>). If You point at several, you lead, and they are the members at the top.</li>
           <li>Click a box to change its name, role, model, permissions, worktree, files and review; click an arrow, or its label, to change the relation. <kbd>Delete</kbd> removes what is selected; the agents it led go up to the one above it.</li>
-          <li>In the right column, with nothing selected: the folder of the team, the default of the arrows and the worktrees, and what is still missing before it can start. <span class="ui">Tidy up</span> lays the boxes out as a tree.</li>
+          <li>In the right column, with nothing selected: the folder of the team (<span class="ui">Choose…</span> opens the panel of macOS), the default of the arrows and the worktrees, and what is still missing before it can start. <span class="ui">Tidy up</span> lays the boxes out as a tree.</li>
           <li><span class="ui">Create team</span> starts it, as the panel does; <span class="ui">Save as template</span> keeps it among the teams, with where its boxes stand.</li>
         </ol>
         <h4 id="skills">Skills</h4>

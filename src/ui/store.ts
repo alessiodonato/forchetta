@@ -6,6 +6,7 @@ import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, 
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import { cleanSelection } from '../shared/selection.ts';
+import { shell } from './connection.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
 
 // What the page knows: the agents sent by the daemon, the open panes, whether the connection is up, whether the
@@ -214,6 +215,11 @@ export class Store {
     }
     if (message.type === 'crewRoles') {
       this.set({ roles: message.roles });
+      return;
+    }
+    if (message.type === 'folderChosen') {
+      // As the panel of the app does: the field of the panel that asked takes it.
+      window.forchettaFolder?.(message.path);
       return;
     }
     if (message.type === 'crewTemplates') {
@@ -460,6 +466,16 @@ export class Store {
   saveRole(preset: Omit<RolePreset, 'builtin' | 'modified'>, previous?: string): void {
     this.set({ crewEdit: { action: 'saveRolePreset', busy: true, at: Date.now() } });
     this.send({ type: 'saveRolePreset', preset, ...(previous !== undefined ? { previous } : {}) });
+  }
+
+  /**
+   * The panel of macOS for a folder, starting at `folder`: the app's own, or, in a browser, one the daemon opens on
+   * this Mac. The choice goes to window.forchettaFolder, the field of the panel open.
+   */
+  chooseFolder(folder: string): void {
+    const app = shell();
+    if (app) app.postMessage({ type: 'chooseFolder', folder });
+    else this.send({ type: 'chooseFolder', folder });
   }
 
   /** Deletes a preset of yours; for one of Forchetta you changed, brings back theirs. */

@@ -85,11 +85,9 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
           onInput={(event) => setFolder((event.target as HTMLInputElement).value)}
           onKeyDown={(event) => event.key === 'Enter' && start()}
         />
-        {shell() && (
-          <button type="button" onClick={() => shell()?.postMessage({ type: 'chooseFolder', folder })}>
-            Choose…
-          </button>
-        )}
+        <button type="button" title="Choose the folder in the panel of macOS" onClick={() => store.chooseFolder(folder)}>
+          Choose…
+        </button>
       </div>
       {recent.length > 0 && (
         <div class="broadcast-row">

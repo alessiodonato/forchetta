@@ -3,7 +3,6 @@ import type { Agent } from '../shared/agent.ts';
 import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, type Talk } from '../shared/crew.ts';
 import { SKILL_GROUPS, type SkillInfo, SKILLS, SKILLS_PER_AGENT_MAX, skillById, skillUrl } from '../shared/skills.ts';
 import { openLink } from './Artifacts.tsx';
-import { shell } from './connection.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { TALK_TEXT } from './NewTeam.tsx';
 import type { Store } from './store.ts';
@@ -51,7 +50,10 @@ import {
 /** The canvas you were drawing, kept while the window lives: closing the studio does not lose it. */
 let draft: StudioDoc | undefined;
 
-type Selection = { kind: 'node'; key: number } | { kind: 'link'; to: number } | { kind: 'role'; name: string } | { kind: 'team'; name: string } | { kind: 'skill'; id: string } | undefined;
+type Selection = { kind: 'node'; key: number } | { kind: 'link'; to: number } | { kind: 'role'; name: string } | { kind: 'new-role' } | { kind: 'team'; name: string } | { kind: 'skill'; id: string } | undefined;
+
+/** "+ new agent" in the palette: dragged, a box to fill on the canvas; clicked, a preset of your own to write. */
+const BLANK_AGENT: RolePreset = { name: 'agent', role: '' };
 
 type Drag =
   | { kind: 'move'; what: number | 'you'; dx: number; dy: number; x0: number; y0: number; moved: boolean }
@@ -267,15 +269,32 @@ function RelationForm({ doc, to, onChange, onRemove, onDone }: { doc: StudioDoc;
 }
 
 /** A preset of agent, to change: your version of one of Forchetta, or one of yours. */
-function RoleEditor({ preset, store, onAdd, onRenamed }: { preset: RolePreset; store: Store; onAdd: () => void; onRenamed: (name: string) => void }) {
-  const [fields, setFields] = useState<AgentFields>(() => fieldsOf(preset));
-  useEffect(() => setFields(fieldsOf(preset)), [preset.name, preset.modified]);
+function RoleEditor({ preset, fresh, store, onAdd, onRenamed }: { preset: RolePreset; fresh?: boolean; store: Store; onAdd: (preset: RolePreset) => void; onRenamed: (name: string) => void }) {
+  const initial = (): AgentFields => (fresh ? { ...fieldsOf(preset), name: '' } : fieldsOf(preset));
+  const [fields, setFields] = useState<AgentFields>(initial);
+  useEffect(() => setFields(initial()), [preset.name, preset.modified, fresh]);
   const [armed, setArmed] = useState(false);
   const saving = store.state.crewEdit?.action === 'saveRolePreset' ? store.state.crewEdit : undefined;
+  const name = fields.name.trim();
+  // A new one, saved: it is selected when the daemon has it, so that an error stays here, under its fields.
+  const [pending, setPending] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const saved = pending ? store.state.roles.find((role) => role.name.toLowerCase() === pending.toLowerCase()) : undefined;
+    if (saved) {
+      setPending(undefined);
+      onRenamed(saved.name);
+    }
+  }, [store.state.roles, pending]);
+  // Saving under the name of another agent would replace it: a new name, or this one's own.
+  const taken = store.state.roles.find(
+    (role) => role.name.toLowerCase() !== pending?.toLowerCase() && role.name.toLowerCase() === name.toLowerCase() && (fresh || role.name.toLowerCase() !== preset.name.toLowerCase()),
+  );
+  const current = (): RolePreset => presetOfNode({ ...fields, name: name || preset.name, key: 0, x: 0, y: 0 });
   const save = (): void => {
     const next = presetOfNode({ ...fields, key: 0, x: 0, y: 0 });
-    store.saveRole(next, preset.name);
-    if (next.name !== preset.name) onRenamed(next.name);
+    store.saveRole(next, fresh ? undefined : preset.name);
+    if (fresh) setPending(next.name);
+    else if (next.name !== preset.name) onRenamed(next.name);
   };
   const duplicate = (): void => {
     const names = new Set(store.state.roles.map((role) => role.name.toLowerCase()));
@@ -287,21 +306,28 @@ function RoleEditor({ preset, store, onAdd, onRenamed }: { preset: RolePreset; s
   return (
     <>
       <p class="studio-title">
-        Preset {preset.name}
+        {fresh ? 'New agent' : `Preset ${preset.name}`}
         {preset.builtin && <span class="studio-tag">{preset.modified ? 'yours, from Forchetta' : 'Forchetta'}</span>}
       </p>
       <p class="studio-hint">
-        {preset.builtin && !preset.modified ? 'A preset of Forchetta: what you save here is your version of it, and you can restore theirs.' : 'Saving changes the preset, not the boxes already on the canvas.'}
+        {fresh
+          ? 'An agent of your own: its name, what it does, its model and its skills. "Save preset" puts it with the agents on the left, for every team.'
+          : preset.builtin && !preset.modified
+            ? 'A preset of Forchetta: what you save here is your version of it, and you can restore theirs.'
+            : 'Saving changes the preset, not the boxes already on the canvas.'}
       </p>
       <AgentForm fields={fields} worktrees={false} onChange={(patch) => setFields((current) => ({ ...current, ...patch }))} />
+      {taken && <p class="studio-note error">There is an agent called {taken.name} already: give this one another name.</p>}
       <div class="studio-actions">
-        <button type="button" onClick={onAdd}>
+        <button type="button" onClick={() => onAdd(current())}>
           Add to canvas
         </button>
-        <button type="button" onClick={duplicate}>
-          Duplicate
-        </button>
-        {(!preset.builtin || preset.modified) &&
+        {!fresh && (
+          <button type="button" onClick={duplicate}>
+            Duplicate
+          </button>
+        )}
+        {!fresh && (!preset.builtin || preset.modified) &&
           (armed ? (
             <button
               type="button"
@@ -318,7 +344,7 @@ function RoleEditor({ preset, store, onAdd, onRenamed }: { preset: RolePreset; s
               {preset.builtin ? 'Restore' : 'Delete'}
             </button>
           ))}
-        <button type="button" class="primary" disabled={!fields.name.trim()} onClick={save}>
+        <button type="button" class="primary" disabled={!name || !!taken} onClick={save}>
           Save preset
         </button>
       </div>
@@ -543,7 +569,15 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
         return;
       }
       if (!current.moved) {
-        setSelection(current.kind === 'role' ? { kind: 'role', name: current.preset.name } : current.kind === 'team' ? { kind: 'team', name: current.template.name } : { kind: 'skill', id: current.skill.id });
+        setSelection(
+          current.kind === 'role'
+            ? current.preset === BLANK_AGENT
+              ? { kind: 'new-role' }
+              : { kind: 'role', name: current.preset.name }
+            : current.kind === 'team'
+              ? { kind: 'team', name: current.template.name }
+              : { kind: 'skill', id: current.skill.id },
+        );
         return;
       }
       if (!overCanvas(event.clientX, event.clientY)) return;
@@ -707,6 +741,14 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
             <span>{[preset.model, preset.reviews ? 'reviews' : undefined].filter(Boolean).join(' · ') || firstLine(preset.role).slice(0, 28)}</span>
           </div>
         ))}
+        <div
+          class={`studio-preset studio-new${selection?.kind === 'new-role' ? ' on' : ''}`}
+          title="An agent of your own. Drag it onto the canvas and fill it there, or click it to make a preset you can use in every team."
+          onPointerDown={(event) => startPalette(event, { preset: BLANK_AGENT })}
+        >
+          <strong>+ new agent</strong>
+          <span>role, model, skills: yours</span>
+        </div>
         <p class="studio-section">Teams</p>
         {store.state.templates.map((template) => (
           <div
@@ -921,13 +963,10 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
           </>
         ) : selection?.kind === 'link' && incoming(doc, selection.to) ? (
           <RelationForm doc={doc} to={selection.to} onChange={setDoc} onRemove={remove} />
+        ) : selection?.kind === 'new-role' ? (
+          <RoleEditor preset={BLANK_AGENT} fresh store={store} onAdd={(preset) => addPreset(preset)} onRenamed={(name) => setSelection({ kind: 'role', name })} />
         ) : selectedRole ? (
-          <RoleEditor
-            preset={selectedRole}
-            store={store}
-            onAdd={() => addPreset(selectedRole)}
-            onRenamed={(name) => setSelection({ kind: 'role', name })}
-          />
+          <RoleEditor preset={selectedRole} store={store} onAdd={(preset) => addPreset(preset)} onRenamed={(name) => setSelection({ kind: 'role', name })} />
         ) : selectedTeam ? (
           <TeamCard template={selectedTeam} store={store} onOpen={() => openTeam(selectedTeam)} onAdd={() => addTeam(selectedTeam)} />
         ) : selectedSkill ? (
@@ -946,11 +985,9 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
                   spellcheck={false}
                   onInput={(event) => setDoc({ ...doc, folder: (event.target as HTMLInputElement).value })}
                 />
-                {shell() && (
-                  <button type="button" onClick={() => shell()?.postMessage({ type: 'chooseFolder', folder: doc.folder })}>
-                    Choose…
-                  </button>
-                )}
+                <button type="button" title="Choose the folder in the panel of macOS" onClick={() => store.chooseFolder(doc.folder)}>
+                  Choose…
+                </button>
               </div>
             </label>
             {recent.length > 0 && (

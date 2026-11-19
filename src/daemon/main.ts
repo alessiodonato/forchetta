@@ -26,6 +26,7 @@ import { runRecall } from './recall.ts';
 import { folderOf, inGitRepo, spawnSession } from './spawn.ts';
 import { Teams } from './teams.ts';
 import { crewApi, CrewTemplates, Crews, RolePresets, templateApi } from './crews.ts';
+import { FolderChooser } from './folder-chooser.ts';
 import { gitRunner, SkillCache } from './skills.ts';
 import { cleanCrewSpec, templateOf } from '../shared/crew.ts';
 import { mcpConfigFile } from '../shared/mcp-config.ts';
@@ -138,6 +139,8 @@ function main(): void {
   const roles = new RolePresets(paths.crewRoles, log);
   crews.agent = (agentId) => registry.agents.get(agentId);
   crews.inGit = inGitRepo;
+  // The panel of macOS for a folder, for a page in a browser (the app has its own).
+  const folderChooser = new FolderChooser();
   // The skills of the agents: fetched from GitHub the first time a team uses them, kept in var/skills.
   const skillCache = new SkillCache(join(paths.varDir, 'skills'), gitRunner(), log);
   crews.skills = { ensure: (ids) => skillCache.ensure(ids), plugin: (key, ids) => skillCache.plugin(key, ids) };
@@ -424,6 +427,7 @@ function main(): void {
     },
     roles: () => roles.list(),
     onRole: (message) => (message.type === 'deleteRolePreset' ? roles.delete(message.name) : roles.save(message.preset, message.previous)),
+    onChooseFolder: (folder) => folderChooser.choose(folder),
     onEditCrew: async (message) => {
       // The box and the chart follow a change of the place of a session in its team.
       const place = (agentId: string, team: Agent['team']): void => {

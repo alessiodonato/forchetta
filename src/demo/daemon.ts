@@ -24,6 +24,7 @@ import { applySubagentHook, subagentResultOf } from '../daemon/subagents.ts';
 import { Teams } from '../daemon/teams.ts';
 import { type ClaudeHost, FakeClaude, type PermissionHandle, type SubagentScript, type TeamTools } from './claude.ts';
 import { commit, repoRoot } from './git.ts';
+import { DEMO_DIR } from './project.ts';
 import { existsSync, filesUnder, isDir, putFile, readText } from './shims/fs.ts';
 import { type DemoSocket, HubSide, routeSockets } from './socket.ts';
 import { FakeTerminal } from './terminal.ts';
@@ -176,6 +177,14 @@ export class DemoDaemon {
       onTemplate: (message) => (message.type === 'deleteCrewTemplate' ? this.templates.delete(message.name) : this.templates.save(message.template, { override: true })),
       roles: () => this.roles.list(),
       onRole: (message) => (message.type === 'deleteRolePreset' ? this.roles.delete(message.name) : this.roles.save(message.preset, message.previous)),
+      // No panel of macOS in a browser: the demo "chooses" the folder written, if it is a project, or the first one.
+      onChooseFolder: async (folder) => {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        const written = folder ? folderOf(folder) : undefined;
+        if (written && isDir(written) && written.startsWith(`${DEMO_DIR}/`)) return written;
+        const first = filesUnder(DEMO_DIR)[0]?.slice(DEMO_DIR.length + 1).split('/')[0];
+        return first ? `${DEMO_DIR}/${first}` : undefined;
+      },
       onCreateCrew: async (input) => {
         const checked = cleanCrewSpec(input);
         if ('error' in checked) return { ok: false, error: checked.error };

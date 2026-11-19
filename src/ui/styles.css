@@ -3730,3 +3730,24 @@ html[data-hidden] *::after {
 .studio-props a {
   color: var(--claude);
 }
+
+/* "+ new agent": the empty one at the end of the agents of the studio. */
+.studio-preset.studio-new {
+  border-style: dashed;
+  background: transparent;
+}
+
+.studio-preset.studio-new strong {
+  color: var(--claude);
+}
+
+/* The folder of the team and "Choose…" side by side: the field takes the room the button leaves. */
+.broadcast.studio .studio-row > .command-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.studio-row > button {
+  flex: none;
+}

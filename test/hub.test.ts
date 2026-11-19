@@ -21,6 +21,7 @@ const updateActions: string[] = [];
 const menuCalls: string[] = [];
 let savedPrompts: unknown = [{ name: 'Explain', text: 'Explain:\n{selection}', mode: 'ask' }];
 const FAILED_UPDATE = { failed: { at: 1_794_000_000_000, from: '2.1.322', status: 'install_failed' } };
+const foldersAsked: (string | undefined)[] = [];
 
 beforeAll(async () => {
   mkdirSync(uiDir);
@@ -46,6 +47,10 @@ beforeAll(async () => {
     onInsert: async (agentId, text) => {
       menuCalls.push(`insert ${agentId} ${text}`);
       return { ok: true };
+    },
+    onChooseFolder: async (folder) => {
+      foldersAsked.push(folder);
+      return folder === '~/cancel' ? undefined : '/Users/you/projects/shop';
     },
     prompts: () => savedPrompts as never,
     onSavePrompts: (prompts) => {
@@ -171,5 +176,25 @@ describe('the menu of a selection', () => {
     expect(messages.filter((message) => message.type === 'promptsSaved').map((message) => (message as { ok: boolean }).ok)).toEqual([false, true]);
     expect(messages.at(-1)).toMatchObject({ type: 'prompts', prompts: [{ name: 'Fix' }] });
     socket.close();
+  });
+});
+
+describe('the folder of a panel, from a page in a browser', () => {
+  it('opens the panel of macOS through the daemon and gives the choice back to that page only', async () => {
+    const asking = await connect(TOKEN, `http://127.0.0.1:${port}`);
+    const other = await connect(TOKEN, `http://127.0.0.1:${port}`);
+    await sleep(30);
+    asking.socket.send(JSON.stringify({ type: 'chooseFolder', folder: '~/projects' }));
+    asking.socket.send(JSON.stringify({ type: 'chooseFolder', folder: '~/cancel' }));
+    asking.socket.send(JSON.stringify({ type: 'chooseFolder', folder: 42 }));
+    await sleep(30);
+    expect(foldersAsked).toEqual(['~/projects', '~/cancel', undefined]);
+    expect(asking.messages.filter((message) => message.type === 'folderChosen')).toEqual([
+      { type: 'folderChosen', now: expect.any(Number), path: '/Users/you/projects/shop' },
+      { type: 'folderChosen', now: expect.any(Number), path: '/Users/you/projects/shop' },
+    ]);
+    expect(other.messages.some((message) => message.type === 'folderChosen')).toBe(false);
+    asking.socket.close();
+    other.socket.close();
   });
 });

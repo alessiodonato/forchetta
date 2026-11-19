@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, RELATION_MAX, ROLE_MAX, type Talk, treeOrder } from '../shared/crew.ts';
-import { shell } from './connection.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import type { Store } from './store.ts';
 
@@ -297,11 +296,9 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
       <div class="broadcast-row">
         <span class="broadcast-label">Folder</span>
         <input class="command-input mono" type="text" value={folder} placeholder="~/projects/app" spellcheck={false} onInput={(event) => setFolder((event.target as HTMLInputElement).value)} />
-        {shell() && (
-          <button type="button" onClick={() => shell()?.postMessage({ type: 'chooseFolder', folder })}>
-            Choose…
-          </button>
-        )}
+        <button type="button" title="Choose the folder in the panel of macOS" onClick={() => store.chooseFolder(folder)}>
+          Choose…
+        </button>
       </div>
       {recent.length > 0 && (
         <div class="broadcast-row">

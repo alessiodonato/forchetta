@@ -29,6 +29,8 @@ export type ServerMessage =
   | { type: 'crewTemplates'; now: number; templates: CrewTemplate[] }
   /** The presets of agents of the studio, after one was saved or deleted. */
   | { type: 'crewRoles'; now: number; roles: RolePreset[] }
+  /** The folder chosen in the panel of macOS, for the window that asked (chooseFolder). */
+  | { type: 'folderChosen'; now: number; path: string }
   /** How a change of a team went (a member added, taken away, → / ⇄), or a template saved: for the window that asked. */
   | { type: 'crewEdited'; now: number; ok: boolean; crewId?: string; action: string; error?: string }
   /** The teams of agents, after one was created. */
@@ -103,6 +105,8 @@ export type ClientMessage =
   | { type: 'saveRolePreset'; preset: unknown; previous?: string }
   | { type: 'deleteRolePreset'; name: string }
   | { type: 'recall'; id: number; project: string; query: string }
+  /** The panel of macOS for a folder, from a page in a browser (the app has its own), starting at `folder`. */
+  | { type: 'chooseFolder'; folder?: string }
   /** Run `claude update`, or hide the line of the last one. */
   | { type: 'claudeUpdate'; action: 'run' | 'dismiss' };
 
@@ -144,6 +148,8 @@ export interface HubOptions {
   /** The presets of agents of the studio, and saving or deleting one. */
   roles?: () => RolePreset[];
   onRole?: (message: Extract<ClientMessage, { type: 'saveRolePreset' | 'deleteRolePreset' }>) => { ok: boolean; error?: string };
+  /** The folder chosen in the panel of macOS; undefined if cancelled. */
+  onChooseFolder?: (folder: string | undefined) => Promise<string | undefined>;
   /** A request from you to a team. */
   onCrewRequest?: (crewId: string, to: string[], text: string) => { ok: true; n: number } | { ok: false; error: string };
   /** The changes of a session, read when its panel opens. */
@@ -307,6 +313,13 @@ export class Hub {
               : this.options.onRole({ type: 'deleteRolePreset', name: String(message.name ?? '') });
           this.send(ws, { type: 'crewEdited', now: Date.now(), action: message.type, ...result });
           if (result.ok) this.broadcast({ type: 'crewRoles', now: Date.now(), roles: this.options.roles?.() ?? [] });
+        } else if (message.type === 'chooseFolder' && this.options.onChooseFolder) {
+          void this.options.onChooseFolder(typeof message.folder === 'string' ? message.folder.slice(0, 4096) : undefined).then(
+            (path) => {
+              if (path) this.send(ws, { type: 'folderChosen', now: Date.now(), path });
+            },
+            (error: unknown) => this.options.log(`scelta della cartella: ${String(error)}`),
+          );
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
           const reviews = this.options.crewReviews?.(message.crewId);
