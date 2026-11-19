@@ -9,6 +9,7 @@ import { FilesPanel } from './Files.tsx';
 import { SubagentsPanel } from './Subagents.tsx';
 import { NewSessionPanel } from './NewSession.tsx';
 import { NewTeamPanel } from './NewTeam.tsx';
+import { Studio } from './Studio.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
 import { crewLineOf } from '../shared/crew.ts';
 import { guardTotal, type GuardStatsInfo, statsTitle } from '../shared/guard-stats.ts';
@@ -149,6 +150,8 @@ export function App({ store }: { store: Store }) {
   const working = state.panes.open.length > 0;
   const [panel, setPanel] = useState<'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | undefined>(undefined);
   const [view, setView] = useState<'grid' | 'org'>(savedView);
+  /** The studio of teams, over everything else. */
+  const [studio, setStudio] = useState(false);
   const chooseView = (next: 'grid' | 'org'): void => {
     setView(next);
     try {
@@ -178,6 +181,7 @@ export function App({ store }: { store: Store }) {
   useEffect(() => {
     if (!crewCreated || crewError) return;
     setPanel(undefined);
+    setStudio(false);
     store.endCrewSpawn();
   }, [crewCreated, crewError]);
   // A session started from the panel: the panel closes, its terminal opens.
@@ -223,6 +227,19 @@ export function App({ store }: { store: Store }) {
             </button>
           )}
           {state.ready && (
+            <button
+              type="button"
+              class={`broadcast-toggle${studio ? ' active' : ''}`}
+              title="Draw a team: drag agents and teams onto a canvas, link them with arrows, then create it or keep it as a template"
+              onClick={() => {
+                store.endCrewSpawn();
+                setStudio(!studio);
+              }}
+            >
+              studio
+            </button>
+          )}
+          {state.ready && (
             <button type="button" class={`broadcast-toggle primary${panel === 'new' ? ' active' : ''}`} title="Start a Claude Code session in a folder" onClick={() => toggle('new')}>
               new session
             </button>
@@ -231,7 +248,28 @@ export function App({ store }: { store: Store }) {
       </header>
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && panel === 'new' && <NewSessionPanel agents={agents} store={store} onClose={() => toggle('new')} />}
-      {state.ready && panel === 'team' && <NewTeamPanel agents={agents} store={store} onClose={() => toggle('team')} />}
+      {state.ready && panel === 'team' && (
+        <NewTeamPanel
+          agents={agents}
+          store={store}
+          onClose={() => toggle('team')}
+          onStudio={() => {
+            setPanel(undefined);
+            store.endCrewSpawn();
+            setStudio(true);
+          }}
+        />
+      )}
+      {state.ready && studio && (
+        <Studio
+          agents={agents}
+          store={store}
+          onClose={() => {
+            store.endCrewSpawn();
+            setStudio(false);
+          }}
+        />
+      )}
       {state.ready && panel === 'crew' && <TeamPanel crews={state.crews} store={store} onClose={() => toggle('crew')} onNew={() => setPanel('team')} />}
       {state.ready && panel === 'recall' && <RecallPanel agents={agents} store={store} onClose={() => toggle('recall')} />}
       {state.ready && panel === 'prompts' && <PromptsPanel store={store} onClose={() => setPanel(undefined)} />}

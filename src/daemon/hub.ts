@@ -4,7 +4,7 @@ import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
-import type { CrewRequest, CrewSummary, CrewTemplate, ReviewRecord } from '../shared/crew.ts';
+import type { CrewRequest, CrewSummary, CrewTemplate, ReviewRecord, RolePreset } from '../shared/crew.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
@@ -14,7 +14,7 @@ import type { QuickPrompt } from '../shared/prompts.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo }
   /** What you selected with the mouse in a pane, for the window where you did it. */
   | { type: 'selection'; now: number; agentId: string; text: string }
   /** How a question or a text from the menu of a selection went: queued, put in the prompt, or why not. */
@@ -27,6 +27,8 @@ export type ServerMessage =
   | { type: 'claudeUpdate'; now: number; update: ClaudeUpdateInfo }
   /** The templates of teams, after one was saved or deleted. */
   | { type: 'crewTemplates'; now: number; templates: CrewTemplate[] }
+  /** The presets of agents of the studio, after one was saved or deleted. */
+  | { type: 'crewRoles'; now: number; roles: RolePreset[] }
   /** How a change of a team went (a member added, taken away, → / ⇄), or a template saved: for the window that asked. */
   | { type: 'crewEdited'; now: number; ok: boolean; crewId?: string; action: string; error?: string }
   /** The teams of agents, after one was created. */
@@ -97,6 +99,9 @@ export type ClientMessage =
   /** A template: from the panel of a new team (template), or from an existing team (crewId, with its name). */
   | { type: 'saveCrewTemplate'; template?: unknown; crewId?: string }
   | { type: 'deleteCrewTemplate'; name: string }
+  /** A preset of agent of the studio: saved (in place of `previous`, when renamed), or deleted (restored, for one of Forchetta). */
+  | { type: 'saveRolePreset'; preset: unknown; previous?: string }
+  | { type: 'deleteRolePreset'; name: string }
   | { type: 'recall'; id: number; project: string; query: string }
   /** Run `claude update`, or hide the line of the last one. */
   | { type: 'claudeUpdate'; action: 'run' | 'dismiss' };
@@ -136,6 +141,9 @@ export interface HubOptions {
   /** The templates of teams, and saving or deleting one. */
   templates?: () => CrewTemplate[];
   onTemplate?: (message: Extract<ClientMessage, { type: 'saveCrewTemplate' | 'deleteCrewTemplate' }>) => { ok: boolean; error?: string };
+  /** The presets of agents of the studio, and saving or deleting one. */
+  roles?: () => RolePreset[];
+  onRole?: (message: Extract<ClientMessage, { type: 'saveRolePreset' | 'deleteRolePreset' }>) => { ok: boolean; error?: string };
   /** A request from you to a team. */
   onCrewRequest?: (crewId: string, to: string[], text: string) => { ok: true; n: number } | { ok: false; error: string };
   /** The changes of a session, read when its panel opens. */
@@ -202,6 +210,7 @@ export class Hub {
       today: this.today,
       crews: this.options.crews?.(),
       templates: this.options.templates?.(),
+      roles: this.options.roles?.(),
       claudeUpdate: this.options.claudeUpdate?.(),
       prompts: this.options.prompts?.(),
       limits: this.limits,
@@ -291,6 +300,13 @@ export class Hub {
               : this.options.onTemplate({ type: 'deleteCrewTemplate', name: String(message.name ?? '') });
           this.send(ws, { type: 'crewEdited', now: Date.now(), action: message.type, ...result });
           if (result.ok) this.broadcast({ type: 'crewTemplates', now: Date.now(), templates: this.options.templates?.() ?? [] });
+        } else if ((message.type === 'saveRolePreset' || message.type === 'deleteRolePreset') && this.options.onRole) {
+          const result =
+            message.type === 'saveRolePreset'
+              ? this.options.onRole({ type: 'saveRolePreset', preset: message.preset, ...(typeof message.previous === 'string' ? { previous: message.previous } : {}) })
+              : this.options.onRole({ type: 'deleteRolePreset', name: String(message.name ?? '') });
+          this.send(ws, { type: 'crewEdited', now: Date.now(), action: message.type, ...result });
+          if (result.ok) this.broadcast({ type: 'crewRoles', now: Date.now(), roles: this.options.roles?.() ?? [] });
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
           const reviews = this.options.crewReviews?.(message.crewId);

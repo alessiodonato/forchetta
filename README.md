@@ -72,7 +72,7 @@ Start a session with `forchetta run claude`, or from the app, and Forchetta can 
 
 ### Teams, when you want them
 
-A lead, which is a Claude session or you, and up to 6 members. Each member is a full Claude Code session with its own role and model, and by default its own worktree. The lead hands out requests through an MCP server; members answer, or ask the lead when they're stuck. Give a member its own files, and the guard keeps it in them and the others out of them. A member that reviews approves commits, and the guard asks you before a merge of anything it did not approve. Save a team as a template and start it again in another project, or describe your teams in a document and ask any session to set them up: it saves the templates, and you start them from the app. [Teams in the manual](https://forchetta.dev/manual.html#teams).
+A lead, which is a Claude session or you, and up to 6 members, on as many levels as you need: a junior can report to a senior that reports to the lead, and each relation has a prompt of its own. Each member is a full Claude Code session with its own role and model, and by default its own worktree. Requests go down the chart through an MCP server; members answer, or ask the one above them when they're stuck, and a senior's answer goes up only when its junior's work is done. Give a member its own files, and the guard keeps it in them and the others out of them. A member that reviews approves commits, and the guard asks you before a merge of anything it did not approve. Draw a team in the studio, dragging agents, whole teams and open-source skills onto a canvas and pulling arrows between them (a skill is fetched only when a team uses it, outside your project); save it as a template and start it again in another project, or describe your teams in a document and ask any session to set them up: it saves the templates, and you start them from the app. [Teams in the manual](https://forchetta.dev/manual.html#teams).
 
 ## How it compares
 
@@ -80,7 +80,7 @@ A lead, which is a Claude session or you, and up to 6 members. Each member is a 
 |---|---|---|
 | **Agent View** (`claude agents`) | Anthropic's full-screen list of your background sessions, in the terminal | A window that stays open next to your work, with terminals side by side, and the guard. |
 | **Claude Desktop** | Anthropic's app, with parallel sessions in its sidebar | It works with the `claude` CLI you already run in your terminals, with your hooks and settings. |
-| **Agent teams** (experimental in Claude Code) | A lead session that spawns teammates and shares a task list with them | Teams are set up in a panel and saved as templates: role, model, permissions and worktree for each member. The lead can be you. |
+| **Agent teams** (experimental in Claude Code) | A lead session that spawns teammates and shares a task list with them | Teams are set up in a panel or drawn in a studio, on as many levels as you need, and saved as templates: role, model, permissions, worktree and skills for each member. The lead can be you. |
 | **Conductor** and similar Mac apps | Apps that run several coding agents, each in an isolated workspace | Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely. |
 | **Orca**, **Paseo** | Open-source desktop and phone apps that run many kinds of coding agents, each in its own git worktree | No worktree to set up: sessions share one folder, and the guard keeps them off each other's files. It works with the `claude` you already run, in any terminal. |
 | **cmux**, **Claude Squad** | Terminals and session managers for many kinds of coding agents | Built for Claude Code only, through its hooks: the guard, permissions from the box, context and cost per session, subagents. |
@@ -98,7 +98,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.9.8. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.9.9. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -126,7 +126,7 @@ Everything is in the [manual](https://forchetta.dev/manual.html).
 
 - **`~/.claude/settings.json`**, only with `forchetta setup` or `forchetta hooks install`, after showing you every change, and with a backup. The hooks of Forchetta go next to yours without changing them; `forchetta hooks uninstall` removes only them.
 - **The hooks are small `sh` + `curl` scripts.** They always exit with 0, and print only a decision: your answer to a permission, or the guard stopping an edit. With Forchetta off, a session behaves exactly as without it. Most run in the background; the guard makes Claude wait about 30 ms, only before edits and Bash commands. [How the hooks work](https://forchetta.dev/manual.html#hooks)
-- **Everything else** stays in `~/Library/Application Support/Forchetta`, readable only by you. The daemon listens on `127.0.0.1` only, with a token. No telemetry. The one outside call is optional and off by default: a one-line summary of a session by Haiku, through the Claude API.
+- **Everything else** stays in `~/Library/Application Support/Forchetta`, readable only by you. The daemon listens on `127.0.0.1` only, with a token. No telemetry. The one outside call that carries anything of yours is optional and off by default: a one-line summary of a session by Haiku, through the Claude API. When a team whose agents have skills starts, Forchetta fetches those skills from GitHub at a pinned commit, into that folder.
 - At rest, the app, the page and the daemon together stay under 1% of CPU.
 
 ## Works with arricurdAI

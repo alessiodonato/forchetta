@@ -2,7 +2,7 @@ import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SessionColor, Su
 import { resultAt } from '../shared/present.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
-import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, ReviewRecord, Talk } from '../shared/crew.ts';
+import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, ReviewRecord, RolePreset, Talk } from '../shared/crew.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import { cleanSelection } from '../shared/selection.ts';
@@ -54,6 +54,8 @@ export interface UiState {
   crewSpawn?: { busy: boolean; error?: string; createdId?: string };
   /** The templates of teams: the ones of Forchetta, then yours. */
   templates: readonly CrewTemplate[];
+  /** The presets of agents of the studio: the ones of Forchetta (or your version of them), then yours. */
+  roles: readonly RolePreset[];
   /** The last change of a team or of the templates asked from a panel, and how it went. */
   crewEdit?: { action: string; busy: boolean; ok?: boolean; error?: string; at: number };
   /** The whole thread of the team the panel shows: asked again each time the teams change. */
@@ -118,7 +120,7 @@ function loadSeen(): Record<string, number> | undefined {
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
 export class Store {
-  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [], prompts: [] };
+  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [], roles: [], prompts: [] };
   /** Sends a message to the daemon (set by the connection). */
   send: (message: ClientMessage) => void = () => {};
   /** A notification asked by the daemon (see attention.ts). */
@@ -210,6 +212,10 @@ export class Store {
       if (this.state.crewThread) this.send({ type: 'crewThread', crewId: this.state.crewThread.crewId });
       return;
     }
+    if (message.type === 'crewRoles') {
+      this.set({ roles: message.roles });
+      return;
+    }
     if (message.type === 'crewTemplates') {
       this.set({ templates: message.templates });
       return;
@@ -267,6 +273,7 @@ export class Store {
         extra.prompts = message.prompts ?? [];
         extra.crews = message.crews ?? [];
         extra.templates = message.templates ?? [];
+        extra.roles = message.roles ?? [];
         break;
       case 'agents':
         for (const agent of message.agents) {
@@ -440,13 +447,24 @@ export class Store {
   }
 
   /** Saves a template: what the panel of a new team holds, or an existing team. */
-  saveTemplate(source: { template: Omit<CrewTemplate, 'builtin'> } | { crewId: string }): void {
+  saveTemplate(source: { template: Omit<CrewTemplate, 'builtin' | 'modified'> } | { crewId: string }): void {
     this.set({ crewEdit: { action: 'saveCrewTemplate', busy: true, at: Date.now() } });
     this.send({ type: 'saveCrewTemplate', ...source });
   }
 
   deleteTemplate(name: string): void {
     this.send({ type: 'deleteCrewTemplate', name });
+  }
+
+  /** Saves a preset of agent of the studio, in place of `previous` when it was renamed. */
+  saveRole(preset: Omit<RolePreset, 'builtin' | 'modified'>, previous?: string): void {
+    this.set({ crewEdit: { action: 'saveRolePreset', busy: true, at: Date.now() } });
+    this.send({ type: 'saveRolePreset', preset, ...(previous !== undefined ? { previous } : {}) });
+  }
+
+  /** Deletes a preset of yours; for one of Forchetta you changed, brings back theirs. */
+  deleteRole(name: string): void {
+    this.send({ type: 'deleteRolePreset', name });
   }
 
   /** Shows the thread of a team: the daemon sends it whole, then again at every change of the team. */

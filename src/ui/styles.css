@@ -2485,6 +2485,37 @@ html[data-hidden] *::after {
   content: '';
 }
 
+/* A team whose members report to other members: a tree, each box above the boxes of the ones that report to it, the
+   lines (OrgLinks.tsx) from each one down to them. The boxes keep one width, so that brothers line up. */
+.org-group[data-linked] .org-members[data-tree] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px 28px;
+}
+
+.org-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.org-node > .box {
+  width: 296px;
+  max-width: 100%;
+}
+
+.org-reports {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px;
+  padding-top: 36px;
+}
+
 /* A team of agents: a line from the lead to each member (OrgLinks.tsx) instead of the bracket. The line says what
    goes on between the two, in the colors of the thread of the team; an arrival flashes it twice and a dot runs
    along it. Only an arrival moves, for about a second. */
@@ -2615,6 +2646,33 @@ html[data-hidden] *::after {
   font: 11px var(--mono);
   text-align: right;
   padding-right: 6px;
+}
+
+/* A member under another one moves right, one step for each level: the panel shows the chart it makes. */
+.new-team .member {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.new-team .member + .member {
+  margin-top: 4px;
+}
+
+.new-team .member > .broadcast-row > .broadcast-label {
+  flex: none;
+  width: calc(72px + min(var(--depth, 0), 5) * 22px);
+}
+
+/* Its relation with the one it reports to: who that is, → / ⇄, and the prompt of the two. */
+.new-team .member-relation .relation-arrow {
+  font: 12px var(--mono);
+  color: var(--text-3);
+}
+
+.new-team .member-relation-prompt {
+  flex: 1 1 280px;
+  font-size: 12px;
 }
 
 .team-hint {
@@ -2832,8 +2890,14 @@ html[data-hidden] *::after {
 }
 
 .crew-delivery[data-status='working'],
-.crew-delivery[data-status='sent'] {
+.crew-delivery[data-status='sent'],
+.crew-delivery[data-status='delegated'] {
   color: var(--text);
+}
+
+/* Passed on to the members below: still open, the work goes on under it. */
+.crew-delivery[data-status='delegated'] {
+  border-style: dashed;
 }
 
 .crew-delivery[data-status='blocked'] {
@@ -3176,4 +3240,493 @@ html[data-hidden] *::after {
   width: 100%;
   resize: vertical;
   line-height: 1.4;
+}
+
+/* ——— The studio of teams (Studio.tsx) ———
+   Over the whole window: the presets on the left, the canvas in the middle, what is selected on the right. The
+   boxes stand where you put them; arrows go from the dot under the one that leads to the top of the one below. */
+.broadcast.studio,
+.app.with-panes .broadcast.studio {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) 300px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+  outline: none;
+}
+
+.studio-top {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.studio-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.broadcast.studio .studio-team-name {
+  flex: 0 1 240px;
+}
+
+.studio-count {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.studio-spacer {
+  flex: 1;
+}
+
+.studio-palette,
+.studio-props {
+  overflow: auto;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.studio-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid var(--line);
+}
+
+.studio-props {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.studio-section {
+  margin: 8px 0 2px;
+  font: 600 10.5px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.studio-section:first-child {
+  margin-top: 0;
+}
+
+.studio-preset {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.studio-preset strong {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.studio-preset span {
+  overflow: hidden;
+  font: 10.5px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.studio-preset:hover,
+.studio-preset.on {
+  border-color: var(--claude);
+}
+
+.studio-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.studio-canvas {
+  position: relative;
+  overflow: auto;
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--line) 1px, transparent 1.2px);
+  background-size: 24px 24px;
+}
+
+.studio-surface {
+  position: relative;
+}
+
+.studio-links {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+
+.studio-link {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1.5;
+}
+
+.studio-link.oneway {
+  stroke-dasharray: 5 4;
+}
+
+.studio-link.on {
+  stroke: var(--claude);
+  stroke-width: 2;
+}
+
+.studio-link.drawing {
+  stroke: var(--claude);
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.studio-link-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.studio-arrowhead {
+  fill: var(--text-3);
+}
+
+.studio-arrowhead.on {
+  fill: var(--claude);
+}
+
+.broadcast.studio button.studio-link-label {
+  position: absolute;
+  z-index: 2;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg);
+  font: 11px var(--mono);
+  color: var(--text-2);
+  transform: translate(-50%, -50%);
+}
+
+.broadcast.studio button.studio-link-label.on {
+  border-color: var(--claude);
+  color: var(--text);
+}
+
+.studio-you,
+.studio-node {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.studio-you {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.studio-you span {
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.studio-node {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px 12px;
+}
+
+.studio-node.on {
+  border-color: var(--claude);
+  box-shadow: 0 0 0 1px var(--claude);
+}
+
+.studio-node.loose {
+  border-style: dashed;
+}
+
+.studio-node[data-target] {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(70, 196, 138, 0.35);
+}
+
+.studio-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.studio-node-head strong {
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.studio-node-role {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-2);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.studio-node-traits {
+  overflow: hidden;
+  margin-top: auto;
+  font: 10.5px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.studio-tag {
+  padding: 0 6px;
+  border: 1px solid var(--claude);
+  border-radius: 999px;
+  font: 10px var(--mono);
+  font-weight: 400;
+  color: var(--claude);
+}
+
+/* The dot to pull an arrow from: under the box, in the middle. */
+.studio-handle {
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--text-3);
+  cursor: crosshair;
+}
+
+.studio-handle:hover,
+.studio-node.on .studio-handle {
+  background: var(--claude);
+}
+
+.studio-popover {
+  position: absolute;
+  z-index: 3;
+  width: 300px;
+  padding: 12px;
+  border: 1px solid var(--claude);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.studio-relation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.studio-empty {
+  position: absolute;
+  width: 320px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-3);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.studio-ghost {
+  position: fixed;
+  z-index: 60;
+  padding: 6px 10px;
+  border: 1px solid var(--claude);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.studio-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.studio-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.studio-note.error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--red);
+}
+
+.studio-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.broadcast.studio .studio-field .command-input {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.broadcast.studio .studio-field textarea.command-input {
+  resize: vertical;
+  font: 12px/1.45 var(--ui);
+}
+
+.studio-field select {
+  max-width: 100%;
+}
+
+.studio-row {
+  display: flex;
+  gap: 8px;
+}
+
+.studio-row > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.studio-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.studio-actions,
+.studio-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.studio-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.studio-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+/* The skills in the studio: a group per kind on the left, small chips on an agent. */
+.broadcast.studio .studio-filter {
+  flex: none;
+  margin-bottom: 2px;
+}
+
+.studio-skill-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.studio-skill-group-name {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.studio-preset.studio-skill {
+  padding: 4px 9px;
+  border-style: dashed;
+}
+
+.studio-preset.studio-skill strong {
+  font: 12px var(--mono);
+}
+
+.studio-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font: 11px var(--mono);
+  color: var(--text-2);
+}
+
+.broadcast.studio .studio-skill-chip button.quiet {
+  padding: 0 6px;
+}
+
+.studio-strong {
+  color: var(--text-2);
+}
+
+.studio-props a {
+  color: var(--claude);
 }

@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.8. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.9. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -334,17 +334,41 @@ forchetta setup</pre>
         </figure>
         <ol class="steps">
           <li>Click <span class="ui">new team</span> at the top.</li>
-          <li>Optionally, <span class="ui">Start from</span> a template: <em>developer + reviewer</em>, <em>feature squad</em> (frontend, backend, tester), <em>research + writing</em>, or one you saved.</li>
+          <li>Optionally, <span class="ui">Start from</span> a template: <em>developer + reviewer</em>, <em>feature squad</em> (frontend, backend, tester), <em>manager › senior › junior</em> (three <a href="#team-levels">levels</a>), <em>research + writing</em>, or one you saved.</li>
           <li>Give the team a <strong>name</strong> (it becomes its group in the org chart) and a <strong>folder</strong>.</li>
           <li>Choose the <strong>lead</strong>: <span class="ui">Claude</span>, with a name, a role, a model and a permission mode, or <span class="ui">you</span>.</li>
           <li>Add the <strong>members</strong>, up to 6: a name and, in one sentence, what each one does. <span class="ui">more</span> holds the model, the permissions and the worktree of a member, <a href="#team-files">its files</a>, and whether it <a href="#team-reviews">reviews</a>.</li>
-          <li>For each member, choose how it talks with the lead (below), and whether the members work in their own worktree.</li>
+          <li>Under each member, its relation with the one above it: who it <span class="ui">reports to</span> (the lead, or another member: see <a href="#team-levels">More levels</a>), how it talks with it (<a href="#talk">⇄ or →</a>), and, if you like, the prompt of the relation. <span class="ui">+ report</span> adds a member under it.</li>
+          <li>Choose whether the members work in their own worktree.</li>
           <li><span class="ui">Create team</span>, or <kbd>⌘</kbd><kbd>↩</kbd>.</li>
         </ol>
         <p>Every session starts in the tmux of Forchetta, the lead first. From its system prompt each one knows who it is, its role, its lead and the other members. Its name shows in its box, in its pane and in Claude Code. <span class="ui">Save as template</span> keeps the team without its folder, to start it again elsewhere.</p>
 
+        <h3 id="studio">The studio: draw a team</h3>
+        <p><span class="ui">studio</span>, at the top (or <span class="ui">or draw it in the studio</span> in the panel of a new team), opens a canvas over the whole window. On the left the presets: <strong>agents</strong> (manager, senior, junior, developer, reviewer, tester, frontend, backend, researcher, writer, and yours) and whole <strong>teams</strong> (the templates). On the right, whatever you selected.</p>
+        <figure>
+          <img src="img/studio.png" width="2400" height="1520" loading="lazy" alt="The studio: on the left the agents and the teams to drag; on the canvas You, the manager that leads, the senior and the reviewer under it, the junior under the senior; on the right the junior, selected, with its role, model, permissions, files and three skills.">
+          <figcaption>The <em>manager › senior › junior</em> team opened on the canvas, with a reviewer added under the manager.</figcaption>
+        </figure>
+        <ol class="steps">
+          <li>Drag agents, or a whole team, onto the canvas. Each agent is a box; move it where you like.</li>
+          <li>Pull an arrow from the dot under <strong>You</strong> or under a box, and drop it on the agent it leads. On release you choose the relation: <a href="#talk">⇄ answers or → executes</a>, and its prompt. An agent has one arrow coming in; a new one moves it under someone else, and a circle is refused.</li>
+          <li>If You point at one agent only, and it leads others, it is the Claude lead of the team (its arrow says <span class="ui">lead</span>). If You point at several, you lead, and they are the members at the top.</li>
+          <li>Click a box to change its name, role, model, permissions, worktree, files and review; click an arrow, or its label, to change the relation. <kbd>Delete</kbd> removes what is selected; the agents it led go up to the one above it.</li>
+          <li>In the right column, with nothing selected: the folder of the team, the default of the arrows and the worktrees, and what is still missing before it can start. <span class="ui">Tidy up</span> lays the boxes out as a tree.</li>
+          <li><span class="ui">Create team</span> starts it, as the panel does; <span class="ui">Save as template</span> keeps it among the teams, with where its boxes stand.</li>
+        </ol>
+        <h4 id="skills">Skills</h4>
+        <p>Under the teams, the <strong>skills</strong>: open-source skills of Claude Code chosen from the best-known repositories (<code>obra/superpowers</code>, <code>anthropics/skills</code>, <code>addyosmani/agent-skills</code>, <code>vercel-labs/agent-skills</code>, <code>trailofbits/skills</code>, <code>multica-ai/andrej-karpathy-skills</code>), grouped by what they are for: plan, build, debug and quality, review, security, test, docs. Click one to read what it does, where it comes from, its license and what it weighs; drop it on an agent to give it that skill, or add it from the skills of the agent, on the right. Most agent presets come with two or three, and so do the agents of the teams of Forchetta (the junior of <em>manager › senior › junior</em> has the skills of the junior preset); 8 at most for an agent.</p>
+        <ul>
+          <li><strong>Nothing is downloaded while you choose.</strong> When a team starts, Forchetta fetches the skills it does not have yet: only their folders, at the commit of the catalog (the version that was checked, never one that moves), into its own folder (<code>skills/</code> in <a href="#data">your data</a>), not into your project. The next teams find them there.</li>
+          <li><strong>Each agent gets only its own</strong>, for its session only (<code>claude --plugin-dir</code>): they show as <code>forchetta-skills:pdf</code> and so on. Until it uses one, an agent carries only its name and description.</li>
+          <li>A skill that cannot be fetched (no network, say) does not stop the team: it starts without it, and the panel says which.</li>
+        </ul>
+        <p>Every preset can be changed and duplicated. Click an agent on the left to edit it: saving one of Forchetta makes it your version, marked with a dot, and <span class="ui">Restore</span> brings theirs back. <span class="ui">Save as preset</span>, on a box, keeps an agent you set up. Click a team to <span class="ui">Open</span> it on the canvas (it replaces what is there), add it, duplicate it, or delete it; saved with the same name, a team of Forchetta becomes your version too. Closing the studio keeps the canvas until you come back.</p>
+
         <h3 id="team-from-document">A team from a document</h3>
-        <p>Every session Forchetta starts, from the app or with <code>forchetta run claude</code>, has two tools of the MCP server <code>forchetta</code>: <code>list_team_templates</code> and <code>save_team_template</code>. So a team can come from a description. Ask any session “Set up in Forchetta the teams described in roles.md”, or point it at an artifact, or describe the team in your own words. Claude reads the description and saves one template per team, with the name, the role, the model and the permissions of the lead and of each member, and for each member whether it answers the lead or executes only (<a href="#talk">⇄ or →</a>): as the document says, or as Claude judges from the role.</p>
+        <p>Every session Forchetta starts, from the app or with <code>forchetta run claude</code>, has two tools of the MCP server <code>forchetta</code>: <code>list_team_templates</code> and <code>save_team_template</code>. So a team can come from a description. Ask any session “Set up in Forchetta the teams described in roles.md”, or point it at an artifact, or describe the team in your own words. Claude reads the description and saves one template per team, with the name, the role, the model and the permissions of the lead and of each member, and for each member whether it answers or executes only (<a href="#talk">⇄ or →</a>): as the document says, or as Claude judges from the role. When the document has more levels, each member also gets who it reports to, and the prompt of that relation (the formats of requests and reports, the rules of that link): see <a href="#team-levels">More levels</a>.</p>
         <ul>
           <li>Saving starts nothing. You start the team as usual: <span class="ui">new team</span>, <span class="ui">Start from</span> the template, its folder, <span class="ui">Create team</span>. There you see the roles and the permissions before anything runs.</li>
           <li>Claude Code asks you before each save, as for any tool. Reading the templates needs no permission.</li>
@@ -357,20 +381,30 @@ forchetta setup</pre>
         <div class="table"><table>
           <thead><tr><th>Member</th><th>What happens when it finishes a request</th></tr></thead>
           <tbody>
-            <tr><td><strong>⇄ answers</strong></td><td>Its final message goes back to whoever asked: to a Claude lead as a new prompt, “Answer from developer to request #2:”, or to you, in the team panel. If it cannot go on, it can ask the lead a question.</td></tr>
+            <tr><td><strong>⇄ answers</strong></td><td>Its final message goes back to whoever asked: to a Claude lead (or the member it reports to) as a new prompt, “Answer from developer to request #2:”, or to you, in the team panel. If it cannot go on, it can ask a question.</td></tr>
             <tr><td><strong>→ executes</strong></td><td>It does the work and sends nothing back. Good for steps whose result you see in the files: formatting, running the tests, writing a text.</td></tr>
           </tbody>
         </table></div>
+
+        <h3 id="team-levels">More levels: a member under another one</h3>
+        <p>By default every member reports to the lead. A member can report to another member instead, which then leads it: a junior under a senior under the lead, as in an org chart. In the panel, <span class="ui">+ report</span> on a member adds one under it, and <span class="ui">reports to</span> moves a member under another one. The panel shows the members as the chart will, each one under the one it reports to.</p>
+        <ul>
+          <li><strong>Each one talks along its lines.</strong> The lead sends requests to the members that report to it, a senior to its juniors; answers and questions go back to whoever sent the request. A Claude lead that writes to a junior is told to go through its senior. You can still write to anyone from the team panel.</li>
+          <li>A member that leads others gets the tools to give requests and wait for the answers, for its own members only.</li>
+          <li><strong>A request passed on stays open.</strong> When the senior gives work to its junior and ends its turn, its request shows <span class="ui">passed on</span>. Its answer goes up only when the work of the junior is done and the senior has read it and ended its turn again. So the lead gets the result, not “I passed it on”. A request of yours to the lead works the same way: its answer comes when the team has finished.</li>
+        </ul>
+        <p><strong>The prompt of a relation.</strong> Next to <span class="ui">reports to</span>, each member has a field for how it works with the one above it: what is asked and how, what comes back and in what form, when to ask. Both of them read it in their system prompt. It is the place for the formats of requests and reports, or for a rule like “the junior asks before any change outside its step”.</p>
+        <p>The template <em>manager › senior › junior</em> is a team with three levels, ready to start.</p>
 
         <h3>How the work goes</h3>
         <p>Give the goal to the lead: from the <a href="#team-panel">team panel</a>, or by writing in its terminal. A Claude lead works with the tools of the team, from an MCP server called <code>forchetta</code>. Only the sessions of the team get these tools, and they need no permission:</p>
         <div class="table"><table>
           <thead><tr><th>Tool</th><th>Who has it</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td><code>send_request</code></td><td>lead</td><td>Gives work to one member, to some or to all. The request gets a number and reaches each member as a new prompt, “Request #3 from lead:”, as soon as its session is free; until then it waits in its queue.</td></tr>
-            <tr><td><code>wait_for_answers</code></td><td>lead</td><td>Waits for the answers of its requests, up to 10 minutes, and returns them all at once, in the same turn. Answers that come later arrive as prompts.</td></tr>
+            <tr><td><code>send_request</code></td><td>lead, members others report to</td><td>Gives work to one of its members, to some or to all. The request gets a number and reaches each member as a new prompt, “Request #3 from lead:”, as soon as its session is free; until then it waits in its queue.</td></tr>
+            <tr><td><code>wait_for_answers</code></td><td>lead, members others report to</td><td>Waits for the answers of its requests, up to 10 minutes, and returns them all at once, in the same turn. Answers that come later arrive as prompts.</td></tr>
             <tr><td><code>team</code></td><td>lead, ⇄ members, reviewers</td><td>Shows the members, what each one does, its files, what it is working on, the folder and branch of each, and the last verdicts of the reviewers.</td></tr>
-            <tr><td><code>ask_lead</code></td><td>⇄ members</td><td>Asks the lead about the current request, as “Question from reviewer about request #3:”. The answer comes back as a new request.</td></tr>
+            <tr><td><code>ask_lead</code></td><td>⇄ members</td><td>Asks whoever sent the current request (the lead, or the member it reports to), as “Question from reviewer about request #3:”. The answer comes back as a new request.</td></tr>
             <tr><td><code>review</code></td><td>members that review</td><td>Records a verdict on one commit: <code>approve</code>, or <code>changes</code> with what to fix (see <a href="#team-reviews">A member that reviews</a>).</td></tr>
           </tbody>
         </table></div>
@@ -383,24 +417,24 @@ forchetta setup</pre>
         </figure>
         <p><span class="ui">teams</span>, at the top, takes the place of <span class="ui">new team</span> when there is at least one team; <span class="ui">+ new team</span> is inside. It shows the thread of the team, oldest first:</p>
         <ul>
-          <li>each request, with who sent it, to whom, and how it goes for each one: in the queue, working, done;</li>
+          <li>each request, with who sent it, to whom, and how it goes for each one: in the queue, working, passed on (to the members below it), done; a request a senior sends while working on #3 says <span class="ui">for #3</span>;</li>
           <li>the answers, and where they went: <span class="ui">delivered to lead</span>, <span class="ui">collected by lead (waiting for it)</span>, <span class="ui">for you</span>, or <span class="ui">not sent back</span> (a member that executes only, or one that asked a question instead);</li>
           <li>the questions of the members;</li>
           <li>the verdicts of the members that review, with the commit and the note: <span class="ui">approved</span> in green, <span class="ui">changes asked</span> in amber.</li>
         </ul>
         <p>Below the thread, write a request yourself, to the lead, to one member or to all; it arrives as “Request #n from the user:”. In the grid and in the org chart, the box of each session says what it works on (<span class="ui">#4 from lead: Write the tests…</span>), and the box of a Claude lead says which requests it still waits for.</p>
-        <p>In the org chart a line runs from the lead to each member, and says what goes on between the two: <strong>orange</strong>, a request the member works on (dashed while it waits in its queue); <strong>green</strong>, an answer on its way back to the lead; <strong>amber</strong>, a question for the lead. When something arrives, a request at a member, an answer or a question at the lead, its line flashes twice and a dot runs along it, the way it went.</p>
+        <p>In the org chart a line runs to each member from the one it reports to, and says what goes on between the two: <strong>orange</strong>, a request the member works on (dashed while it waits in its queue); <strong>green</strong>, an answer on its way back up; <strong>amber</strong>, a question going up. When something arrives, a request at a member, an answer or a question at the one above it, its line flashes twice and a dot runs along it, the way it went. A team with <a href="#team-levels">levels</a> is drawn as a tree, each member under the one it reports to.</p>
 
         <h3>Change a team while it works</h3>
         <p><span class="ui">edit team</span>, in the team panel:</p>
         <ul>
           <li><strong>→ / ⇄</strong> of a member: it applies from its next request, which tells the member.</li>
           <li><strong>its files</strong>, in the field next to its name: the guard follows them at once, and the member learns them with its next request.</li>
-          <li><strong>remove</strong> takes a member out: its requests still in the queue are cancelled and its box leaves the group. Its session goes on; <code>/exit</code> ends it.</li>
-          <li><strong>+ member</strong> adds one, started like the others.</li>
+          <li><strong>remove</strong> takes a member out: its requests still in the queue are cancelled and its box leaves the group; the members that reported to it now report to the one above it, and their next request tells them. Its session goes on; <code>/exit</code> ends it.</li>
+          <li><strong>Add</strong> adds one, started like the others, under the lead or, with <span class="ui">under</span>, under a member that started leading others (a session gets its tools when it starts).</li>
           <li><strong>Save as template</strong> keeps the team as it is now.</li>
         </ul>
-        <p>A Claude lead learns of every change with its next prompt.</p>
+        <p>A Claude lead, and a member that leads others, learn of every change among their members with their next prompt.</p>
 
         <h3 id="team-files">The files of each member</h3>
         <p>Under <span class="ui">more</span>, a member can have <strong>files</strong> of its own, relative to the folder of the team: folders (<code>src/ui/</code>), files (<code>README.md</code>), or patterns (<code>*.test.ts</code>, <code>docs/**</code>; a pattern with no <code>/</code> matches at any depth). Then:</p>
@@ -424,7 +458,7 @@ forchetta setup</pre>
 
         <h3>Limits</h3>
         <ul>
-          <li>6 members per team, and team names are unique.</li>
+          <li>6 members per team, the lead aside, on any number of levels; team names are unique.</li>
           <li>20 requests open at once in a team: a lead cannot hand out more work than you can follow.</li>
           <li>20,000 characters per request.</li>
         </ul>
@@ -609,10 +643,10 @@ Read them again before you write code that relies on them.</code></pre>
         <ul>
           <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
           <li><code>state.json</code>, the sessions; <code>teams.json</code>, names, groups and roles by folder;</li>
-          <li><code>crews/</code>, the teams of agents, one file each; <code>crew-templates.json</code>, your templates;</li>
+          <li><code>crews/</code>, the teams of agents, one file each; <code>crew-templates.json</code>, your templates; <code>crew-roles.json</code>, your presets of agents; <code>skills/</code>, the <a href="#skills">skills</a> downloaded, and the plugin of each session of a team that has some;</li>
           <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>guard-stats.json</code>, how many times a day the guard did each thing; <code>daemon.log</code>.</li>
         </ul>
-        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code> and, after asking, <code>~/.claude/settings.json</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception.</p>
+        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code> and, after asking, <code>~/.claude/settings.json</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception. Forchetta also downloads: when a team whose agents have <a href="#skills">skills</a> starts, it fetches the ones it does not have yet from GitHub, with <code>git</code>, at the commit of its catalog. Nothing of yours is sent.</p>
       </section>
 
       <section id="trouble">

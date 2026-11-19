@@ -4,8 +4,10 @@ import { isAbsolute, join, relative } from 'node:path';
 import { type Agent, type QueuedCommand, TEAM_TEXT_MAX, type TeamInfo } from '../shared/agent.ts';
 import {
   ANSWER_HEADER,
+  BUILTIN_ROLES,
   BUILTIN_TEMPLATES,
   cleanCrewSpec,
+  cleanRolePreset,
   cleanPaths,
   cleanTemplate,
   KEPT_REVIEWS,
@@ -17,6 +19,7 @@ import {
   type Crew,
   type CrewMemberSpec,
   type CrewTemplate,
+  type RolePreset,
   type Talk,
   talkNote,
   type CrewRequest,
@@ -26,6 +29,10 @@ import {
   type DeliveryStatus,
   effectiveTalk,
   effectiveWorktree,
+  hasLevels,
+  managerName,
+  reportsOf,
+  reportsToNote,
   type TeamTool,
   teamToolsFor,
   tooLong,
@@ -47,12 +54,17 @@ import type { HookPayload } from './state.ts';
 // with its name, its system prompt, its place in the chart and, for the lead and the members that answer, the
 // tools of the team (mcp/team.ts).
 //
-// A request (from you, or from the Claude lead with send_request) gets the next number of its team and goes, with
-// its header ("Request #3 from lead:"), into the queue of each recipient (daemon/commands.ts), which pastes it when
-// the session is ready. The queue tells how it goes; the Stop of the recipient after it took the request says the
-// work is done, with its last message. A member that answers (⇄) has that message go back to whoever asked: the
-// Claude lead gets it in its own queue ("Answer from tester to request #3:"), you see it in the panel of the team.
-// A member → gets no tools and sends nothing back.
+// A request (from you, or with send_request from the Claude lead or from a member others report to) gets the next
+// number of its team and goes, with its header ("Request #3 from lead:"), into the queue of each recipient
+// (daemon/commands.ts), which pastes it when the session is ready. A session sends only to the members that report
+// to it; you write to anyone. The queue tells how it goes; the Stop of the recipient after it took the request says
+// the work is done, with its last message. A member that answers (⇄) has that message go back to whoever asked:
+// the session that sent the request gets it in its own queue ("Answer from tester to request #3:"), you see it in
+// the panel of the team. A member → gets no tools and sends nothing back, unless others report to it.
+//
+// A request a session passes on to its own members (sent while it worked on it: their requests have it as parent)
+// stays open, "delegated", when its turn ends: it is done, and its answer goes back, when their work is done too and
+// their answers were read (settle). So the answer of a senior reaches the lead after the work of its junior.
 //
 // A member can have files of its own (shared/crew.ts): the guard asks laneCheck before each of its edits. A member
 // that reviews records its verdicts with the tool review; before a git merge of the branch of a member, decideMerge
@@ -85,7 +97,7 @@ const QUESTION_MAX = 4000;
 
 const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
 const flat = (text: string): string => text.replace(/\s+/g, ' ').trim();
-const OPEN: DeliveryStatus[] = ['queued', 'blocked', 'sent', 'working'];
+const OPEN: DeliveryStatus[] = ['queued', 'blocked', 'sent', 'working', 'delegated'];
 
 /** The status of a delivery for the status of the command that carries it. */
 function deliveryStatus(command: QueuedCommand): DeliveryStatus {
@@ -148,11 +160,12 @@ function stateText(agent: Agent | undefined): string {
 /** The longest wait of a lead for its answers. */
 export const MAX_WAIT_MS = 10 * 60_000;
 
-/** A lead waiting for the answers of some of its requests (wait_for_answers): its answers are held for it. */
+/** A session waiting for the answers of some of its requests (wait_for_answers): its answers are held for it. */
 interface Waiter {
   id: string;
   crewId: string;
-  lead: string;
+  /** The session that waits: the Claude lead, or a member others report to. */
+  by: string;
   requests: Set<number>;
   until: number;
   timer: ReturnType<typeof setTimeout>;
@@ -196,6 +209,29 @@ export class Crews {
   git: (dir: string, args: string[]) => Promise<string | undefined> = async () => undefined;
   /** The root of the git repository of the folder of each team, read once: where its worktrees are. */
   private readonly roots = new Map<string, string | null>();
+  /**
+   * The skills of the agents (daemon/skills.ts), set by the daemon: fetched into the cache of Forchetta when a team
+   * uses them, then given to each session as a plugin of its own. By default nothing is fetched and no one has any.
+   */
+  skills: { ensure: (ids: readonly string[]) => Promise<{ failed: { id: string; error: string }[] }>; plugin: (key: string, ids: readonly string[]) => string | undefined } = {
+    ensure: async () => ({ failed: [] }),
+    plugin: () => undefined,
+  };
+
+  /** The skills of some agents in the cache; what could not be fetched, in a line for the panel. */
+  private async fetchSkills(people: readonly { skills?: string[] }[]): Promise<string | undefined> {
+    const ids = people.flatMap((person) => person.skills ?? []);
+    if (ids.length === 0) return undefined;
+    const { failed } = await this.skills.ensure(ids);
+    if (failed.length === 0) return undefined;
+    this.log(`skill non scaricate: ${failed.map((item) => `${item.id} (${item.error})`).join('; ')}`);
+    return `skills not downloaded, the agents started without them: ${failed.map((item) => `${item.id} (${item.error})`).join('; ')}`;
+  }
+
+  /** The plugin with the skills of one session of a team, for claude --plugin-dir. */
+  private pluginOf(crew: Crew, name: string, skills: readonly string[] | undefined): string | undefined {
+    return skills && skills.length > 0 ? this.skills.plugin(`${crew.id}/${name}`, skills) : undefined;
+  }
 
   constructor(
     private readonly dir: string | undefined,
@@ -234,6 +270,8 @@ export class Crews {
           talk: effectiveTalk(crew, member),
           ...(member.paths ? { paths: member.paths } : {}),
           ...(member.reviews ? { reviews: true } : {}),
+          ...(member.reportsTo !== undefined ? { reportsTo: member.reportsTo } : {}),
+          ...(member.canLead ? { canLead: true } : {}),
         })),
       ],
       requests: (crew.requests ?? []).slice(-SHOWN_REQUESTS).map((request) => ({
@@ -259,17 +297,38 @@ export class Crews {
   }
 
   /**
-   * A text for the Claude lead, with the changes of the team it has not been told yet: its system prompt lists
-   * the team as it was when it started. `done` is called once the text is in its queue, to forget them.
+   * A text for a session that leads others (the Claude lead, or a member others report to), with the changes of
+   * its members it has not been told yet: its system prompt lists them as they were when it started. `done` is
+   * called once the text is in its queue, to forget them.
    */
-  private forLead(crew: Crew, text: string): { text: string; done: () => void } {
-    const notes = crew.leadNotes ?? [];
+  private forManager(crew: Crew, name: string, text: string): { text: string; done: () => void } {
+    const lead = crew.lead.kind === 'claude' && crew.lead.name === name;
+    const member = lead ? undefined : crew.members.find((candidate) => candidate.name === name);
+    const notes = (lead ? crew.leadNotes : member?.notes) ?? [];
     if (notes.length === 0) return { text, done: () => {} };
-    return { text: `${text}\n\n(The team changed: ${notes.join('; ')}.)`, done: () => delete crew.leadNotes };
+    return {
+      text: `${text}\n\n(The team changed: ${notes.join('; ')}.)`,
+      done: () => {
+        if (lead) delete crew.leadNotes;
+        else if (member) delete member.notes;
+      },
+    };
   }
 
-  private noteForLead(crew: Crew, note: string): void {
-    if (crew.lead.kind === 'claude') crew.leadNotes = [...(crew.leadNotes ?? []), note];
+  /** A change of the team, for the next text that reaches a session that leads: a member by its name, the lead with undefined. */
+  private noteFor(crew: Crew, manager: string | undefined, note: string): void {
+    if (manager === undefined) {
+      if (crew.lead.kind === 'claude') crew.leadNotes = [...(crew.leadNotes ?? []), note];
+      return;
+    }
+    const member = crew.members.find((candidate) => candidate.name === manager);
+    if (member) member.notes = [...(member.notes ?? []), note];
+  }
+
+  /** A change of a member, for the one it reports to, and for the Claude lead when that is someone else. */
+  private noteAbove(crew: Crew, member: Pick<CrewMemberSpec, 'reportsTo'>, note: string, forLead = note): void {
+    this.noteFor(crew, member.reportsTo, note);
+    if (member.reportsTo !== undefined) this.noteFor(crew, undefined, forLead);
   }
 
   /** The name of the worktree of a member, when it has one (and the folder of the team is in git). */
@@ -294,81 +353,131 @@ export class Crews {
   }
 
   /** Who a session is in its team: the lead or a member, by name. */
-  whoami(agentId: string): { crew: Crew; name: string; role: 'lead' | 'member'; talk?: 'oneway' | 'twoway' } | undefined {
+  whoami(agentId: string): { crew: Crew; name: string; role: 'lead' | 'member'; talk?: 'oneway' | 'twoway'; member?: CrewMemberSpec } | undefined {
     for (const crew of this.crews.values()) {
       if (crew.lead.kind === 'claude' && crew.agents.lead === agentId) return { crew, name: crew.lead.name, role: 'lead' };
       const member = crew.members.find((candidate) => crew.agents[candidate.name] === agentId);
-      if (member) return { crew, name: member.name, role: 'member', talk: effectiveTalk(crew, member) };
+      if (member) return { crew, name: member.name, role: 'member', talk: effectiveTalk(crew, member), member };
     }
     return undefined;
   }
 
-  /** The tools of the team a session has: the lead and the members that answer. */
+  /** The tools of the team a session has: the lead, the members others report to, the members that answer. */
   toolsOf(agentId: string): TeamTool[] {
     const me = this.whoami(agentId);
     if (!me) return [];
-    return teamToolsFor(me.crew, me.role === 'lead' ? 'lead' : { talk: me.talk });
+    return teamToolsFor(me.crew, me.member ?? 'lead');
+  }
+
+  /** The names of the members a session gives requests to: those that report to it (the lead: those with no one else above). */
+  private reportsNames(crew: Crew, name: string): string[] {
+    const lead = crew.lead.kind === 'claude' && crew.lead.name === name;
+    return reportsOf(crew.members, lead ? undefined : name).map((member) => member.name);
   }
 
   /**
-   * A request to some recipients of a team: from you (all the members when `to` is empty) or from its Claude lead
-   * (to its members only). Each one gets it in its queue; a recipient with no session gets a failed delivery.
+   * The request a session works on now, the one its new requests are part of: the one it took (sent, working), else
+   * the last one it passed on and still waits on.
    */
-  request(crewId: string, to: readonly string[], text: string, from = 'the user', now = Date.now()): Result<{ n: number; to: string[] }> {
+  private workingOn(crew: Crew, agentId: string): number | undefined {
+    let passed: number | undefined;
+    for (const request of [...(crew.requests ?? [])].reverse()) {
+      for (const delivery of request.deliveries) {
+        if (delivery.agentId !== agentId) continue;
+        if (delivery.status === 'working' || delivery.status === 'sent') return request.n;
+        if (delivery.status === 'delegated') passed ??= request.n;
+      }
+    }
+    return passed;
+  }
+
+  /** Why some names are not members a session can send to: who they report to, and who reports to it. */
+  private notYours(crew: Crew, names: readonly string[], reports: readonly string[]): string {
+    const said = names.map((name) => {
+      const member = crew.members.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase());
+      return member ? `${member.name} reports to ${managerName(crew, member)}` : `"${name}" is not a member of the team`;
+    });
+    return `${said.join('; ')}. You send requests only to the members that report to you (${reports.join(', ') || 'none'}): the work of the others goes through the one they report to.`;
+  }
+
+  /**
+   * A request to some recipients of a team: from you (anyone; all the members when `to` is empty), or from its
+   * Claude lead or a member others report to (only to the members that report to it; "all" is all of them). Each
+   * one gets it in its queue; a recipient with no session gets a failed delivery. `parent`: the request the sender
+   * works on, which this one is part of.
+   */
+  request(crewId: string, to: readonly string[], text: string, from = 'the user', now = Date.now(), parent?: number): Result<{ n: number; to: string[] }> {
     const crew = this.crews.get(crewId);
     if (!crew) return { ok: false, error: 'unknown team' };
     const body = text.replace(/\r\n?/g, '\n').trim();
     if (!body) return { ok: false, error: 'write the request first' };
     const members = crew.members.map((member) => member.name);
-    const names = from === 'the user' && crew.lead.kind === 'claude' ? [crew.lead.name, ...members] : members;
+    const user = from === 'the user';
+    const reports = user ? members : this.reportsNames(crew, from);
+    const names = user && crew.lead.kind === 'claude' ? [crew.lead.name, ...members] : reports;
     const all = to.length === 0 || to.some((name) => name.toLowerCase() === 'all');
     const wanted = to.map((name) => name.toLowerCase());
-    const targets = all ? members : names.filter((name) => wanted.includes(name.toLowerCase()));
-    if (targets.length === 0) return { ok: false, error: `nobody to send it to: the members are ${members.join(', ')}` };
+    if (!user && !all) {
+      const strangers = to.filter((name) => !reports.some((report) => report.toLowerCase() === name.toLowerCase()));
+      if (strangers.length > 0) return { ok: false, error: this.notYours(crew, strangers, reports) };
+    }
+    const targets = all ? reports : names.filter((name) => wanted.includes(name.toLowerCase()));
+    if (targets.length === 0) return { ok: false, error: user ? `nobody to send it to: the members are ${members.join(', ')}` : 'nobody reports to you: there is nobody to send it to' };
     const open = (crew.requests ?? []).flatMap((request) => request.deliveries).filter((delivery) => OPEN.includes(delivery.status)).length;
     if (open + targets.length > MAX_OPEN_DELIVERIES) {
       return { ok: false, error: `${open} requests of the team are still open (at most ${MAX_OPEN_DELIVERIES}): wait for some answers first` };
     }
     const n = Math.max(0, ...(crew.requests ?? []).map((request) => request.n)) + 1;
-    const request: CrewRequest = { n, from, text: body, createdAt: now, deliveries: [] };
+    const request: CrewRequest = { n, from, text: body, createdAt: now, deliveries: [], ...(parent !== undefined ? { parent } : {}) };
     for (const name of targets) {
       const agentId = this.agentOf(crew, name);
       const member = crew.members.find((candidate) => candidate.name === name);
       // A member keeps, for this request, the → / ⇄ it has now; one whose → / ⇄ changed is told so here.
       const talk = member ? effectiveTalk(crew, member) : undefined;
-      const toLead = crew.lead.kind === 'claude' && name === crew.lead.name ? this.forLead(crew, `${REQUEST_HEADER(n, from)}\n${body}`) : undefined;
-      // What changed for it since its system prompt: how it talks, its files.
-      const notes = [member?.talkNote && talk ? talkNote(talk) : '', member?.pathsNote ? pathsNote(member.paths) : ''].filter(Boolean);
-      const full = toLead?.text ?? `${REQUEST_HEADER(n, from)}\n${body}${notes.length > 0 ? `\n\n${notes.join('\n')}` : ''}`;
+      // What changed for it since its system prompt: how it talks, its files, who it reports to.
+      const notes = [
+        member?.talkNote && talk ? talkNote(talk) : '',
+        member?.pathsNote ? pathsNote(member.paths) : '',
+        member?.reportsToNote ? reportsToNote(managerName(crew, member)) : '',
+      ].filter(Boolean);
+      // And, for a session that leads others, what changed among them.
+      const full = this.forManager(crew, name, `${REQUEST_HEADER(n, from)}\n${body}${notes.length > 0 ? `\n\n${notes.join('\n')}` : ''}`);
       const delivery: Delivery = { to: name, agentId, status: 'queued', at: now, ...(talk ? { talk } : {}) };
       if (!agentId) Object.assign(delivery, { status: 'failed', reason: 'no session' });
       else {
-        const queued = this.enqueue(agentId, full, { crew: crew.id, n });
+        const queued = this.enqueue(agentId, full.text, { crew: crew.id, n });
         if (queued.ok) {
           delivery.commandId = queued.command.id;
           if (member?.talkNote) delete member.talkNote;
           if (member?.pathsNote) delete member.pathsNote;
-          toLead?.done();
+          if (member?.reportsToNote) delete member.reportsToNote;
+          full.done();
         } else Object.assign(delivery, { status: 'failed', reason: queued.error });
       }
       request.deliveries.push(delivery);
     }
     crew.requests = [...(crew.requests ?? []), request].slice(-KEPT_REQUESTS);
-    this.log(`team «${crew.name}»: richiesta #${n} da ${from} a ${targets.join(', ')}`);
+    this.log(`team «${crew.name}»: richiesta #${n} da ${from} a ${targets.join(', ')}${parent !== undefined ? ` (per la #${parent})` : ''}`);
     this.changed(crew);
     return { ok: true, n, to: targets };
   }
 
-  /** send_request of the Claude lead. */
-  requestFromLead(agentId: string, to: readonly string[], text: string, now = Date.now()): Result<{ n: number; to: string[] }> {
+  /**
+   * send_request of a session of a team: the Claude lead, or a member others report to, to the members that report
+   * to it. The request is part of the one the session works on.
+   */
+  requestFrom(agentId: string, to: readonly string[], text: string, now = Date.now()): Result<{ n: number; to: string[] }> {
     const me = this.whoami(agentId);
-    if (!me || me.role !== 'lead') return { ok: false, error: 'only the lead of a team can send requests' };
-    return this.request(me.crew.id, to, text, me.name, now);
+    if (!me || (me.role === 'member' && this.reportsNames(me.crew, me.name).length === 0)) {
+      return { ok: false, error: 'only the lead of a team, or a member others report to, can send requests' };
+    }
+    return this.request(me.crew.id, to, text, me.name, now, this.workingOn(me.crew, agentId));
   }
 
   /**
-   * ask_lead of a member that answers: a question about the request it is working on (the last one it got). A
-   * Claude lead gets it in its queue; when you lead, it waits in the panel of the team.
+   * ask_lead of a member that answers: a question about the request it is working on (the last one it got), to
+   * whoever sent it. A session (the Claude lead, or a member it reports to) gets it in its queue; a request of yours
+   * has it wait for you in the panel of the team.
    */
   question(agentId: string, text: string, now = Date.now()): Result<{ n?: number; to: string }> {
     const me = this.whoami(agentId);
@@ -380,14 +489,13 @@ export class Crews {
     if (!found) return { ok: false, error: 'you have had no request yet: there is nothing to ask about' };
     const { request, delivery } = found;
     const question: NonNullable<Delivery['questions']>[number] = { text: clip(body, QUESTION_MAX), at: now, status: 'shown' };
-    // The question goes back to whoever sent the request: the Claude lead, or you.
-    const askedByLead = crew.lead.kind === 'claude' && request.from === crew.lead.name;
-    const to = askedByLead ? request.from : 'the user';
-    if (askedByLead) {
-      const lead = crew.agents.lead;
-      const text = this.forLead(crew, `${QUESTION_HEADER(request.n, me.name)}\n${body}`);
-      const queued = lead ? this.enqueue(lead, text.text, { crew: crew.id, n: request.n }) : { ok: false as const, error: 'no session' };
-      if (!queued.ok) return { ok: false, error: `the question did not reach the lead: ${queued.error}` };
+    // The question goes back to whoever sent the request: a session of the team, or you.
+    const asker = request.from === 'the user' ? undefined : this.agentOf(crew, request.from);
+    const to = asker ? request.from : 'the user';
+    if (asker) {
+      const text = this.forManager(crew, request.from, `${QUESTION_HEADER(request.n, me.name)}\n${body}`);
+      const queued = this.enqueue(asker, text.text, { crew: crew.id, n: request.n });
+      if (!queued.ok) return { ok: false, error: `the question did not reach ${request.from}: ${queued.error}` };
       text.done();
       Object.assign(question, { status: 'queued', commandId: queued.command.id });
     }
@@ -405,15 +513,25 @@ export class Crews {
     const open = (crew.requests ?? []).flatMap((request) => request.deliveries.filter((delivery) => OPEN.includes(delivery.status)).map((delivery) => ({ n: request.n, delivery })));
     const doing = (name: string, id: string | undefined): string => {
       const mine = open.filter((item) => item.delivery.to === name);
-      const requests = mine.length ? `; requests: ${mine.map((item) => `#${item.n} ${item.delivery.status === 'working' ? 'in progress' : 'waiting for its turn'}`).join(', ')}` : '';
+      const status = (delivery: Delivery): string => (delivery.status === 'working' ? 'in progress' : delivery.status === 'delegated' ? 'passed to its members, waiting for their work' : 'waiting for its turn');
+      const requests = mine.length ? `; requests: ${mine.map((item) => `#${item.n} ${status(item.delivery)}`).join(', ')}` : '';
       return `${stateText(id ? this.agent(id) : undefined)}${requests}`;
     };
+    const up = me.member?.reportsTo;
+    const who =
+      me.role === 'lead'
+        ? 'the lead'
+        : up !== undefined
+          ? `a member that reports to ${up}${me.talk === 'twoway' ? ' and answers it' : ''}`
+          : `a member${me.talk === 'twoway' ? ' that answers its lead' : ''}`;
+    const mine = this.reportsNames(crew, me.name);
+    const levels = hasLevels(crew);
     const lines = [
-      `Team "${crew.name}", in ${crew.cwd}. You are ${me.name}, ${me.role === 'lead' ? 'the lead' : `a member${me.talk === 'twoway' ? ' that answers its lead' : ''}`}.`,
+      `Team "${crew.name}", in ${crew.cwd}. You are ${me.name}, ${who}.${mine.length > 0 && (levels || me.role === 'member') ? ` Members that report to you: ${mine.join(', ')}.` : ''}`,
       crew.lead.kind === 'claude' ? `Lead: ${crew.lead.name} — ${doing(crew.lead.name, crew.agents.lead)}` : 'Lead: the user, from the Forchetta app.',
       'Members:',
       ...crew.members.map((member) => {
-        const talk = `${effectiveTalk(crew, member) === 'twoway' ? 'answers' : 'executes only'}${member.reviews ? ', reviews' : ''}`;
+        const talk = `${member.reportsTo !== undefined ? `reports to ${member.reportsTo}, ` : ''}${effectiveTalk(crew, member) === 'twoway' ? 'answers' : 'executes only'}${member.reviews ? ', reviews' : ''}`;
         const files = member.paths ? ` — files: ${pathsText(member.paths)}` : '';
         return `- ${member.name} (${talk}): ${flat(member.role)}${files} — works ${this.placeText(crew, member)} — now: ${doing(member.name, crew.agents[member.name])}`;
       }),
@@ -477,7 +595,7 @@ export class Crews {
     if (checked.paths) member.paths = checked.paths;
     else delete member.paths;
     member.pathsNote = true;
-    this.noteForLead(crew, checked.paths ? `${name} now works only on ${pathsText(checked.paths)}` : `${name} no longer has files of its own`);
+    this.noteAbove(crew, member, checked.paths ? `${name} now works only on ${pathsText(checked.paths)}` : `${name} no longer has files of its own`);
     this.log(`team «${crew.name}»: file di ${name} ${checked.paths ? `ora ${pathsText(checked.paths)}` : 'tolti'}`);
     this.changed(crew);
     return { ok: true, ...(checked.paths ? { paths: checked.paths } : {}) };
@@ -583,18 +701,21 @@ export class Crews {
     for (const request of crew.requests ?? []) {
       for (const delivery of request.deliveries) {
         if (delivery.commandId === command.id) {
-          if (delivery.status === 'done') return;
+          if (delivery.status === 'done' || delivery.status === 'delegated') return;
           const status = deliveryStatus(command);
           if (delivery.status === status && delivery.reason === command.reason) return;
           delivery.status = status;
           delivery.reason = status === 'working' ? undefined : command.reason;
           delivery.at = now;
+          // Cancelled or failed: a request passed on that waited only on this one may be over.
+          this.settle(crew, undefined, now);
           return this.changed(crew);
         }
         if (delivery.reply?.commandId === command.id) {
           const status = passageStatus(command);
           if (delivery.reply.status === status) return;
           delivery.reply = { ...delivery.reply, status, ...(status === 'failed' ? { reason: command.reason } : {}) };
+          this.settle(crew, undefined, now);
           return this.changed(crew);
         }
         const question = delivery.questions?.find((candidate) => candidate.commandId === command.id);
@@ -602,6 +723,7 @@ export class Crews {
           const status = passageStatus(command);
           if (question.status === status) return;
           question.status = status;
+          this.settle(crew, undefined, now);
           return this.changed(crew);
         }
       }
@@ -610,8 +732,9 @@ export class Crews {
 
   /**
    * The hooks of a session of a team: the Stop after it took a request ends that request, with its last message,
-   * which goes back to a Claude lead that asked when the member answers; a StopFailure, or the end of the session,
-   * fails it.
+   * which goes back to the session that asked when the member answers; a request it passed on to its own members
+   * waits for their work instead (delegated). A StopFailure fails the request it was working on, the end of the
+   * session every request it had open.
    */
   hook(agent: Agent, payload: HookPayload, now = Date.now()): void {
     const crewId = agent.team?.crew;
@@ -625,17 +748,26 @@ export class Crews {
     if (!crew?.requests) return;
     if (event !== 'Stop' && event !== 'StopFailure' && event !== 'SessionEnd') return;
     let changed = false;
+    let ended = false;
+    const message = payload.last_assistant_message ? clip(payload.last_assistant_message, ANSWER_MAX) : undefined;
     for (const request of crew.requests) {
       for (const delivery of request.deliveries) {
-        if (delivery.agentId !== agent.id || (delivery.status !== 'working' && delivery.status !== 'sent')) continue;
+        if (delivery.agentId !== agent.id) continue;
+        const taken = delivery.status === 'working' || delivery.status === 'sent';
+        if (!taken && !(delivery.status === 'delegated' && event === 'SessionEnd')) continue;
         if (event === 'Stop') {
           // Since it took the request (delivery.at), did it ask its lead something? Then its turn ends waiting for
           // the answer, and that message would tell the lead nothing new: the answer comes with the next request.
           const asked = (delivery.questions ?? []).some((question) => question.at >= delivery.at);
-          delivery.status = 'done';
           delivery.reason = undefined;
-          if (payload.last_assistant_message) delivery.answer = clip(payload.last_assistant_message, ANSWER_MAX);
-          if (!asked) this.answerBack(crew, request, delivery);
+          if (message) delivery.answer = message;
+          ended = true;
+          // It passed part of the work to its own members: done when their work is.
+          if (this.pending(crew, request.n, delivery.to, true)) delivery.status = 'delegated';
+          else {
+            delivery.status = 'done';
+            if (!asked) this.answerBack(crew, request, delivery);
+          }
         } else {
           delivery.status = 'failed';
           delivery.reason = event === 'SessionEnd' ? 'the session ended' : 'the turn ended with an error';
@@ -644,43 +776,99 @@ export class Crews {
         changed = true;
       }
     }
+    if (event === 'Stop') {
+      // A turn that took no request worked on what came back (an answer, a question): its message is the latest
+      // word on the requests it passed on.
+      if (!ended && message) {
+        for (const request of crew.requests) for (const delivery of request.deliveries) if (delivery.agentId === agent.id && delivery.status === 'delegated') delivery.answer = message;
+      }
+      if (this.settle(crew, agent.id, now)) changed = true;
+    }
     if (changed) {
       this.changed(crew);
       this.wake(crew.id);
     }
   }
 
-  /** The answer of a member ⇄ to a request of the Claude lead goes into the queue of the lead. */
+  /**
+   * Whether the work a session passed on, while it worked on request n, is still going: a request of its own with n
+   * as parent still open, or an answer or a question on its way to it. `own`: at its own Stop, what was pasted in
+   * its terminal before it (sent) has been read.
+   */
+  private pending(crew: Crew, n: number, name: string, own: boolean): boolean {
+    const coming = (status: string | undefined): boolean => status === 'queued' || status === 'held' || (status === 'sent' && !own);
+    for (const request of crew.requests ?? []) {
+      if (request.parent !== n || request.from !== name) continue;
+      for (const delivery of request.deliveries) {
+        if (OPEN.includes(delivery.status) || coming(delivery.reply?.status)) return true;
+        if (delivery.questions?.some((question) => coming(question.status))) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Whether a session is in the middle of a turn: it will finish what it passed on at its own Stop. */
+  private busy(agentId: string | undefined): boolean {
+    const state = agentId ? this.agent(agentId)?.state : undefined;
+    return state === 'working' || state === 'compacting' || state === 'waiting';
+  }
+
+  /**
+   * Ends the requests passed on whose work is over: their answer (the last message of the session about them) goes
+   * back like any other. Again, until nothing changes: a senior done can end the request of the lead above it.
+   * `stopped`: the session whose Stop this is. Whether anything ended.
+   */
+  private settle(crew: Crew, stopped: string | undefined, now = Date.now()): boolean {
+    let changed = false;
+    for (let again = true; again; ) {
+      again = false;
+      for (const request of crew.requests ?? []) {
+        for (const delivery of request.deliveries) {
+          if (delivery.status !== 'delegated') continue;
+          const own = delivery.agentId === stopped;
+          if (this.pending(crew, request.n, delivery.to, own) || (!own && this.busy(delivery.agentId))) continue;
+          delivery.status = 'done';
+          delivery.at = now;
+          this.answerBack(crew, request, delivery);
+          this.log(`team «${crew.name}»: ${delivery.to} ha finito la #${request.n}, col lavoro passato ai suoi`);
+          again = changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  /** The answer of a member ⇄ to a request of a session of the team goes into the queue of that session. */
   private answerBack(crew: Crew, request: CrewRequest, delivery: Delivery): void {
-    if (crew.lead.kind !== 'claude' || request.from !== crew.lead.name) return;
+    if (request.from === 'the user') return;
     const member = crew.members.find((candidate) => candidate.name === delivery.to);
     // The → / ⇄ of when the request left: a change counts from the next request.
     if (!member || (delivery.talk ?? effectiveTalk(crew, member)) !== 'twoway') return;
-    const lead = crew.agents.lead;
-    if (!lead) return;
-    // The lead waits for this answer (wait_for_answers): it is held for it, and given there.
+    const asker = this.agentOf(crew, request.from);
+    if (!asker) return;
+    // The session waits for this answer (wait_for_answers): it is held for it, and given there.
     if (this.waiterFor(crew.id, request.n)) {
       delivery.reply = { status: 'held' };
       return;
     }
-    this.sendAnswer(crew, request, delivery, lead);
+    this.sendAnswer(crew, request, delivery, asker);
   }
 
-  /** The answer of a member into the queue of the lead, as a new prompt. */
-  private sendAnswer(crew: Crew, request: CrewRequest, delivery: Delivery, lead: string): void {
-    const text = this.forLead(crew, `${ANSWER_HEADER(request.n, delivery.to)}\n${delivery.answer?.trim() || '(it ended its turn with no message)'}`);
-    const queued = this.enqueue(lead, text.text, { crew: crew.id, n: request.n });
+  /** The answer of a member into the queue of the session that asked, as a new prompt. */
+  private sendAnswer(crew: Crew, request: CrewRequest, delivery: Delivery, asker: string): void {
+    const text = this.forManager(crew, request.from, `${ANSWER_HEADER(request.n, delivery.to)}\n${delivery.answer?.trim() || '(it ended its turn with no message)'}`);
+    const queued = this.enqueue(asker, text.text, { crew: crew.id, n: request.n });
     if (queued.ok) text.done();
     delivery.reply = queued.ok ? { status: 'queued', commandId: queued.command.id } : { status: 'failed', reason: queued.error };
-    this.log(`team «${crew.name}»: risposta di ${delivery.to} alla #${request.n} ${queued.ok ? 'in coda per il capo' : `non consegnata: ${queued.error}`}`);
+    this.log(`team «${crew.name}»: risposta di ${delivery.to} alla #${request.n} ${queued.ok ? `in coda per ${request.from}` : `non consegnata: ${queued.error}`}`);
   }
 
-  /** Whether a wait is of this lead. */
+  /** Whether a wait is of this session. */
   waitOf(id: string, agentId: string): boolean {
-    return this.waiters.get(id)?.lead === agentId;
+    return this.waiters.get(id)?.by === agentId;
   }
 
-  /** The wait of the lead that holds the answers of this request, if any. */
+  /** The wait that holds the answers of this request, if any. */
   private waiterFor(crewId: string, n: number, now = Date.now()): Waiter | undefined {
     return [...this.waiters.values()].find((waiter) => waiter.crewId === crewId && waiter.requests.has(n) && now < waiter.until);
   }
@@ -696,12 +884,15 @@ export class Crews {
   }
 
   /**
-   * wait_for_answers of the Claude lead: from now until `minutes` pass, the answers of these requests (all its
-   * requests still open, when none is given) are held for it instead of going into its queue.
+   * wait_for_answers of the Claude lead, or of a member others report to: from now until `minutes` pass, the
+   * answers of these requests (all its requests still open, when none is given) are held for it instead of going
+   * into its queue.
    */
   startWait(agentId: string, requests: readonly number[] | undefined, minutes: number | undefined, now = Date.now()): Result<{ id: string; requests: number[] }> {
     const me = this.whoami(agentId);
-    if (!me || me.role !== 'lead') return { ok: false, error: 'only the lead of a team can wait for answers' };
+    if (!me || (me.role === 'member' && this.reportsNames(me.crew, me.name).length === 0 && !(me.crew.requests ?? []).some((request) => request.from === me.name))) {
+      return { ok: false, error: 'only the lead of a team, or a member others report to, can wait for answers' };
+    }
     const crew = me.crew;
     const mine = (crew.requests ?? []).filter((request) => request.from === me.name);
     const chosen = requests?.length
@@ -713,7 +904,7 @@ export class Crews {
     const waiter: Waiter = {
       id,
       crewId: crew.id,
-      lead: agentId,
+      by: agentId,
       requests: new Set(chosen.map((request) => request.n)),
       until: now + span,
       listeners: [],
@@ -722,7 +913,7 @@ export class Crews {
     };
     waiter.timer.unref?.();
     this.waiters.set(id, waiter);
-    this.log(`team «${crew.name}»: il capo aspetta le risposte di ${[...waiter.requests].map((n) => `#${n}`).join(', ') || 'nessuna richiesta'}`);
+    this.log(`team «${crew.name}»: ${me.name} aspetta le risposte di ${[...waiter.requests].map((n) => `#${n}`).join(', ') || 'nessuna richiesta'}`);
     return { ok: true, id, requests: [...waiter.requests] };
   }
 
@@ -767,7 +958,7 @@ export class Crews {
       });
     clearTimeout(waiter.timer);
     this.waiters.delete(id);
-    this.log(`team «${crew.name}»: attesa del capo finita, ${answers.filter((answer) => answer.answer).length} risposte${open.length ? `, ${open.length} ancora aperte` : ''}`);
+    this.log(`team «${crew.name}»: attesa finita, ${answers.filter((answer) => answer.answer).length} risposte${open.length ? `, ${open.length} ancora aperte` : ''}`);
     this.changed(crew);
     return { ok: true, done: true, answers, open };
   }
@@ -778,16 +969,16 @@ export class Crews {
     return now >= waiter.until || deliveries.every((delivery) => !OPEN.includes(delivery.status));
   }
 
-  /** A wait that nobody collected: its held answers go to the lead as prompts. */
+  /** A wait that nobody collected: its held answers go to the session that waited, as prompts. */
   private release(id: string): void {
     const waiter = this.waiters.get(id);
     if (!waiter) return;
     this.waiters.delete(id);
     const crew = this.crews.get(waiter.crewId);
-    if (!crew || crew.lead.kind !== 'claude' || !crew.agents.lead) return;
+    if (!crew) return;
     for (const request of crew.requests ?? []) {
       if (!waiter.requests.has(request.n)) continue;
-      for (const delivery of request.deliveries) if (delivery.reply?.status === 'held') this.sendAnswer(crew, request, delivery, crew.agents.lead);
+      for (const delivery of request.deliveries) if (delivery.reply?.status === 'held') this.sendAnswer(crew, request, delivery, waiter.by);
     }
     this.changed(crew);
   }
@@ -810,7 +1001,12 @@ export class Crews {
     if (effectiveTalk(crew, member) === talk) return { ok: true, changes: [] };
     member.talk = talk;
     member.talkNote = true;
-    this.noteForLead(crew, talk === 'twoway' ? `${name} now answers you` : `${name} now executes only: it will not answer`);
+    this.noteAbove(
+      crew,
+      member,
+      talk === 'twoway' ? `${name} now answers you` : `${name} now executes only: it will not answer`,
+      talk === 'twoway' ? `${name} now answers ${member.reportsTo}` : `${name} now executes only`,
+    );
     this.log(`team «${crew.name}»: ${name} ora ${talk === 'twoway' ? 'risponde' : 'esegue e basta'}, dalla prossima richiesta`);
     this.changed(crew);
     const agentId = crew.agents[name];
@@ -819,7 +1015,8 @@ export class Crews {
 
   /**
    * A member out of the team: no more requests, the ones still in its queue cancelled (`cancel`), its box out of
-   * the group. Its session goes on: Forchetta never ends a session, /exit does.
+   * the group; the members that reported to it now report to the one above it, and their next request tells them.
+   * Its session goes on: Forchetta never ends a session, /exit does.
    */
   removeMember(crewId: string, name: string, cancel: (agentId: string, commandId: string) => void): Result<{ agentId?: string }> {
     const crew = this.crews.get(crewId);
@@ -837,22 +1034,48 @@ export class Crews {
     }
     crew.members = crew.members.filter((candidate) => candidate !== member);
     delete crew.agents[name];
-    this.noteForLead(crew, `${name} is no longer in the team`);
-    this.log(`team «${crew.name}»: ${name} tolto dal team (la sessione resta)`);
+    const moved = reportsOf(crew.members, name);
+    for (const report of moved) {
+      if (member.reportsTo !== undefined) report.reportsTo = member.reportsTo;
+      else delete report.reportsTo;
+      report.reportsToNote = true;
+    }
+    const names = moved.map((report) => report.name).join(', ');
+    this.noteAbove(
+      crew,
+      member,
+      `${name} is no longer in the team${moved.length > 0 ? `; ${names} now report${moved.length === 1 ? 's' : ''} to you` : ''}`,
+      `${name} is no longer in the team${moved.length > 0 ? `; ${names} now report${moved.length === 1 ? 's' : ''} to ${member.reportsTo}` : ''}`,
+    );
+    this.settle(crew, undefined);
+    this.log(`team «${crew.name}»: ${name} tolto dal team (la sessione resta)${moved.length > 0 ? `; ${names} ora sotto ${managerName(crew, member)}` : ''}`);
     this.changed(crew);
     return { ok: true, ...(agentId ? { agentId } : {}) };
   }
 
-  /** A new member: checked with the rest of the team (names, at most 6), then started like the others. */
-  async addMember(crewId: string, input: unknown, start: Starter = this.spawn): Promise<Result<{ agentId: string }>> {
+  /**
+   * A new member: checked with the rest of the team (names, at most 6), then started like the others. It can report
+   * to the lead, or to a member whose session started with the tools to lead (the tools of a session are fixed when
+   * it starts).
+   */
+  async addMember(crewId: string, input: unknown, start: Starter = this.spawn): Promise<Result<{ agentId: string; error?: string }>> {
     const crew = this.crews.get(crewId);
     if (!crew) return { ok: false, error: 'unknown team' };
     const checked = cleanCrewSpec({ ...crew, members: [...crew.members, input] });
     if ('error' in checked) return { ok: false, error: checked.error };
     const member: CrewMemberSpec = checked.spec.members.at(-1)!;
+    const manager = member.reportsTo !== undefined ? crew.members.find((candidate) => candidate.name === member.reportsTo) : undefined;
+    if (manager && !manager.canLead) {
+      const able = crew.members.filter((candidate) => candidate.canLead).map((candidate) => candidate.name);
+      return {
+        ok: false,
+        error: `${manager.name} started without the tools to give requests: put ${member.name} under ${crew.lead.kind === 'claude' ? crew.lead.name : 'you'}${able.length > 0 ? ` or under ${able.join(', ')}` : ''}`,
+      };
+    }
     // No worktree where Claude Code could not make one: the new member shares the folder.
     if (effectiveWorktree(crew, member) && this.noWorktrees(crew.cwd)) member.worktree = false;
     const spec: CrewSpec = { ...crew, members: [...crew.members, member] };
+    const skillsNote = await this.fetchSkills([member]);
     const result = await start(
       { cwd: crew.cwd, model: member.model, mode: member.mode, worktree: this.worktreeOf(crew, member) },
       {
@@ -860,15 +1083,22 @@ export class Crews {
         name: member.name,
         team: { label: member.name, role: shortRole(member.role), talk: effectiveTalk(spec, member), group: crew.name, crew: crew.id },
         teamTools: teamToolsFor(spec, member),
+        pluginDir: this.pluginOf(crew, member.name, member.skills),
       },
     );
     if (!result.ok) return { ok: false, error: result.error };
     crew.members.push(member);
     crew.agents[member.name] = result.agentId;
-    this.noteForLead(crew, `${member.name} joined the team (${effectiveTalk(crew, member) === 'twoway' ? 'it answers you' : 'it executes only'}): ${flat(member.role)}`);
+    const how = effectiveTalk(crew, member) === 'twoway' ? 'it answers you' : 'it executes only';
+    this.noteAbove(
+      crew,
+      member,
+      `${member.name} joined the team${hasLevels(crew) ? ' and reports to you' : ''} (${how}): ${flat(member.role)}${member.relation ? ` — how you work together: ${flat(member.relation)}` : ''}`,
+      `${member.name} joined the team under ${member.reportsTo}: ${flat(member.role)}`,
+    );
     this.log(`team «${crew.name}»: ${member.name} aggiunto`);
     this.changed(crew);
-    return { ok: true, agentId: result.agentId };
+    return { ok: true, agentId: result.agentId, ...(skillsNote ? { error: skillsNote } : {}) };
   }
 
   /** How a session of a team starts (spawnSession): set by the daemon, for the members that start later. */
@@ -894,13 +1124,21 @@ export class Crews {
     const agentIds: string[] = [];
     const errors: string[] = [];
     let first: string | undefined;
+    // The skills of everyone, fetched once before anyone starts: a session gets its plugin when it starts.
+    const skillsNote = await this.fetchSkills([...(crew.lead.kind === 'claude' ? [crew.lead] : []), ...crew.members]);
 
     if (crew.lead.kind === 'claude') {
       const lead = crew.lead;
       first = lead.name;
       const result = await start(
         { cwd: crew.cwd, model: lead.model, mode: lead.mode, worktree: lead.worktree && !noGit && !waitTrust ? worktreeName(crew.id, crew.name, lead.name) : undefined },
-        { system: leadPrompt(crew), name: lead.name, team: this.place(crew, { label: lead.name, role: shortRole(lead.role), lead: true }), teamTools: teamToolsFor(crew, 'lead') },
+        {
+          system: leadPrompt(crew),
+          name: lead.name,
+          team: this.place(crew, { label: lead.name, role: shortRole(lead.role), lead: true }),
+          teamTools: teamToolsFor(crew, 'lead'),
+          pluginDir: this.pluginOf(crew, lead.name, lead.skills),
+        },
       );
       if (result.ok) {
         crew.agents.lead = result.agentId;
@@ -929,7 +1167,7 @@ export class Crews {
         ok: true,
         crewId: crew.id,
         agentIds,
-        error: `Claude Code asks, in the terminal of ${first}, whether you trust this folder: answer "Yes, I trust this folder" there, and the rest of the team starts${wantsWorktrees && !noGit ? ', each member in its worktree' : ''}`,
+        error: `Claude Code asks, in the terminal of ${first}, whether you trust this folder: answer "Yes, I trust this folder" there, and the rest of the team starts${wantsWorktrees && !noGit ? ', each member in its worktree' : ''}${skillsNote ? `. ${skillsNote}` : ''}`,
       };
     }
     if (agentIds.length === 0 && errors.length > 0) return { ok: false, error: errors[0]! };
@@ -941,7 +1179,7 @@ export class Crews {
     this.save(crew);
     const why = noGit ? 'the folder is not in a git repository: the members share it, with no worktree' : undefined;
     this.log(`team «${crew.name}» creato: ${agentIds.length} sessioni${errors.length ? `, ${errors.length} non partite` : ''}${why ? ', senza worktree (non è un repo git)' : ''}`);
-    const notes = [...(errors.length ? [`not started: ${errors.join('; ')}`] : []), ...(why ? [why] : [])];
+    const notes = [...(errors.length ? [`not started: ${errors.join('; ')}`] : []), ...(why ? [why] : []), ...(skillsNote ? [skillsNote] : [])];
     return { ok: true, crewId: crew.id, agentIds, ...(notes.length ? { error: notes.join('. ') } : {}) };
   }
 
@@ -976,10 +1214,13 @@ export class Crews {
           name: member.name,
           team: this.place(crew, { label: member.name, role: shortRole(member.role), talk: effectiveTalk(crew, member) }),
           teamTools: teamToolsFor(crew, member),
+          pluginDir: this.pluginOf(crew, member.name, member.skills),
         },
       );
       if (result.ok) {
         crew.agents[member.name] = result.agentId;
+        // The members that report to it later need it to have started with the tools to lead.
+        if (teamToolsFor(crew, member).includes('send_request')) member.canLead = true;
         agentIds.push(result.agentId);
       } else errors.push(`${member.name}: ${result.error}`);
     }
@@ -1054,7 +1295,7 @@ export async function crewApi(crews: Crews, route: string, input: Record<string,
     }
     case 'request': {
       const to = Array.isArray(input.to) ? input.to.filter((name): name is string => typeof name === 'string') : typeof input.to === 'string' ? [input.to] : [];
-      return answer(crews.requestFromLead(agentId, to, typeof input.text === 'string' ? input.text : ''));
+      return answer(crews.requestFrom(agentId, to, typeof input.text === 'string' ? input.text : ''));
     }
     case 'question':
       return answer(crews.question(agentId, typeof input.text === 'string' ? input.text : ''));
@@ -1078,7 +1319,8 @@ export async function crewApi(crews: Crews, route: string, input: Record<string,
 
 /**
  * The templates of teams you saved (var/crew-templates.json), after the ones that come with Forchetta. Saving one
- * with the name of another replaces it; the ones of Forchetta stay as they are.
+ * with the name of another replaces it. From the app (`override`), one with the name of a template of Forchetta is
+ * your version of it, shown in its place until you delete it; a session cannot do that.
  */
 export class CrewTemplates {
   private saved: CrewTemplate[] = [];
@@ -1100,19 +1342,26 @@ export class CrewTemplates {
   }
 
   list(): CrewTemplate[] {
-    return [...BUILTIN_TEMPLATES, ...this.saved];
+    const mine = (name: string): CrewTemplate | undefined => this.saved.find((other) => other.name.toLowerCase() === name.toLowerCase());
+    return [
+      ...BUILTIN_TEMPLATES.map((builtin) => {
+        const changed = mine(builtin.name);
+        return changed ? { ...changed, builtin: true, modified: true } : builtin;
+      }),
+      ...this.saved.filter((template) => !BUILTIN_TEMPLATES.some((builtin) => builtin.name.toLowerCase() === template.name.toLowerCase())),
+    ];
   }
 
   /**
    * Saves a template; one of yours with the same name is replaced, unless `replace` is false (a session that saves
    * one must say it means to replace it).
    */
-  save(input: unknown, options: { replace?: boolean } = {}): Result<{ name: string; replaced: boolean }> {
+  save(input: unknown, options: { replace?: boolean; override?: boolean } = {}): Result<{ name: string; replaced: boolean }> {
     const checked = cleanTemplate(input);
     if ('error' in checked) return { ok: false, error: checked.error };
     const template = checked.template;
     const key = template.name.toLowerCase();
-    if (BUILTIN_TEMPLATES.some((builtin) => builtin.name.toLowerCase() === key)) return { ok: false, error: `"${template.name}" is a template of Forchetta: give yours another name` };
+    if (!options.override && BUILTIN_TEMPLATES.some((builtin) => builtin.name.toLowerCase() === key)) return { ok: false, error: `"${template.name}" is a template of Forchetta: give yours another name` };
     const replaced = this.saved.some((other) => other.name.toLowerCase() === key);
     if (replaced && options.replace === false) {
       return { ok: false, error: `a template "${template.name}" already exists: give this one another name, or replace that one with replace: true if the user asked to change it` };
@@ -1148,6 +1397,74 @@ export class CrewTemplates {
   }
 }
 
+/**
+ * The presets of agents of the studio: the ones of Forchetta, each replaced by your version when you changed it,
+ * then yours (var/crew-roles.json). Deleting your version of one of Forchetta restores it.
+ */
+export class RolePresets {
+  private saved: RolePreset[] = [];
+
+  constructor(
+    private readonly file: string | undefined,
+    private readonly log: (message: string) => void = () => {},
+  ) {
+    if (!file || !existsSync(file)) return;
+    try {
+      const raw = JSON.parse(readFileSync(file, 'utf8')) as unknown;
+      for (const item of Array.isArray(raw) ? raw : []) {
+        const checked = cleanRolePreset(item);
+        if ('preset' in checked) this.saved.push(checked.preset);
+      }
+    } catch {
+      this.log('preset dello studio illeggibili, ignorati');
+    }
+  }
+
+  private static same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
+  list(): RolePreset[] {
+    const builtin = (name: string): boolean => BUILTIN_ROLES.some((role) => RolePresets.same(role.name, name));
+    return [
+      ...BUILTIN_ROLES.map((role) => {
+        const changed = this.saved.find((preset) => RolePresets.same(preset.name, role.name));
+        return changed ? { ...changed, builtin: true, modified: true } : role;
+      }),
+      ...this.saved.filter((preset) => !builtin(preset.name)),
+    ];
+  }
+
+  /** Saves a preset, in place of one with its name; `previous`: the name it had, when it was renamed. */
+  save(input: unknown, previous?: string): Result<{ name: string }> {
+    const checked = cleanRolePreset(input);
+    if ('error' in checked) return { ok: false, error: checked.error };
+    const preset = checked.preset;
+    const gone = (name: string): boolean => RolePresets.same(name, preset.name) || (previous !== undefined && RolePresets.same(name, previous) && !BUILTIN_ROLES.some((role) => RolePresets.same(role.name, previous)));
+    this.saved = [...this.saved.filter((other) => !gone(other.name)), preset];
+    this.write();
+    return { ok: true, name: preset.name };
+  }
+
+  /** Deletes one of yours; for one of Forchetta you changed, brings back theirs. */
+  delete(name: string): Result {
+    const before = this.saved.length;
+    this.saved = this.saved.filter((other) => !RolePresets.same(other.name, name));
+    if (this.saved.length === before) return { ok: false, error: 'unknown preset' };
+    this.write();
+    return { ok: true };
+  }
+
+  private write(): void {
+    if (!this.file) return;
+    try {
+      const temporary = `${this.file}.${process.pid}`;
+      writeFileSync(temporary, `${JSON.stringify(this.saved, null, 2)}\n`, { mode: 0o600 });
+      renameSync(temporary, this.file);
+    } catch (error) {
+      this.log(`preset dello studio non salvati: ${String(error)}`);
+    }
+  }
+}
+
 /** A person of a template in a line: its name, then its model, its permissions and how it works in the team. */
 function personLine(crew: Pick<CrewTemplate, 'talk' | 'worktrees'>, person: CrewMemberSpec | Extract<CrewTemplate['lead'], { kind: 'claude' }>, member: boolean): string {
   const traits = [
@@ -1157,6 +1474,8 @@ function personLine(crew: Pick<CrewTemplate, 'talk' | 'worktrees'>, person: Crew
     ...(member && effectiveWorktree(crew, person as CrewMemberSpec) ? ['own worktree'] : []),
     ...(member && (person as CrewMemberSpec).reviews ? ['reviews'] : []),
     ...(member && (person as CrewMemberSpec).paths ? [`files: ${pathsText((person as CrewMemberSpec).paths!)}`] : []),
+    ...(member && (person as CrewMemberSpec).reportsTo ? [`reports to ${(person as CrewMemberSpec).reportsTo}`] : []),
+    ...(person.skills ? [`skills: ${person.skills.join(', ')}`] : []),
   ].filter(Boolean);
   return `${person.name}${traits.length > 0 ? ` (${traits.join(', ')})` : ''}`;
 }

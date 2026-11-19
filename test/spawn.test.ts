@@ -127,7 +127,7 @@ describe('spawnSession', () => {
     const result = await spawnSession(
       { tmux, registry, claude: fake, log, shell: '/bin/bash', env: { PATH: '/usr/bin:/bin', HOME: join(temp.dir, 'home') }, watchMs: 400, teamMcp: { command: '/n/node', args: ['/F/team-mcp.js'] } },
       { cwd: temp.dir, prompt: 'go', model: 'haiku' },
-      { system, name: 'tester', team, teamTools: ['team', 'ask_lead'] },
+      { system, name: 'tester', team, teamTools: ['team', 'ask_lead'], pluginDir: '/F/var/skills/agents/c1/tester' },
     );
     expect(result.ok).toBe(true);
     // Its place in the team is there before the session says hello.
@@ -143,12 +143,13 @@ describe('spawnSession', () => {
     const lines = readFileSync(out, 'utf8').trimEnd().split('\n');
     const agentId = (result as { agentId: string }).agentId;
     const mcpFile = join(paths.crewMcp, `${agentId}.json`);
-    expect(lines[0]).toBe('12');
+    expect(lines[0]).toBe('14');
     expect(lines.slice(1, 4)).toEqual(['[--model]', '[haiku]', '[--append-system-prompt]']);
     expect(lines.slice(4, 6).join('\n')).toBe(`[${system}]`);
-    // The tools of its team: its MCP configuration, allowed without asking; "--" closes the options that take several values.
-    expect(lines.slice(6, 14)).toEqual(['[--name]', '[tester]', '[--mcp-config]', `[${mcpFile}]`, '[--allowedTools]', '[mcp__forchetta]', '[--]', '[go]']);
-    expect(lines[14]).toBe('variabili:assente|assente');
+    // Its skills, a plugin for this session only; the tools of its team: its MCP configuration, allowed without
+    // asking; "--" closes the options that take several values.
+    expect(lines.slice(6, 16)).toEqual(['[--name]', '[tester]', '[--plugin-dir]', '[/F/var/skills/agents/c1/tester]', '[--mcp-config]', `[${mcpFile}]`, '[--allowedTools]', '[mcp__forchetta]', '[--]', '[go]']);
+    expect(lines[16]).toBe('variabili:assente|assente');
     expect(JSON.parse(readFileSync(mcpFile, 'utf8')).mcpServers.forchetta.env).toEqual({ FORCHETTA_AGENT: agentId, FORCHETTA_VAR: paths.varDir, FORCHETTA_TEAM_TOOLS: 'team,ask_lead' });
     expect(statSync(mcpFile).mode & 0o777).toBe(0o600);
     rmSync(mcpFile, { force: true });

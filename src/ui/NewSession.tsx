@@ -15,12 +15,12 @@ declare global {
   }
 }
 
-/** The folders of the sessions known, the most recent first. */
+/** The folders of the sessions known, the most recent first; not the worktrees Claude Code makes for a session. */
 export function recentFolders(agents: readonly Agent[], max = 6): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const agent of [...agents].sort((a, b) => b.lastEvent.at - a.lastEvent.at)) {
-    if (!agent.cwd || seen.has(agent.cwd)) continue;
+    if (!agent.cwd || seen.has(agent.cwd) || agent.cwd.includes('/.claude/worktrees/')) continue;
     seen.add(agent.cwd);
     out.push(agent.cwd);
     if (out.length === max) break;

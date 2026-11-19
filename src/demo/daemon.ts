@@ -5,13 +5,13 @@
 import type { Agent, GuardHold, SubagentStep } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
 import { addArtifact, artifactOf } from '../shared/artifacts.ts';
-import { cleanCrewSpec } from '../shared/crew.ts';
+import { cleanCrewSpec, reportsOf } from '../shared/crew.ts';
 import { subagentKey } from '../shared/present.ts';
 import { tmuxSessionName } from '../shared/tmux.ts';
 import { Attention } from '../daemon/attention.ts';
 import { Commander } from '../daemon/commands.ts';
 import { Conflicts, writtenFile } from '../daemon/conflicts.ts';
-import { crewApi, Crews, CrewTemplates } from '../daemon/crews.ts';
+import { crewApi, Crews, CrewTemplates, RolePresets } from '../daemon/crews.ts';
 import { changesOf } from '../daemon/diffs.ts';
 import { Guard } from '../daemon/guard.ts';
 import { Hub } from '../daemon/hub.ts';
@@ -72,6 +72,7 @@ export class DemoDaemon {
   readonly conflicts = new Conflicts({ hasGit: (dir) => existsSync(`${dir}/.git`) });
   readonly crews = new Crews(undefined);
   readonly templates = new CrewTemplates(undefined);
+  readonly roles = new RolePresets(undefined);
   readonly teams = new Teams(undefined);
   readonly patches = new Patches('/forchetta/var/patches');
   readonly guard: Guard;
@@ -172,7 +173,9 @@ export class DemoDaemon {
       crewThread: (crewId) => this.crews.thread(crewId),
       onCrewRequest: (crewId, to, text) => this.crews.request(crewId, to, text),
       templates: () => this.templates.list(),
-      onTemplate: (message) => (message.type === 'deleteCrewTemplate' ? this.templates.delete(message.name) : this.templates.save(message.template)),
+      onTemplate: (message) => (message.type === 'deleteCrewTemplate' ? this.templates.delete(message.name) : this.templates.save(message.template, { override: true })),
+      roles: () => this.roles.list(),
+      onRole: (message) => (message.type === 'deleteRolePreset' ? this.roles.delete(message.name) : this.roles.save(message.preset, message.previous)),
       onCreateCrew: async (input) => {
         const checked = cleanCrewSpec(input);
         if ('error' in checked) return { ok: false, error: checked.error };
@@ -424,9 +427,10 @@ export class DemoDaemon {
     if (!me) return undefined;
     const call = async (route: string, body: Record<string, unknown>): Promise<Record<string, unknown>> => (await crewApi(this.crews, route, { agent: claude.id, ...body }, 1500)).body as Record<string, unknown>;
     return {
-      members: () => (me.role === 'lead' ? me.crew.members.map((member) => ({ name: member.name, answers: (member.talk ?? me.crew.talk) === 'twoway' })) : []),
+      // The members it gives requests to: those that report to it.
+      members: () => reportsOf(me.crew.members, me.role === 'lead' ? undefined : me.name).map((member) => ({ name: member.name, answers: (member.talk ?? me.crew.talk) === 'twoway' })),
       send: (to, text) => {
-        const result = this.crews.requestFromLead(claude.id, to, text);
+        const result = this.crews.requestFrom(claude.id, to, text);
         return result.ok ? { ok: true, n: result.n, to: result.to } : { ok: false, error: result.error };
       },
       wait: async (requests) => {

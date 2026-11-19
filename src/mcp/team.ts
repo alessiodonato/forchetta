@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { CREW_MAX_MEMBERS, CREW_NAME_MAX, MEMBER_NAME_MAX, MODELS, MODES, PATHS_MAX, ROLE_MAX, type TeamTool, TEMPLATE_TOOLS } from '../shared/crew.ts';
+import { CREW_MAX_MEMBERS, CREW_NAME_MAX, MEMBER_NAME_MAX, MODELS, MODES, PATHS_MAX, RELATION_MAX, ROLE_MAX, type TeamTool, TEMPLATE_TOOLS } from '../shared/crew.ts';
+import { SKILLS, SKILLS_PER_AGENT_MAX } from '../shared/skills.ts';
 import { paths } from '../shared/paths.ts';
 import { VERSION } from '../shared/version.ts';
 
 // The tools of Forchetta for Claude Code: an MCP server on stdio (JSON-RPC 2.0, one message per line), started by
-// Claude Code for the lead of a team and for its members that answer, with the tools of the team, and for every
+// Claude Code for the lead of a team and for its members that answer or lead others, with the tools of the team, and for every
 // other session Forchetta starts, with the tools of the templates of teams (shared/mcp-config.ts writes the
 // configuration). It knows its session by FORCHETTA_AGENT and its tools by FORCHETTA_TEAM_TOOLS, and asks the
 // daemon, with the token of var/daemon.json, to do what a tool says: the daemon checks again who may do what.
@@ -21,17 +22,17 @@ export const TOOLS: Record<TeamTool, Tool> = {
   team: {
     name: 'team',
     description:
-      'Your team in Forchetta: who leads it, its members, what each one does, whether it answers its lead, and what each one is doing now (free, working, which requests wait for it).',
+      'Your team in Forchetta: who leads it, its members, who each one reports to, what each one does, whether it answers, and what each one is doing now (free, working, which requests wait for it).',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   send_request: {
     name: 'send_request',
     description:
-      'Give work to members of your team. Each one gets the request as a new prompt "Request #<n> from <you>:" as soon as its session is free: while it works the request waits in its queue, so you never need to wait for a member. A member that answers sends you its final message as a new prompt "Answer from <name> to request #<n>:"; a member that executes only does not. Write the request complete: the member sees only that.',
+      'Give work to the members of your team that report to you. Each one gets the request as a new prompt "Request #<n> from <you>:" as soon as its session is free: while it works the request waits in its queue, so you never need to wait for a member. A member that answers sends you its final message as a new prompt "Answer from <name> to request #<n>:"; a member that executes only does not. A member that leads others answers when their work is done too. Write the request complete: the member sees only that.',
     inputSchema: {
       type: 'object',
       properties: {
-        to: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'The names of the members, or ["all"] for every member.' },
+        to: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'The names of members that report to you, or ["all"] for all of them.' },
         request: { type: 'string', description: 'What to do, complete and on its own.' },
       },
       required: ['to', 'request'],
@@ -54,7 +55,7 @@ export const TOOLS: Record<TeamTool, Tool> = {
   ask_lead: {
     name: 'ask_lead',
     description:
-      'Ask your lead a question about the request you are working on, when you cannot go on without the answer. The lead gets it as a new prompt "Question from <you> about request #<n>:". Then end your turn: the answer reaches you as a new request.',
+      'Ask your lead (whoever sent you the request you are working on) a question about it, when you cannot go on without the answer. It gets it as a new prompt "Question from <you> about request #<n>:". Then end your turn: the answer reaches you as a new request.',
     inputSchema: {
       type: 'object',
       properties: { question: { type: 'string', description: 'The question, with what the lead needs to answer it.' } },
@@ -93,6 +94,7 @@ export const TOOLS: Record<TeamTool, Tool> = {
       'Save a team of agents as a template of Forchetta: a lead and its members, each one a Claude Code session with its role, model and permissions. Use it when the user asks to create or set up a team in Forchetta, also from a document that describes the roles and their prompts: read the document, then save one template per team.',
       'A template starts nothing: the user starts the team from the Forchetta app, choosing its folder, and sees the roles and permissions there first. Tell the user so.',
       'Forchetta adds by itself who the lead and the members are and how requests, answers and questions travel between them (the tools send_request, wait_for_answers and ask_lead): the roles say only what each one does. Rules the whole team shares, longer than a role, belong in a CLAUDE.md in the folder of the team (Claude Code loads it in every session there): write that file yourself, it is not part of the template.',
+      'The org chart can have more levels: a member reports to the lead, or to another member (reportsTo), which then leads it, gives it requests and gets its answers; a junior under a senior under the lead. Each one talks only with the one it reports to and with those that report to it: follow the chart of the document. The relation of a member with the one it reports to can have its own prompt (relation): how the two work together, what goes down, what comes back, when to ask; both read it. Put there what the document says about that link (formats of requests and reports, rules), not in the roles.',
       'Forchetta checks the template as its panel does: what is wrong comes back as an error, to fix and save again.',
     ].join(' '),
     inputSchema: {
@@ -113,6 +115,12 @@ export const TOOLS: Record<TeamTool, Tool> = {
   },
   model: { type: 'string', enum: [...MODELS], description: 'Its model; none: the model of the user.' },
   mode: { type: 'string', enum: [...MODES], description: 'The permission mode of its session; none: the one of the user.' },
+  skills: {
+    type: 'array',
+    items: { type: 'string', enum: SKILLS.map((skill) => skill.id) },
+    maxItems: SKILLS_PER_AGENT_MAX,
+    description: `Open-source skills of Claude Code from the catalog of Forchetta, for this agent only; Forchetta downloads them when the team starts, outside the project. ${SKILLS_PER_AGENT_MAX} at most; only what the role needs, or none: ${SKILLS.map((skill) => `${skill.id} (${skill.summary.replace(/\.$/, '')})`).join('; ')}.`,
+  },
 },
           },
           required: ['kind'],
@@ -122,14 +130,14 @@ export const TOOLS: Record<TeamTool, Tool> = {
           type: 'string',
           enum: ['twoway', 'oneway'],
           description:
-            'How the members talk with the lead, unless a member says otherwise: "twoway", the final message of each request goes back to the lead and the member can ask it questions; "oneway", the member executes only. Default "twoway". Follow the document when it says; otherwise choose for each member (its own talk).',
+            'How the members talk with the one they report to, unless a member says otherwise: "twoway", the final message of each request goes back and the member can ask questions; "oneway", the member executes only. Default "twoway". Follow the document when it says; otherwise choose for each member (its own talk).',
         },
         worktrees: { type: 'boolean', description: 'Each member in a git worktree of its own (only in a git repository), unless a member says otherwise; the lead merges their branches. Default false: all in the folder of the team.' },
         members: {
           type: 'array',
           minItems: 1,
           maxItems: CREW_MAX_MEMBERS,
-          description: `The members, ${CREW_MAX_MEMBERS} at most: a bigger organization is several teams, one template each.`,
+          description: `The members, ${CREW_MAX_MEMBERS} at most, the lead aside: a bigger organization is several teams, one template each.`,
           items: {
             type: 'object',
             properties: {
@@ -142,12 +150,28 @@ export const TOOLS: Record<TeamTool, Tool> = {
   },
   model: { type: 'string', enum: [...MODELS], description: 'Its model; none: the model of the user.' },
   mode: { type: 'string', enum: [...MODES], description: 'The permission mode of its session; none: the one of the user.' },
+  skills: {
+    type: 'array',
+    items: { type: 'string', enum: SKILLS.map((skill) => skill.id) },
+    maxItems: SKILLS_PER_AGENT_MAX,
+    description: `Open-source skills of Claude Code from the catalog of Forchetta, for this agent only; Forchetta downloads them when the team starts, outside the project. ${SKILLS_PER_AGENT_MAX} at most; only what the role needs, or none: ${SKILLS.map((skill) => `${skill.id} (${skill.summary.replace(/\.$/, '')})`).join('; ')}.`,
+  },
 },
               talk: {
                 type: 'string',
                 enum: ['twoway', 'oneway'],
                 description:
-                  'Its own way of talking with the lead; none: the one of the team. "twoway" when the lead needs something back from it: a report, a verdict, facts or an answer to go on with, or when it may need to ask. "oneway" when its work shows in the files and the lead needs no report (formatting, running a fixed step, writing a text the lead does not check): it costs the lead no turn, but it cannot ask questions.',
+                  'Its own way of talking with the one it reports to; none: the one of the team. "twoway" when that one needs something back from it: a report, a verdict, facts or an answer to go on with, or when it may need to ask. "oneway" when its work shows in the files and no report is needed (formatting, running a fixed step, writing a text nobody checks): it costs no turn above it, but it cannot ask questions.',
+              },
+              reportsTo: {
+                type: 'string',
+                maxLength: MEMBER_NAME_MAX,
+                description: 'The name of the member it reports to, which leads it and gives it requests; none: the lead. No circles: each chain goes up to the lead.',
+              },
+              relation: {
+                type: 'string',
+                maxLength: RELATION_MAX,
+                description: `The prompt of its relation with the one it reports to: how the two work together (what is asked and how, what comes back and in what form, when to ask). Both read it, so write it about the two of them in the third person ("The senior gives…, the junior reports…"). None: just the roles. ${RELATION_MAX} characters at most.`,
               },
               worktree: { type: 'boolean', description: 'Its own choice of a git worktree; none: the one of the team.' },
               paths: {

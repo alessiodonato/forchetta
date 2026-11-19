@@ -820,14 +820,17 @@
     <section class="part" id="teams" aria-labelledby="teams-title">
       <div class="text">
         <h2 id="teams-title">Teams of agents that work together</h2>
-        <p>Start a team from one panel: a lead, which is a Claude session or you, and up to six members, each a Claude Code session with its own role. The lead splits the goal into numbered requests, and each member gets its own as a new prompt as soon as it is free.</p>
+        <p>Start a team from one panel, or draw it in the studio: a lead, which is a Claude session or you, and up to six members, each a Claude Code session with its own role. The lead splits the goal into numbered requests, and each member gets its own as a new prompt as soon as it is free.</p>
         <ul class="list">
           <li><b>Real tools, not copy and paste:</b> the lead sends requests and waits for the answers through a small MCP server of Forchetta; a member that is stuck asks the lead a question.</li>
           <li><b>⇄ answers or → executes:</b> for each member, choose whether its final message goes back to the lead or it just does the work.</li>
+          <li><b>As many levels as you need:</b> a junior can report to a senior that reports to a manager, and each relation has a prompt of its own. The senior's answer goes up only when its junior's work is done.</li>
+          <li><b>A studio to draw it:</b> drag agents and whole teams onto a canvas, pull an arrow from one box to another, and choose the relation on release.</li>
+          <li><b>Open-source skills:</b> give each agent skills of Claude Code from a catalog pinned to a commit. Nothing is downloaded until a team uses one, and never into your project.</li>
           <li><b>A worktree each, if you like:</b> every member can work on a branch of its own, and the lead merges the work when it is good.</li>
           <li><b>Files of its own:</b> give a member its folders, and the guard keeps it in them and the other members out of them.</li>
           <li><b>A review that counts:</b> a reviewer approves commits with a tool of the team; before a merge of anything it did not approve, the guard asks you.</li>
-          <li><b>Templates:</b> developer + reviewer, a feature squad, research + writing, or a team you saved.</li>
+          <li><b>Templates:</b> developer + reviewer, a feature squad, manager › senior › junior, research + writing, or a team you saved.</li>
         </ul>
       </div>
       <figure class="shot">
@@ -852,7 +855,7 @@
       <ul class="list">
         <li><b>Agent View</b> (<code>claude agents</code>) is Anthropic's full-screen list of your background sessions, in the terminal. Forchetta is a window that stays open next to your work, with a live box for each session and up to four terminals side by side.</li>
         <li><b>Claude Desktop</b> is Anthropic's app, with parallel sessions in its sidebar. Forchetta works with the <code>claude</code> CLI you already run in your terminal, with your hooks and settings.</li>
-        <li><b>Agent teams</b>, experimental in Claude Code, are a lead session that spawns teammates and shares a task list with them. In Forchetta, teams are set up in a panel and saved as templates, with a role, model, permissions and worktree for each member, and the lead can be you.</li>
+        <li><b>Agent teams</b>, experimental in Claude Code, are a lead session that spawns teammates and shares a task list with them. In Forchetta, teams are set up in a panel or drawn in a studio, on as many levels as you need, and saved as templates, with a role, model, permissions, worktree and skills for each member, and the lead can be you.</li>
         <li><b>Conductor</b> and similar Mac apps run several coding agents, each in an isolated workspace. Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely.</li>
         <li><b>Orca</b> and <b>Paseo</b> are open-source desktop and phone apps that run many kinds of coding agents, each in its own git worktree. With Forchetta there is no worktree to set up: sessions share one folder, and the guard keeps them off each other's files.</li>
         <li><b>cmux</b> and <b>Claude Squad</b> are terminals and session managers for many kinds of coding agents. Forchetta is built for Claude Code only, through its hooks: a guard that keeps two sessions off the same file, permissions answered from the box, context and cost per session, subagents, teams that talk through an MCP server.</li>
@@ -862,7 +865,7 @@
 
     <section class="part text" aria-labelledby="mac-title">
       <h2 id="mac-title">It stays on your Mac</h2>
-      <p>The hooks talk to a small daemon that listens on <code>127.0.0.1</code> only. Your sessions are not sent anywhere. The one network call Forchetta can make is an optional one-line summary from the Claude API, off unless you turn it on.</p>
+      <p>The hooks talk to a small daemon that listens on <code>127.0.0.1</code> only. Your sessions are not sent anywhere. The one network call that carries anything of yours is an optional one-line summary from the Claude API, off unless you turn it on. The only download is the open-source skills a team of agents uses, fetched from GitHub when that team starts, at a pinned commit.</p>
       <p>Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change, asks, and keeps a backup. Your other hooks stay exactly as they are, and <code>forchetta hooks uninstall</code> takes its own away.</p>
     </section>
 

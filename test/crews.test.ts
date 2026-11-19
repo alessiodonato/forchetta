@@ -388,18 +388,18 @@ describe('a Claude lead and its members', () => {
   it('the lead sends requests to its members, never to itself; a member cannot send any', async () => {
     const { crews, crewId, queued } = await started();
     expect(crews.toolsOf('agent-1')).toEqual(['team', 'send_request', 'wait_for_answers']);
-    expect(crews.requestFromLead('agent-1', ['all'], 'Write the parser.')).toEqual({ ok: true, n: 1, to: ['tester', 'formatter'] });
+    expect(crews.requestFrom('agent-1', ['all'], 'Write the parser.')).toEqual({ ok: true, n: 1, to: ['tester', 'formatter'] });
     expect(queued.map((item) => item.agentId)).toEqual(['agent-2', 'agent-3']);
     expect(queued[0]!.text).toBe('Request #1 from lead:\nWrite the parser.');
-    expect(crews.requestFromLead('agent-1', ['Tester'], 'Test it.')).toMatchObject({ ok: true, to: ['tester'] });
-    expect(crews.requestFromLead('agent-1', ['lead'], 'Do it yourself.')).toMatchObject({ ok: false });
-    expect(crews.requestFromLead('agent-2', ['formatter'], 'Format.')).toEqual({ ok: false, error: 'only the lead of a team can send requests' });
+    expect(crews.requestFrom('agent-1', ['Tester'], 'Test it.')).toMatchObject({ ok: true, to: ['tester'] });
+    expect(crews.requestFrom('agent-1', ['lead'], 'Do it yourself.')).toMatchObject({ ok: false });
+    expect(crews.requestFrom('agent-2', ['formatter'], 'Format.')).toEqual({ ok: false, error: 'only the lead of a team, or a member others report to, can send requests' });
     expect(crews.get(crewId)!.requests!.map((request) => request.from)).toEqual(['lead', 'lead']);
   });
 
   it('the answer of a member ⇄ goes back to the lead that asked; a member → sends nothing back', async () => {
     const { crews, crewId, queued } = await started();
-    crews.requestFromLead('agent-1', ['all'], 'Write the parser.');
+    crews.requestFrom('agent-1', ['all'], 'Write the parser.');
     for (const item of queued.slice(0, 2)) crews.commandChanged(command(item, crewId, 1, 'confermato'));
     crews.hook(agentIn('agent-2', crewId), { hook_event_name: 'Stop', session_id: 's', last_assistant_message: 'Parser written, 8 tests pass.' });
     crews.hook(agentIn('agent-3', crewId), { hook_event_name: 'Stop', session_id: 's', last_assistant_message: 'Formatted.' });
@@ -424,7 +424,7 @@ describe('a Claude lead and its members', () => {
   it('a member ⇄ asks the lead about its request; a member → cannot ask', async () => {
     const { crews, crewId, queued } = await started();
     expect(crews.question('agent-2', 'Which parser?')).toEqual({ ok: false, error: 'you have had no request yet: there is nothing to ask about' });
-    crews.requestFromLead('agent-1', ['tester'], 'Write the parser.');
+    crews.requestFrom('agent-1', ['tester'], 'Write the parser.');
     expect(crews.question('agent-2', 'JSON or YAML?')).toEqual({ ok: true, n: 1, to: 'lead' });
     expect(queued.at(-1)).toMatchObject({ agentId: 'agent-1', text: 'Question from tester about request #1:\nJSON or YAML?' });
     expect(crews.get(crewId)!.requests![0]!.deliveries[0]!.questions).toEqual([{ text: 'JSON or YAML?', at: expect.any(Number), status: 'queued', commandId: queued.at(-1)!.id }]);
@@ -434,7 +434,7 @@ describe('a Claude lead and its members', () => {
 
   it('a member that asked ends its turn waiting: that message does not go back, the answer comes with the next request', async () => {
     const { crews, crewId, queued } = await started();
-    crews.requestFromLead('agent-1', ['tester'], 'Count the words of a file.', 1000);
+    crews.requestFrom('agent-1', ['tester'], 'Count the words of a file.', 1000);
     crews.commandChanged(command(queued[0]!, crewId, 1, 'confermato'), 2000);
     crews.question('agent-2', 'Which file?', 3000);
     crews.hook(agentIn('agent-2', crewId), { hook_event_name: 'Stop', session_id: 's', last_assistant_message: 'I asked the lead which file.' }, 4000);
@@ -443,7 +443,7 @@ describe('a Claude lead and its members', () => {
     expect(crews.get(crewId)!.requests![0]!.deliveries[0]).toMatchObject({ status: 'done', answer: 'I asked the lead which file.' });
     expect(crews.get(crewId)!.requests![0]!.deliveries[0]!.reply).toBeUndefined();
     // The next request, with the answer: its end goes back as usual.
-    crews.requestFromLead('agent-1', ['tester'], 'The file is data.txt.', 5000);
+    crews.requestFrom('agent-1', ['tester'], 'The file is data.txt.', 5000);
     crews.commandChanged(command(queued[2]!, crewId, 2, 'confermato'), 6000);
     crews.hook(agentIn('agent-2', crewId), { hook_event_name: 'Stop', session_id: 's', last_assistant_message: '8 words.' }, 7000);
     expect(queued.at(-1)!.text).toBe('Answer from tester to request #2:\n8 words.');
@@ -459,7 +459,7 @@ describe('a Claude lead and its members', () => {
 
   it('tells a session its team, and what each one is doing', async () => {
     const { crews } = await started();
-    crews.requestFromLead('agent-1', ['tester'], 'Write the parser.');
+    crews.requestFrom('agent-1', ['tester'], 'Write the parser.');
     const text = crews.teamText('agent-1')!;
     expect(text).toContain('You are lead, the lead.');
     expect(text).toContain('Lead: lead — working');
@@ -471,8 +471,8 @@ describe('a Claude lead and its members', () => {
 
   it('stops a lead that sends more than the team can hold', async () => {
     const { crews } = await started();
-    for (let round = 0; round < MAX_OPEN_DELIVERIES / 2; round++) expect(crews.requestFromLead('agent-1', ['all'], `Step ${round}.`).ok).toBe(true);
-    expect(crews.requestFromLead('agent-1', ['tester'], 'One more.')).toEqual({ ok: false, error: '20 requests of the team are still open (at most 20): wait for some answers first' });
+    for (let round = 0; round < MAX_OPEN_DELIVERIES / 2; round++) expect(crews.requestFrom('agent-1', ['all'], `Step ${round}.`).ok).toBe(true);
+    expect(crews.requestFrom('agent-1', ['tester'], 'One more.')).toEqual({ ok: false, error: '20 requests of the team are still open (at most 20): wait for some answers first' });
   });
 
   it('answers the MCP server of the team on its routes', async () => {
@@ -566,7 +566,7 @@ describe('the thread of a team', () => {
 describe('templates of teams', () => {
   it('the templates of Forchetta are teams the daemon accepts', () => {
     for (const template of BUILTIN_TEMPLATES) expect('error' in cleanCrewSpec({ ...template, cwd: '/x' })).toBe(false);
-    expect(BUILTIN_TEMPLATES.map((template) => template.name)).toEqual(['developer + reviewer', 'feature squad', 'research + writing']);
+    expect(BUILTIN_TEMPLATES.map((template) => template.name)).toEqual(['developer + reviewer', 'feature squad', 'manager › senior › junior', 'research + writing']);
   });
 
   it('a template saved from a team starts the same team again: lead, members, roles, → / ⇄, models', async () => {
@@ -679,7 +679,7 @@ describe('templates saved by a session (the tools list_team_templates and save_t
     templateApi(store, 'template-save', { template: bakery });
     const list = (templateApi(store, 'templates', {})!.body as { text: string }).text.split('\n');
     expect(list[0]).toContain('The user starts one from the app');
-    expect(list).toContain('- "developer + reviewer" (comes with Forchetta): lead lead; members: developer (own worktree), reviewer (own worktree, reviews)');
+    expect(list).toContain('- "developer + reviewer" (comes with Forchetta): lead lead; members: developer (own worktree, skills: test-driven-development, incremental-implementation, verification-before-completion), reviewer (own worktree, reviews, skills: code-review-and-quality, differential-review)');
     expect(list).toContain('- "Bakery": lead chef (opus, acceptEdits); members: baker (sonnet), cashier (executes only, files: cashier/)');
     const one = (templateApi(store, 'templates', { name: ' bakery ' })!.body as { text: string }).text;
     expect(one.split('\n')[0]).toBe('The template "Bakery":');
@@ -709,7 +709,7 @@ describe('changing a team', () => {
 
   it('⇄ to → counts from the next request: the one in progress still answers, the next tells the member and does not', async () => {
     const { crews, crewId, queued } = await started();
-    crews.requestFromLead('agent-1', ['tester'], 'Write the parser.');
+    crews.requestFrom('agent-1', ['tester'], 'Write the parser.');
     confirm(crews, queued[0]!, crewId, 1);
     // Changed while #1 is in progress.
     expect(crews.setTalk(crewId, 'tester', 'oneway')).toEqual({ ok: true, changes: [{ agentId: 'agent-2', talk: 'oneway' }] });
@@ -717,13 +717,13 @@ describe('changing a team', () => {
     // The answer of #1 goes back, and tells the lead the news.
     expect(queued.at(-1)!.text).toBe('Answer from tester to request #1:\nDone.\n\n(The team changed: tester now executes only: it will not answer.)');
     // The next request carries the news to the member, once.
-    crews.requestFromLead('agent-1', ['tester'], 'Now the docs.');
+    crews.requestFrom('agent-1', ['tester'], 'Now the docs.');
     expect(queued.at(-1)!.text).toBe('Request #2 from lead:\nNow the docs.\n\n(From now on you execute only: your final message is not sent to your lead, you do not need to report back.)');
     confirm(crews, queued.at(-1)!, crewId, 2);
     const before = queued.length;
     crews.hook(agentIn('agent-2', crewId), { hook_event_name: 'Stop', session_id: 's', last_assistant_message: 'Docs done.' });
     expect(queued).toHaveLength(before);
-    crews.requestFromLead('agent-1', ['tester'], 'And the changelog.');
+    crews.requestFrom('agent-1', ['tester'], 'And the changelog.');
     expect(queued.at(-1)!.text).toBe('Request #3 from lead:\nAnd the changelog.');
     // It cannot ask any more either; back to ⇄ it may.
     expect(crews.question('agent-2', 'Which one?')).toMatchObject({ ok: false });
@@ -747,12 +747,12 @@ describe('changing a team', () => {
 
   it('a member taken out loses its queued requests and gets no more; its session goes on; the last member stays', async () => {
     const { crews, crewId, queued } = await started();
-    crews.requestFromLead('agent-1', ['all'], 'Go.');
+    crews.requestFrom('agent-1', ['all'], 'Go.');
     const cancelled: string[] = [];
     expect(crews.removeMember(crewId, 'formatter', (agentId, commandId) => cancelled.push(`${agentId}:${commandId}`))).toEqual({ ok: true, agentId: 'agent-3' });
     expect(cancelled).toEqual([`agent-3:${queued[1]!.id}`]);
     expect(crews.get(crewId)!.requests![0]!.deliveries.map((d) => `${d.to}:${d.status}`)).toEqual(['tester:queued', 'formatter:cancelled']);
-    expect(crews.requestFromLead('agent-1', ['formatter'], 'Again.')).toMatchObject({ ok: false });
+    expect(crews.requestFrom('agent-1', ['formatter'], 'Again.')).toMatchObject({ ok: false });
     expect(crews.whoami('agent-3')).toBeUndefined();
     expect(crews.removeMember(crewId, 'tester', () => {})).toEqual({ ok: false, error: 'a team needs at least one member' });
   });
@@ -912,7 +912,7 @@ describe('the lead waits for its answers', () => {
 
   it('holds the answers while the lead waits, and gives them all at once, not again as prompts', async () => {
     const { crews, crewId, queued } = await started();
-    crews.requestFromLead('agent-1', ['all'], 'Do your part.');
+    crews.requestFrom('agent-1', ['all'], 'Do your part.');
     working(crews, crewId, queued, 0, 1);
     working(crews, crewId, queued, 1, 1);
     const wait = crews.startWait('agent-1', undefined, 5);
@@ -943,7 +943,7 @@ describe('the lead waits for its answers', () => {
 
   it('when the time is up it gives what came, and the rest reaches the lead as prompts', async () => {
     const { crews, crewId, queued } = await started();
-    crews.requestFromLead('agent-1', ['all'], 'Do your part.');
+    crews.requestFrom('agent-1', ['all'], 'Do your part.');
     working(crews, crewId, queued, 0, 1);
     working(crews, crewId, queued, 1, 1);
     let clock = Date.now();
@@ -957,7 +957,7 @@ describe('the lead waits for its answers', () => {
     vi.useFakeTimers();
     try {
       const { crews, crewId, queued } = await started();
-      crews.requestFromLead('agent-1', ['tester'], 'Test it.');
+      crews.requestFrom('agent-1', ['tester'], 'Test it.');
       working(crews, crewId, queued, 0, 1);
       crews.startWait('agent-1', undefined, 1);
       crews.hook(agentIn('agent-2', crewId), { hook_event_name: 'Stop', session_id: 's', last_assistant_message: 'Tested.' });
@@ -972,7 +972,7 @@ describe('the lead waits for its answers', () => {
 
   it('only the lead waits; with nothing open there is nothing to wait for', async () => {
     const { crews } = await started();
-    expect(crews.startWait('agent-2', undefined, 5)).toEqual({ ok: false, error: 'only the lead of a team can wait for answers' });
+    expect(crews.startWait('agent-2', undefined, 5)).toEqual({ ok: false, error: 'only the lead of a team, or a member others report to, can wait for answers' });
     expect(crews.startWait('agent-1', undefined, 5)).toMatchObject({ ok: true, requests: [] });
     expect(crews.startWait('agent-1', [7], 5)).toMatchObject({ ok: false, error: expect.stringContaining('none yet') });
   });

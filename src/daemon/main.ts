@@ -25,7 +25,8 @@ import { editOf, Patches } from './patches.ts';
 import { runRecall } from './recall.ts';
 import { folderOf, inGitRepo, spawnSession } from './spawn.ts';
 import { Teams } from './teams.ts';
-import { crewApi, CrewTemplates, Crews, templateApi } from './crews.ts';
+import { crewApi, CrewTemplates, Crews, RolePresets, templateApi } from './crews.ts';
+import { gitRunner, SkillCache } from './skills.ts';
 import { cleanCrewSpec, templateOf } from '../shared/crew.ts';
 import { mcpConfigFile } from '../shared/mcp-config.ts';
 import { Hub } from './hub.ts';
@@ -134,8 +135,12 @@ function main(): void {
   const teams = new Teams(paths.teams, log);
   const crews = new Crews(paths.crews, log);
   const templates = new CrewTemplates(paths.crewTemplates, log);
+  const roles = new RolePresets(paths.crewRoles, log);
   crews.agent = (agentId) => registry.agents.get(agentId);
   crews.inGit = inGitRepo;
+  // The skills of the agents: fetched from GitHub the first time a team uses them, kept in var/skills.
+  const skillCache = new SkillCache(join(paths.varDir, 'skills'), gitRunner(), log);
+  crews.skills = { ensure: (ids) => skillCache.ensure(ids), plugin: (key, ids) => skillCache.plugin(key, ids) };
   // git for the verdicts of the reviewers and the merges: by its full path, briefly, its output or nothing.
   crews.git = (dir, args) =>
     new Promise((done) => {
@@ -414,8 +419,11 @@ function main(): void {
       // From an existing team: the daemon has its roles and models, the page does not.
       const crew = message.crewId ? crews.get(message.crewId) : undefined;
       if (message.crewId && !crew) return { ok: false, error: 'unknown team' };
-      return templates.save(crew ? templateOf(crew) : message.template);
+      // From the app, a template with the name of one of Forchetta is your version of it.
+      return templates.save(crew ? templateOf(crew) : message.template, { override: true });
     },
+    roles: () => roles.list(),
+    onRole: (message) => (message.type === 'deleteRolePreset' ? roles.delete(message.name) : roles.save(message.preset, message.previous)),
     onEditCrew: async (message) => {
       // The box and the chart follow a change of the place of a session in its team.
       const place = (agentId: string, team: Agent['team']): void => {

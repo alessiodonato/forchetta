@@ -86,9 +86,9 @@ const started = async (crew = team()) => {
 
 describe('a member that reviews', () => {
   it('gets the tool review, with team; and ask_lead when it answers', () => {
-    expect(teamToolsFor({ talk: 'twoway' }, { reviews: true })).toEqual(['team', 'ask_lead', 'review']);
-    expect(teamToolsFor({ talk: 'oneway' }, { reviews: true })).toEqual(['team', 'review']);
-    expect(teamToolsFor({ talk: 'oneway' }, {})).toEqual([]);
+    expect(teamToolsFor({ talk: 'twoway', members: [] }, { name: 'r', reviews: true })).toEqual(['team', 'ask_lead', 'review']);
+    expect(teamToolsFor({ talk: 'oneway', members: [] }, { name: 'r', reviews: true })).toEqual(['team', 'review']);
+    expect(teamToolsFor({ talk: 'oneway', members: [] }, { name: 'r' })).toEqual([]);
     expect(TOOLS.review.inputSchema).toMatchObject({ required: ['commit', 'verdict', 'note'] });
   });
 

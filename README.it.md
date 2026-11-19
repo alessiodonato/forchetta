@@ -74,7 +74,7 @@ Avvia una sessione con `forchetta run claude`, o dall'app, e Forchetta può anch
 
 ### I team, quando servono
 
-Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree. Il capo distribuisce le richieste attraverso un server MCP; i membri rispondono, o gli fanno una domanda quando sono bloccati. Dai a un membro i suoi file, e il vigile lo tiene lì dentro e gli altri fuori. Un membro che fa la revisione approva i commit, e il vigile ti chiede conferma prima del merge di qualcosa che non ha approvato. Salva il team come modello e riavvialo in un altro progetto, oppure descrivi i tuoi team in un documento e chiedi a una sessione qualsiasi di prepararli: salva i modelli, e tu li avvii dall'app. [I team nel manuale](https://forchetta.dev/manual.html#teams).
+Un capo, che è una sessione Claude oppure tu, e fino a 6 membri, su quanti livelli servono: un junior può rispondere a un senior che risponde al capo, e ogni relazione ha un suo prompt. Ogni membro è una sessione di Claude Code completa, con il suo ruolo e il suo modello e, di default, il suo worktree. Le richieste scendono lungo l'organigramma attraverso un server MCP; i membri rispondono, o fanno una domanda a chi sta sopra quando sono bloccati, e la risposta di un senior sale solo quando il lavoro del suo junior è finito. Dai a un membro i suoi file, e il vigile lo tiene lì dentro e gli altri fuori. Un membro che fa la revisione approva i commit, e il vigile ti chiede conferma prima del merge di qualcosa che non ha approvato. Disegna un team nello studio, trascinando agenti, team interi e skill open source su una tela e tirando frecce tra loro (una skill si scarica solo quando un team la usa, fuori dal progetto); salvalo come modello e riavvialo in un altro progetto, oppure descrivi i tuoi team in un documento e chiedi a una sessione qualsiasi di prepararli: salva i modelli, e tu li avvii dall'app. [I team nel manuale](https://forchetta.dev/manual.html#teams).
 
 ## Rispetto ad altri strumenti
 
@@ -82,7 +82,7 @@ Un capo, che è una sessione Claude oppure tu, e fino a 6 membri. Ogni membro è
 |---|---|---|
 | **Agent View** (`claude agents`) | La lista a schermo intero delle sessioni in background, di Anthropic, nel terminale | Una finestra che resta aperta accanto al tuo lavoro, con i terminali affiancati, e il vigile. |
 | **Claude Desktop** | L'app di Anthropic, con le sessioni in parallelo nella barra laterale | Lavora con la CLI `claude` che usi già nei tuoi terminali, con i tuoi hook e le tue impostazioni. |
-| **Agent teams** (sperimentali in Claude Code) | Una sessione capo che avvia i compagni e divide con loro una lista di compiti | I team si preparano in un pannello e si salvano come modelli: ruolo, modello, permessi e worktree per ogni membro. Il capo puoi essere tu. |
+| **Agent teams** (sperimentali in Claude Code) | Una sessione capo che avvia i compagni e divide con loro una lista di compiti | I team si preparano in un pannello o si disegnano in uno studio, su quanti livelli servono, e si salvano come modelli: ruolo, modello, permessi, worktree e skill per ogni membro. Il capo puoi essere tu. |
 | **Conductor** e app per Mac simili | App che fanno girare più agenti, ognuno in uno spazio di lavoro isolato | Forchetta non ospita le tue sessioni: vede quelle che avvii ovunque, e le lascia lavorare nella stessa cartella senza danni. |
 | **Orca**, **Paseo** | App open source per desktop e telefono che fanno girare molti tipi di agenti, ognuno nel suo worktree git | Nessun worktree da preparare: le sessioni lavorano nella stessa cartella, e il vigile le tiene lontane dai file delle altre. Funziona con il `claude` che già usi, in qualsiasi terminale. |
 | **cmux**, **Claude Squad** | Terminali e gestori di sessioni per molti tipi di agenti | Fatta solo per Claude Code, attraverso i suoi hook: il vigile, permessi dal box, contesto e costo per sessione, subagenti. |
@@ -100,7 +100,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.9.8. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.9.9. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
@@ -128,7 +128,7 @@ Tutto il resto è nel [manuale](https://forchetta.dev/manual.html) (in inglese).
 
 - **`~/.claude/settings.json`**, solo con `forchetta setup` o `forchetta hooks install`, dopo averti mostrato ogni modifica, e con un backup. Gli hook di Forchetta si aggiungono accanto ai tuoi senza cambiarli; `forchetta hooks uninstall` toglie solo quelli.
 - **Gli hook sono piccoli script `sh` + `curl`.** Terminano sempre con 0 e stampano solo una decisione: la tua risposta a un permesso, o il vigile che ferma una modifica. Con Forchetta spenta, una sessione si comporta esattamente come senza. Quasi tutti girano in background; il vigile fa aspettare Claude circa 30 ms, solo prima delle modifiche ai file e dei comandi Bash. [Come funzionano gli hook](https://forchetta.dev/manual.html#hooks)
-- **Tutto il resto** sta in `~/Library/Application Support/Forchetta`, leggibile solo da te. Il daemon ascolta solo su `127.0.0.1`, con un token. Nessuna telemetria. L'unica chiamata esterna è facoltativa e spenta di default: un riassunto di una riga scritto da Haiku, attraverso la Claude API.
+- **Tutto il resto** sta in `~/Library/Application Support/Forchetta`, leggibile solo da te. Il daemon ascolta solo su `127.0.0.1`, con un token. Nessuna telemetria. L'unica chiamata esterna che porta fuori qualcosa di tuo è facoltativa e spenta di default: un riassunto di una riga scritto da Haiku, attraverso la Claude API. Quando parte un team i cui agenti hanno delle skill, Forchetta le scarica da GitHub a un commit fissato, in quella cartella.
 - A riposo, app, pagina e daemon insieme restano sotto l'1% della CPU.
 
 ## Funziona con arricurdAI

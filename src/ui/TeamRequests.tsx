@@ -15,6 +15,7 @@ export const DELIVERY_TEXT: Record<DeliveryStatus, string> = {
   blocked: 'blocked',
   sent: 'sent',
   working: 'working',
+  delegated: 'passed on',
   done: 'done',
   failed: 'failed',
   cancelled: 'cancelled',
@@ -41,7 +42,7 @@ const who = (name: string): string => (name === 'the user' ? 'you' : name);
 export function entryHead(entry: ThreadEntry): string {
   switch (entry.kind) {
     case 'request':
-      return `${who(entry.from)} → ${entry.deliveries.map((delivery) => delivery.to).join(', ')}`;
+      return `${who(entry.from)} → ${entry.deliveries.map((delivery) => delivery.to).join(', ')}${entry.parent !== undefined ? ` · for #${entry.parent}` : ''}`;
     case 'question':
       return `${entry.from} → ${who(entry.to)} · question on #${entry.n}`;
     case 'answer':
@@ -115,7 +116,12 @@ function Entry({ entry }: { entry: ThreadEntry }) {
       {entry.kind === 'request' && (
         <div class="crew-deliveries">
           {entry.deliveries.map((delivery) => (
-            <span key={delivery.to} class="crew-delivery" data-status={delivery.status} title={delivery.reason ?? DELIVERY_TEXT[delivery.status]}>
+            <span
+              key={delivery.to}
+              class="crew-delivery"
+              data-status={delivery.status}
+              title={delivery.reason ?? (delivery.status === 'delegated' ? 'It passed part of the work to the members that report to it: it is done, and answers, when they are' : DELIVERY_TEXT[delivery.status])}
+            >
               {delivery.to} · {DELIVERY_TEXT[delivery.status]}
             </span>
           ))}
@@ -162,7 +168,8 @@ function MemberFiles({ crewId, name, paths, busy, store }: { crewId: string; nam
 
 /**
  * The members of a team, to change: → / ⇄ of each (from its next request), its files, take one out (its session
- * goes on), add one (a new session), and keep the team as a template.
+ * goes on, the ones that reported to it go up), add one (a new session), under the lead or under a member that can
+ * lead it, and keep the team as a template.
  */
 function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
   const [removing, setRemoving] = useState<string | undefined>(undefined);
@@ -170,6 +177,7 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
   const [role, setRole] = useState('');
   const [talk, setTalk] = useState<Talk>('twoway');
   const [model, setModel] = useState('');
+  const [under, setUnder] = useState('');
   const edit = store.state.crewEdit;
   const busy = edit?.busy === true;
   // Added: the row empties for the next one.
@@ -180,6 +188,8 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
     setRole('');
   }, [addedAt]);
   const members = (crew.recipients ?? []).filter((recipient) => !recipient.lead);
+  // A new member goes under the lead, or under a member whose session started with the tools to give requests.
+  const leaders = members.filter((member) => member.canLead).map((member) => member.name);
   const note =
     edit?.error ??
     (edit?.ok && edit.action === 'saveCrewTemplate'
@@ -196,6 +206,7 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
           <span class="broadcast-label" />
           <span class="edit-member-name" title={member.reviews ? 'It reviews: the lead merges only the commits it approved' : undefined}>
             {member.name}
+            {member.reportsTo !== undefined ? <span class="team-hint"> ↳ {member.reportsTo}</span> : null}
             {member.reviews ? <span class="team-hint"> · reviews</span> : null}
           </span>
           <button
@@ -203,7 +214,11 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
             class="talk-toggle chosen"
             data-talk={member.talk}
             disabled={busy}
-            title={member.talk === 'twoway' ? 'It answers its lead. Click: from its next request it only executes.' : 'It only executes. Click: from its next request it also answers.'}
+            title={
+              member.talk === 'twoway'
+                ? `It answers ${member.reportsTo ?? 'its lead'}. Click: from its next request it only executes.`
+                : 'It only executes. Click: from its next request it also answers.'
+            }
             onClick={() => store.editCrew(crew.id, { action: 'talk', name: member.name, talk: member.talk === 'twoway' ? 'oneway' : 'twoway' })}
           >
             {member.talk === 'twoway' ? '⇄ answers' : '→ executes'}
@@ -240,6 +255,19 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
         <button type="button" class="talk-toggle chosen" onClick={() => setTalk(talk === 'twoway' ? 'oneway' : 'twoway')}>
           {talk === 'twoway' ? '⇄ answers' : '→ executes'}
         </button>
+        {leaders.length > 0 && (
+          <label class="spawn-option" title="Who it reports to: a member here leads it, gives it requests and gets its answers. Only the members that started leading others can take one more.">
+            under
+            <select value={under} onChange={(event) => setUnder((event.target as HTMLSelectElement).value)}>
+              <option value="">{crew.lead ?? 'you'} (lead)</option>
+              {leaders.map((leader) => (
+                <option key={leader} value={leader}>
+                  {leader}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label class="spawn-option">
           model
           <select value={model} onChange={(event) => setModel((event.target as HTMLSelectElement).value)}>
@@ -254,7 +282,9 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
           type="button"
           class="primary"
           disabled={busy || !name.trim() || members.length >= 6}
-          onClick={() => store.editCrew(crew.id, { action: 'add', member: { name: name.trim(), role: role.trim(), talk, ...(model ? { model } : {}) } })}
+          onClick={() =>
+            store.editCrew(crew.id, { action: 'add', member: { name: name.trim(), role: role.trim(), talk, ...(model ? { model } : {}), ...(under && leaders.includes(under) ? { reportsTo: under } : {}) } })
+          }
         >
           {busy && edit?.action === 'add' ? 'Starting…' : 'Add'}
         </button>
@@ -370,7 +400,11 @@ export function TeamPanel({ crews, store, onClose, onNew }: { crews: readonly Cr
             type="button"
             class={`chip${to.includes(recipient.name) ? ' on' : ''}`}
             disabled={!recipient.agentId}
-            title={recipient.lead ? 'The lead of the team' : recipient.talk === 'twoway' ? 'Answers its lead' : 'Executes only'}
+            title={
+              recipient.lead
+                ? 'The lead of the team'
+                : `${recipient.reportsTo !== undefined ? `Reports to ${recipient.reportsTo}; ` : ''}${recipient.talk === 'twoway' ? 'answers whoever asks it' : 'executes only'}`
+            }
             onClick={() => setTo(toggleRecipient(to, recipient.name, members))}
           >
             {recipientText(recipient)}

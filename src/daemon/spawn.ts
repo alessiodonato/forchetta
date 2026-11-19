@@ -109,6 +109,8 @@ export interface SpawnExtras {
    * executes only; undefined for a session not in a team, which gets the tools of templates.
    */
   teamTools?: readonly string[];
+  /** A plugin with its skills, for this session only (claude --plugin-dir): daemon/skills.ts. */
+  pluginDir?: string;
 }
 
 export { TEAM_MCP_TIMEOUT_MS, type TeamMcpServer, teamMcpConfig } from '../shared/mcp-config.ts';
@@ -141,6 +143,7 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   // Like the prompt, the texts of a team go through the private env file: forchetta-start gives them to claude.
   if (extras.system) env.FORCHETTA_SYSTEM_PROMPT = extras.system;
   if (extras.name) env.FORCHETTA_NAME = extras.name;
+  if (extras.pluginDir) env.FORCHETTA_PLUGIN_DIR = extras.pluginDir;
   // The tools of its team, all allowed; or, out of a team, the tools of templates, of which only reading is.
   const tools = extras.teamTools ?? TEMPLATE_TOOLS;
   if (tools.length > 0 && options.teamMcp) {

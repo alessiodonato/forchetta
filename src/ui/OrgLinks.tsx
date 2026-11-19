@@ -2,11 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { CrewSummary } from '../shared/crew.ts';
 import { type ArrivalKind, type Arrival, arrivalsBetween, type Box, FLASH_MS, leadAgent, linkPath, linkStates, RANK, type Snapshot, snapshotOf } from './org-lines.ts';
 
-// The lines of a team of agents in the org chart: one from its lead to each member, drawn over the group. A line
-// says what goes on between the two: a request the member works on (orange) or that waits in its queue (orange,
-// dashed), an answer on its way back to the lead (green), a question for the lead (amber). When something arrives,
-// a request at the member, an answer or a question at the lead, its line flashes twice and a dot runs along it,
-// the way it went. The colors stay still: only an arrival moves, for about a second.
+// The lines of a team of agents in the org chart: one to each member from the one it reports to (the lead, or
+// another member), drawn over the group. A line says what goes on between the two: a request the member works on
+// (orange) or that waits in its queue (orange, dashed), an answer on its way back up (green), a question going up
+// (amber). When something arrives, a request at the member, an answer or a question at the one above, its line
+// flashes twice and a dot runs along it, the way it went. The colors stay still: only an arrival moves, for about
+// a second.
 
 interface Geometry {
   width: number;
@@ -43,7 +44,12 @@ export function OrgLinks({ crew }: { crew: CrewSummary }) {
   const [geometry, setGeometry] = useState<Geometry | undefined>(undefined);
   const drawn = useRef('');
   const lead = leadAgent(crew);
-  const members = (crew.recipients ?? []).filter((recipient) => !recipient.lead && recipient.agentId).map((recipient) => recipient.agentId!);
+  const recipients = crew.recipients ?? [];
+  const agentOf = new Map(recipients.map((recipient) => [recipient.name, recipient.agentId]));
+  // Each member and the session of the one it reports to; none: the lead.
+  const members = recipients
+    .filter((recipient) => !recipient.lead && recipient.agentId)
+    .map((recipient) => ({ id: recipient.agentId!, above: recipient.reportsTo !== undefined ? agentOf.get(recipient.reportsTo) : undefined }));
 
   const measure = (): void => {
     const group = svg.current?.parentElement;
@@ -55,9 +61,28 @@ export function OrgLinks({ crew }: { crew: CrewSummary }) {
       return { left: rect.left - base.left, top: rect.top - base.top, width: rect.width, height: rect.height };
     };
     const leadBox = boxOf(lead ? group.querySelector(`.org-leads [data-id="${lead}"]`) : group.querySelector('.org-you'));
-    const boxes = members.map((id) => [id, boxOf(group.querySelector(`.org-members [data-id="${id}"]`))] as const).filter((item): item is readonly [string, Box] => item[1] !== undefined);
-    const firstTop = Math.min(...boxes.map(([, box]) => box.top));
-    const next: Geometry = { width: Math.round(base.width), height: Math.round(base.height), paths: boxes.map(([id, box]) => [id, linkPath(leadBox, box, firstTop, base.width)]) };
+    const memberBox = (id: string): Box | undefined => boxOf(group.querySelector(`.org-members [data-id="${id}"]`));
+    // In a tree, the row of the brothers of a member: its node's parent. A member that wraps is reached along its left.
+    const laneOf = (id: string): number | undefined => {
+      const row = group.querySelector(`.org-members[data-tree] [data-id="${id}"]`)?.closest('.org-node')?.parentElement;
+      return row ? row.getBoundingClientRect().left - base.left - 8 : undefined;
+    };
+    // A member whose one above has no box here hangs from the lead, as the chart puts it (Team.tsx).
+    const boxes = members
+      .map((member) => {
+        const box = memberBox(member.id);
+        const aboveBox = member.above !== undefined ? memberBox(member.above) : undefined;
+        return box ? { id: member.id, box, from: aboveBox ?? leadBox, key: aboveBox ? member.above! : '', lane: laneOf(member.id) } : undefined;
+      })
+      .filter((item) => item !== undefined);
+    // The first row of the members under the same one: where their lines turn.
+    const firstTops = new Map<string, number>();
+    for (const item of boxes) firstTops.set(item.key, Math.min(firstTops.get(item.key) ?? Number.POSITIVE_INFINITY, item.box.top));
+    const next: Geometry = {
+      width: Math.round(base.width),
+      height: Math.round(base.height),
+      paths: boxes.map((item) => [item.id, linkPath(item.from, item.box, firstTops.get(item.key)!, base.width, item.lane)]),
+    };
     const key = JSON.stringify(next);
     if (key === drawn.current) return;
     drawn.current = key;

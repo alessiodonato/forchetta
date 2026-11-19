@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type Agent, SESSION_COLOR_HEX, SESSION_COLORS, type SessionColor, TEAM_TEXT_MAX } from '../shared/agent.ts';
-import type { CrewSummary } from '../shared/crew.ts';
+import { type CrewSummary, treeOrder } from '../shared/crew.ts';
 import type { Store } from './store.ts';
 import { OrgLinks } from './OrgLinks.tsx';
 
@@ -162,13 +162,56 @@ export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; ag
   );
 }
 
+/** A box of the chart with the boxes of the members that report to it. */
+export interface OrgNode {
+  agent: Agent;
+  reports: OrgNode[];
+}
+
+/**
+ * The members of a team of agents as a tree, each one above the members that report to it, in the order of the
+ * team; undefined when nobody reports to another member here (the chart keeps its grid). A member whose one above
+ * has no box here (its session is gone) hangs from the lead.
+ */
+export function crewTree(members: readonly Agent[], crew: CrewSummary | undefined): OrgNode[] | undefined {
+  const recipients = (crew?.recipients ?? []).filter((recipient) => !recipient.lead);
+  const byAgent = new Map(recipients.map((recipient, index) => [recipient.agentId, { recipient, index }]));
+  const agentOf = new Map(recipients.map((recipient) => [recipient.name, recipient.agentId]));
+  const shown = new Set(members.map((agent) => agent.id));
+  const above = (agent: Agent): string | undefined => {
+    const reportsTo = byAgent.get(agent.id)?.recipient.reportsTo;
+    const id = reportsTo !== undefined ? agentOf.get(reportsTo) : undefined;
+    return id !== undefined && id !== agent.id && shown.has(id) ? id : undefined;
+  };
+  if (!members.some((agent) => above(agent) !== undefined)) return undefined;
+  const ordered = [...members].sort((a, b) => (byAgent.get(a.id)?.index ?? Number.MAX_SAFE_INTEGER) - (byAgent.get(b.id)?.index ?? Number.MAX_SAFE_INTEGER));
+  const roots: OrgNode[] = [];
+  const stack: OrgNode[] = [];
+  for (const { item, depth } of treeOrder(ordered, (agent) => agent.id, above)) {
+    const node: OrgNode = { agent: item, reports: [] };
+    stack.length = depth;
+    (depth === 0 ? roots : stack[depth - 1]!.reports).push(node);
+    stack.push(node);
+  }
+  return roots;
+}
+
 /** Whether the lead of a group is you: a team of agents started with no Claude lead. */
 export const ledByYou = (group: Group, crews: readonly CrewSummary[]): boolean =>
   group.crew !== undefined && crews.some((crew) => crew.id === group.crew && crew.lead === undefined);
 
-/** The chart: one section per group, its heads above, the others below. A team led by you has you on top. */
+/**
+ * The chart: one section per group, its heads above, the others below. A team led by you has you on top; a team
+ * whose members report to other members is a tree, each one above the ones that report to it.
+ */
 export function OrgChart({ agents, crews = [], render }: { agents: readonly Agent[]; crews?: readonly CrewSummary[]; render: (agent: Agent) => preact.ComponentChild }) {
   const groups = groupsOf(agents);
+  const node = (item: OrgNode): preact.ComponentChild => (
+    <div key={item.agent.id} class="org-node">
+      {render(item.agent)}
+      {item.reports.length > 0 && <div class="org-reports">{item.reports.map(node)}</div>}
+    </div>
+  );
   return (
     <main class="org">
       {groups.map((group) => {
@@ -176,6 +219,7 @@ export function OrgChart({ agents, crews = [], render }: { agents: readonly Agen
         const linked = (group.leads.length > 0 || you) && group.members.length > 0;
         // A team of agents draws a line to each member (OrgLinks); a group made by hand keeps the bracket.
         const crew = linked && group.crew ? crews.find((item) => item.id === group.crew) : undefined;
+        const tree = crew ? crewTree(group.members, crew) : undefined;
         return (
           <section key={group.name ?? ''} class="org-group" data-linked={linked ? '' : undefined} data-crew={crew ? '' : undefined}>
             {crew && <OrgLinks crew={crew} />}
@@ -193,7 +237,14 @@ export function OrgChart({ agents, crews = [], render }: { agents: readonly Agen
                 {group.leads.map(render)}
               </div>
             )}
-            {group.members.length > 0 && <div class="org-members">{group.members.map(render)}</div>}
+            {group.members.length > 0 &&
+              (tree ? (
+                <div class="org-members" data-tree="">
+                  {tree.map(node)}
+                </div>
+              ) : (
+                <div class="org-members">{group.members.map(render)}</div>
+              ))}
           </section>
         );
       })}

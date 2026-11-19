@@ -204,7 +204,7 @@ export function startTour(daemon: DemoDaemon): void {
         const leadAgent = lead ? store()?.state.agents.get(lead) : undefined;
         return leadAgent?.state === 'idle' && (crew.requests ?? []).every((request) => request.deliveries.every((delivery) => delivery.status === 'done' || delivery.status === 'failed' || delivery.status === 'cancelled'));
       },
-      after: 'The lead gave the work to developer, then had reviewer check it, and reported back. Every request is in the thread of the team.',
+      after: 'The lead gave the work to developer, then had reviewer check it, and reported back. Every request is in the thread of the team. To draw a team instead, open **studio**: drag agents, whole teams and skills onto a canvas, and pull an arrow from one box to another.',
     },
     {
       title: 'That is Forchetta',

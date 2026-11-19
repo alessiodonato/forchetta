@@ -151,15 +151,18 @@ describe('the tools of templates, for a session not in a team', () => {
     const schema = TOOLS.save_team_template.inputSchema as { properties: Record<string, { properties?: object; items?: { properties: object } }> };
     const checked = cleanTemplate({
       name: 'All',
-      lead: { kind: 'claude', name: 'l', role: 'r', model: 'opus', mode: 'plan' },
+      lead: { kind: 'claude', name: 'l', role: 'r', model: 'opus', mode: 'plan', skills: ['brainstorming'] },
       talk: 'oneway',
       worktrees: true,
-      members: [{ name: 'm', role: 'r', talk: 'twoway', model: 'haiku', mode: 'auto', worktree: false, paths: ['src/'], reviews: true }],
+      members: [
+        { name: 'boss', role: 'r' },
+        { name: 'm', role: 'r', talk: 'twoway', model: 'haiku', mode: 'auto', worktree: false, paths: ['src/'], reviews: true, reportsTo: 'boss', relation: 'How the two work.', skills: ['pdf'] },
+      ],
     });
     if ('error' in checked) throw new Error(checked.error);
     const { lead, members, ...team } = checked.template;
     expect(Object.keys(schema.properties).sort()).toEqual([...Object.keys(team), 'lead', 'members', 'replace'].sort());
     expect(Object.keys(schema.properties.lead!.properties!).sort()).toEqual(Object.keys(lead).sort());
-    expect(Object.keys(schema.properties.members!.items!.properties).sort()).toEqual(Object.keys(members[0]!).sort());
+    expect(Object.keys(schema.properties.members!.items!.properties).sort()).toEqual(Object.keys(members[1]!).sort());
   });
 });
