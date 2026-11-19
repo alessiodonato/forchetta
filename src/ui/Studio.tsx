@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, type Talk } from '../shared/crew.ts';
 import { SKILL_GROUPS, type SkillInfo, SKILLS, SKILLS_PER_AGENT_MAX, skillById, skillUrl } from '../shared/skills.ts';
@@ -405,11 +405,26 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
   };
   const [selection, setSelection] = useState<Selection>(undefined);
   const [popover, setPopover] = useState<{ to: number; x: number; y: number } | undefined>(undefined);
+  const popoverBox = useRef<HTMLDivElement>(null);
+  // The relation opens where the arrow was dropped: moved, if it has to, so that all of it is in the visible part of
+  // the canvas (a box near the right or the bottom edge would hide its OK).
+  useLayoutEffect(() => {
+    const box = popoverBox.current?.getBoundingClientRect();
+    const view = viewport.current?.getBoundingClientRect();
+    if (!popover || !box || !view) return;
+    const margin = 8;
+    let dx = Math.min(0, view.right - margin - box.right);
+    dx = Math.max(dx, view.left + margin - box.left);
+    let dy = Math.min(0, view.bottom - margin - box.bottom);
+    dy = Math.max(dy, view.top + margin - box.top);
+    if (Math.abs(dx) >= 1 || Math.abs(dy) >= 1) setPopover({ ...popover, x: Math.round(popover.x + dx), y: Math.round(popover.y + dy) });
+  }, [popover]);
   const [drag, setDrag] = useState<Drag | undefined>(undefined);
   const [note, setNote] = useState<{ text: string; error?: boolean } | undefined>(undefined);
   const [clearArmed, setClearArmed] = useState(false);
   const [skillFilter, setSkillFilter] = useState('');
   const surface = useRef<HTMLDivElement>(null);
+  const links = useRef<SVGSVGElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | undefined>(undefined);
   const docRef = useRef(doc);
@@ -744,9 +759,19 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
         })}
       </aside>
 
-      <div ref={viewport} class="studio-canvas" onPointerDown={(event) => event.target === surface.current && (setSelection(undefined), setPopover(undefined))}>
+      <div
+        ref={viewport}
+        class="studio-canvas"
+        onPointerDown={(event) => {
+          // An empty spot of the canvas: the surface, or the layer of the arrows over all of it, not an arrow.
+          if (event.target === surface.current || event.target === links.current) {
+            setSelection(undefined);
+            setPopover(undefined);
+          }
+        }}
+      >
         <div ref={surface} class="studio-surface" style={{ width: `${size.width}px`, height: `${size.height}px` }}>
-          <svg class="studio-links" width={size.width} height={size.height} aria-hidden="true">
+          <svg ref={links} class="studio-links" width={size.width} height={size.height} aria-hidden="true">
             <defs>
               <marker id="studio-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                 <path d="M0 0 L10 5 L0 10 z" class="studio-arrowhead" />
@@ -841,7 +866,7 @@ export function Studio({ agents, store, onClose }: { agents: readonly Agent[]; s
             );
           })}
           {popover && nodeOf(doc, popover.to) && incoming(doc, popover.to) && (
-            <div class="studio-popover" style={{ left: `${popover.x}px`, top: `${popover.y}px` }} onPointerDown={(event) => event.stopPropagation()}>
+            <div ref={popoverBox} class="studio-popover" style={{ left: `${popover.x}px`, top: `${popover.y}px` }} onPointerDown={(event) => event.stopPropagation()}>
               <RelationForm
                 doc={doc}
                 to={popover.to}
