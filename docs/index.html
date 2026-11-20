@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Forchetta: Claude Code sessions that don't step on each other</title>
-<meta name="description" content="Every Claude Code session on your Mac in one window. When two reach for the same file, Forchetta makes one wait and lets it go on when the file is free. And a studio to draw teams of agents. Free and open source, for macOS.">
+<title>Forchetta: draw a team of Claude Code agents</title>
+<meta name="description" content="Draw a team of Claude Code agents and start it in your project. They share one folder without stepping on each other's files, and every session on your Mac sits in one window. Free and open source, for macOS.">
 <meta property="og:title" content="Forchetta">
-<meta property="og:description" content="Run several Claude Code sessions in the same repo. They won't step on each other.">
+<meta property="og:description" content="Draw a team of Claude Code agents, and put it to work. They won't step on each other.">
 <meta property="og:image" content="https://forchetta.dev/img/social.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
@@ -173,7 +173,7 @@
   .fine.after { margin: 14px 0 0; }
 
   /* ———— The guard, live: two sessions, one file. ———— */
-  .play { padding-top: 64px; }
+  .text + .play-controls { margin-top: 36px; }
 
   .play-controls {
     display: flex;
@@ -431,6 +431,17 @@
   .shot img, .shot video { display: block; width: 100%; height: auto; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
   .shot figcaption { margin-top: 12px; font-size: 14px; color: var(--text-3); }
 
+  /* The video: its poster and a play button under the poster's words, where it covers nothing; YouTube's player takes
+     their place only on a click. */
+  .yt { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
+  .yt > a, .yt > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .shot .yt img { width: 100%; height: 100%; object-fit: cover; border: 0; border-radius: 0; }
+  .yt-play { position: absolute; left: 5.6%; bottom: 9%; display: inline-flex; align-items: center; gap: 10px; padding: 11px 20px 11px 16px; border-radius: 999px; background: var(--claude-strong); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); color: #fff; font-size: 16px; font-weight: 600; line-height: 1; transition: transform 0.15s ease, background-color 0.15s ease; }
+  .yt-play svg { width: 18px; height: 18px; fill: #fff; }
+  .yt-play small { font: 600 13px var(--mono); opacity: 0.85; }
+  .yt > a:hover .yt-play, .yt > a:focus-visible .yt-play { background: var(--claude); transform: scale(1.04); }
+  .yt > a:focus-visible { outline-offset: -4px; border-radius: 12px; }
+
 
   /* The studio, in four clips: a step for each, the one playing lit, with how far it got. */
   .clips { margin: 36px 0 0; }
@@ -591,7 +602,6 @@
     body { font-size: 16px; }
     .wrap { padding: 0 16px; }
     .hero { padding-top: 44px; }
-    .play { padding-top: 48px; }
     .lead { font-size: 17.5px; }
     .top nav { gap: 16px; }
     .top nav a.optional { display: none; }
@@ -607,6 +617,9 @@
     section.part { padding-top: 84px; }
     .clip-text small { display: none; }
     .clip-step { padding: 10px 12px 12px; align-items: center; }
+    .yt-play { bottom: 7%; gap: 7px; padding: 7px 13px 7px 11px; font-size: 14px; }
+    .yt-play svg { width: 14px; height: 14px; }
+    .yt-play small { font-size: 12px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -624,8 +637,9 @@
       Forchetta
     </a>
     <nav aria-label="Page">
-      <a href="demo/">Demo</a>
-      <a class="optional" href="studio/">Studio</a>
+      <a href="studio/">Studio</a>
+      <a class="optional" href="demo/">Demo</a>
+      <a class="optional" href="#video">Video</a>
       <a class="optional" href="manual.html">Manual</a>
       <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
       <a class="nav-install" href="#install">Install</a>
@@ -635,88 +649,100 @@
 
 <main>
   <div class="wrap hero">
-    <h1>Run several Claude Code sessions in the same repo. They won't step on each other.</h1>
-    <p class="lead">Every Claude Code session on your Mac, in one window. When two of them reach for the same file, Forchetta makes one wait, tells Claude why, and lets it go on by itself when the file is free. And when one session is not enough, draw a team of agents.</p>
+    <h1>Draw a team of Claude Code agents, and put it to work.</h1>
+    <p class="lead">Drag the agents onto a canvas, draw who leads whom, and start the team in your project. Each agent is a Claude Code session: they split the work, and Forchetta keeps them off each other's files. Every session on your Mac, in a team or not, sits in one window.</p>
     <div class="actions">
       <button class="copy" type="button" data-copy="brew install alessiodonato/tap/forchetta" aria-label="Copy the install command: brew install alessiodonato/tap/forchetta">
         <span class="cmd"><span class="prompt">$ </span>brew install alessiodonato/tap/forchetta</span>
         <span class="copy-label" aria-hidden="true">Copy</span>
       </button>
-      <a class="button primary" href="demo/">Try it in your browser</a>
-      <a class="button" href="https://github.com/alessiodonato/forchetta">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        View on GitHub
-      </a>
+      <a class="button primary" href="studio/">Draw a team in your browser</a>
+      <a class="button" href="demo/">Try the whole app</a>
     </div>
-    <p class="fine after">Then <code>forchetta setup</code>. Free and open source, Apache 2.0. macOS 12 or later. Everything runs on your Mac.</p>
+    <p class="fine after">Then <code>forchetta setup</code>. Free and <a href="https://github.com/alessiodonato/forchetta">open source</a>, Apache 2.0. macOS 12 or later. Everything runs on your Mac.</p>
   </div>
 
-  <!-- The guard, played in the page: two scripted sessions, the real messages of Claude Code and Forchetta. -->
-  <section class="wrap play" id="guard" aria-labelledby="play-title">
-    <div class="play-controls">
-      <p class="play-title" id="play-title"><b>Two sessions, one file.</b> Play it with the guard, then without.</p>
-      <div class="play-buttons">
-        <div class="switch" role="group" aria-label="The guard">
-          <button type="button" data-mode="on" aria-pressed="true">Guard on</button>
-          <button type="button" data-mode="off" aria-pressed="false">Guard off</button>
-        </div>
-        <button class="replay" type="button" id="replay">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8A5.2 5.2 0 1 1 11.6 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12.4 1.6v3.2H9.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Replay
-        </button>
-      </div>
-    </div>
-
-    <div class="window">
-      <div class="window-bar" aria-hidden="true">
-        <span class="lights"><i></i><i></i><i></i></span>
-        <strong>Forchetta</strong>
-        <span class="count">2 sessions in ~/shop</span>
-      </div>
-      <div class="stage">
-        <div class="pane" data-who="a" id="pane-a" data-state="idle">
-          <div class="pane-head"><h3>retries</h3><span class="pane-state">idle</span><span class="pane-folder">~/shop</span></div>
-          <div class="guard-line" aria-live="off"></div>
-          <div class="term" aria-hidden="true"><div class="term-lines"></div></div>
-        </div>
-        <div class="file" id="file" data-lock="free">
-          <div class="file-head"><h3>src/api.ts</h3><span class="lock">free</span></div>
-          <div class="code" aria-hidden="true"></div>
-          <div class="file-foot" aria-hidden="true"><span class="by-a">retries</span><span class="by-b">rate-limit</span></div>
-        </div>
-        <div class="pane" data-who="b" id="pane-b" data-state="idle">
-          <div class="pane-head"><h3>rate-limit</h3><span class="pane-state">idle</span><span class="pane-folder">~/shop</span></div>
-          <div class="guard-line" aria-live="off"></div>
-          <div class="term" aria-hidden="true"><div class="term-lines"></div></div>
-        </div>
-      </div>
-      <div class="progress" aria-hidden="true"><i></i></div>
-    </div>
-
-    <div class="story">
-      <p class="narration" id="narration" aria-live="polite">Two Claude Code sessions in the same folder, each asked to change src/api.ts.</p>
-      <button class="button primary" type="button" id="next" hidden></button>
-    </div>
-    <p class="play-note">A scripted replay with stand-in sessions. What the guard tells Claude, and the message that lets it go on, are the ones Forchetta really sends. For the whole app, with sessions you start and type into, <a href="demo/">try the demo</a>.</p>
-  </section>
-
   <div class="wrap">
-    <section class="part text" aria-labelledby="guard-title">
-      <h2 id="guard-title">One folder, no worktrees needed</h2>
-      <p>Forchetta sees every edit before it happens, for every session, also those started with plain <code>claude</code>. So sessions work side by side in one folder: one set of dependencies, one <code>.env</code>, one dev server, nothing to merge at the end.</p>
-      <ul class="list">
-        <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another one that tries to edit it is stopped, and Claude is told why.</li>
-        <li><b>It goes on by itself:</b> when that turn ends, the session that waited is told the file is free, and picks up where it stopped.</li>
-        <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With Forchetta off, nothing is stopped.</li>
-      </ul>
-      <p class="more"><a href="manual.html#guard">Everything the guard does</a>: git commands that ask first, notes on what the others changed, one dev server for the folder.</p>
+    <section class="part" id="studio" aria-labelledby="studio-title">
+      <div class="text">
+        <h2 id="studio-title">Draw a team in the studio</h2>
+        <p>A team is a few Claude Code sessions that work together. You drag the agents onto a canvas, each with a role, a model and its skills, and pull an arrow from each one to the agents it leads.</p>
+        <p>Then you start it with a goal. The lead, a Claude session or you, splits it into requests; the others do the work, and ask the one above them when they're stuck. Save the team as a template, and start it again in another project.</p>
+        <p class="studio-cta"><a class="button primary" href="studio/">Open the Studio Maker</a> <span>The same studio in your browser: draw a team, export it as a file, open it in Forchetta.</span></p>
+      </div>
+      <div class="clips">
+        <ol class="clip-steps" aria-label="The studio, step by step">
+          <li><button type="button" class="clip-step" aria-pressed="true" aria-controls="clip" data-src="img/studio-agents.mp4" data-poster="img/studio-agents-poster.jpg"><span class="clip-n">1</span><span class="clip-text"><b>Drag the agents</b><small>Presets with a role, a model and skills, or “+ new agent” for one of your own.</small></span><i class="clip-bar"></i></button></li>
+          <li><button type="button" class="clip-step" aria-pressed="false" aria-controls="clip" data-src="img/studio-arrows.mp4" data-poster="img/studio-arrows-poster.jpg"><span class="clip-n">2</span><span class="clip-text"><b>Pull the arrows</b><small>On release: ⇄ answers or → executes, and the prompt of that relation.</small></span><i class="clip-bar"></i></button></li>
+          <li><button type="button" class="clip-step" aria-pressed="false" aria-controls="clip" data-src="img/studio-skills.mp4" data-poster="img/studio-skills-poster.jpg"><span class="clip-n">3</span><span class="clip-text"><b>Give them skills</b><small>Open-source skills, fetched only when the team starts, never into your project.</small></span><i class="clip-bar"></i></button></li>
+          <li><button type="button" class="clip-step" aria-pressed="false" aria-controls="clip" data-src="img/studio-start.mp4" data-poster="img/studio-start-poster.jpg"><span class="clip-n">4</span><span class="clip-text"><b>Start the team</b><small>A name, a folder from Choose…, Create team: each agent is a Claude Code session.</small></span><i class="clip-bar"></i></button></li>
+        </ol>
+        <figure class="shot">
+          <video id="clip" src="img/studio-agents.mp4" poster="img/studio-agents-poster.jpg" width="1440" height="960" muted playsinline preload="none" data-clips aria-label="The studio of Forchetta: agents dragged onto a canvas, arrows pulled between them with the relation chosen on release, a skill dropped on the junior, and the team started, its four sessions open."></video>
+          <figcaption>Recorded in the <a href="demo/">demo</a>, where you can try it: the app and the daemon are real, the sessions are scripted stand-ins for Claude Code. <a href="manual.html#teams">Teams in the manual</a>.</figcaption>
+        </figure>
+      </div>
     </section>
 
-    <section class="part" aria-labelledby="glance-title">
+    <!-- The guard, played in the page: two scripted sessions, the real messages of Claude Code and Forchetta. -->
+    <section class="part" id="guard" aria-labelledby="guard-title">
       <div class="text">
-        <h2 id="glance-title">Every session at a glance</h2>
-        <p>Forchetta listens to the hooks of Claude Code, so it knows what each session does the moment it does it. Sessions you start anywhere show up by themselves: in the Terminal, in iTerm, in an editor. Each box says what it is doing, how full its context is and what it costs.</p>
-        <p>Click a box and its terminal opens next to the others, a real one you can type in. Answer a permission from the box. A notification tells you when a session waits for you, seems stuck or goes in circles.</p>
+        <h2 id="guard-title">They don't step on each other</h2>
+        <p>Agents in the same folder sooner or later reach for the same file. Forchetta sees every edit before it happens: the second one is stopped and told why, and goes on by itself when the file is free.</p>
+        <p>So there's no worktree to set up: one folder, one set of dependencies, one dev server, nothing to merge at the end. It works for every session, also one you start with plain <code>claude</code>. <a href="manual.html#guard">Everything the guard does</a> is in the manual.</p>
+      </div>
+      <div class="play-controls">
+        <p class="play-title" id="play-title"><b>Two sessions, one file.</b> Play it with the guard, then without.</p>
+        <div class="play-buttons">
+          <div class="switch" role="group" aria-label="The guard">
+            <button type="button" data-mode="on" aria-pressed="true">Guard on</button>
+            <button type="button" data-mode="off" aria-pressed="false">Guard off</button>
+          </div>
+          <button class="replay" type="button" id="replay">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8A5.2 5.2 0 1 1 11.6 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12.4 1.6v3.2H9.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Replay
+          </button>
+        </div>
+      </div>
+
+      <div class="window">
+        <div class="window-bar" aria-hidden="true">
+          <span class="lights"><i></i><i></i><i></i></span>
+          <strong>Forchetta</strong>
+          <span class="count">2 sessions in ~/shop</span>
+        </div>
+        <div class="stage">
+          <div class="pane" data-who="a" id="pane-a" data-state="idle">
+            <div class="pane-head"><h3>retries</h3><span class="pane-state">idle</span><span class="pane-folder">~/shop</span></div>
+            <div class="guard-line" aria-live="off"></div>
+            <div class="term" aria-hidden="true"><div class="term-lines"></div></div>
+          </div>
+          <div class="file" id="file" data-lock="free">
+            <div class="file-head"><h3>src/api.ts</h3><span class="lock">free</span></div>
+            <div class="code" aria-hidden="true"></div>
+            <div class="file-foot" aria-hidden="true"><span class="by-a">retries</span><span class="by-b">rate-limit</span></div>
+          </div>
+          <div class="pane" data-who="b" id="pane-b" data-state="idle">
+            <div class="pane-head"><h3>rate-limit</h3><span class="pane-state">idle</span><span class="pane-folder">~/shop</span></div>
+            <div class="guard-line" aria-live="off"></div>
+            <div class="term" aria-hidden="true"><div class="term-lines"></div></div>
+          </div>
+        </div>
+        <div class="progress" aria-hidden="true"><i></i></div>
+      </div>
+
+      <div class="story">
+        <p class="narration" id="narration" aria-live="polite">Two Claude Code sessions in the same folder, each asked to change src/api.ts.</p>
+        <button class="button primary" type="button" id="next" hidden></button>
+      </div>
+      <p class="play-note">A scripted replay with stand-in sessions. What the guard tells Claude, and the message that lets it go on, are the ones Forchetta really sends. For the whole app, with sessions you start and type into, <a href="demo/">try the demo</a>.</p>
+    </section>
+
+    <section class="part" id="sessions" aria-labelledby="glance-title">
+      <div class="text">
+        <h2 id="glance-title">Every session in one window</h2>
+        <p>Every Claude Code session on your Mac shows up by itself, wherever you started it: the Terminal, iTerm, your editor. Each box tells you what it's doing, how full its context is and what it costs.</p>
+        <p>Answer a permission from the box. Click it, and its terminal opens next to the others. A notification tells you when a session waits for you, or seems stuck. <a href="manual.html#window">The window in the manual</a>.</p>
       </div>
 
       <div class="demo-bar"><strong>Forchetta</strong><span id="counts">6 sessions</span></div>
@@ -785,28 +811,21 @@
       <p class="demo-note">A replay of the app's grid, with made-up sessions. Answer blog's permission when it asks, or hover a box for <code>compact</code> and <code>clear</code>. infra was started with plain <code>claude</code>: Forchetta shows it, but can't type into it.</p>
     </section>
 
-    <section class="part" id="studio" aria-labelledby="studio-title">
+    <section class="part" id="video" aria-labelledby="video-title">
       <div class="text">
-        <h2 id="studio-title">Draw a team in the studio</h2>
-        <p>A team of agents: a lead, which is a Claude session or you, and as many members as you need, each a Claude Code session with its own role, model and skills. The lead splits the goal into requests, the members answer or ask when they are stuck, on as many levels as you need.</p>
-        <p>Drag agents onto a canvas, pull an arrow from each one to the agents it leads, give them their skills, and start the team.</p>
-        <p class="studio-cta"><a class="button primary" href="studio/">Open the Studio Maker</a> <span>The same studio in your browser: make a team, export it as a file, open it in Forchetta. What you draw stays in this browser.</span></p>
+        <h2 id="video-title">Forchetta in three minutes</h2>
+        <p>The guard, the window, a team drawn in the studio and at work, and the install.</p>
       </div>
-      <div class="clips">
-        <ol class="clip-steps" aria-label="The studio, step by step">
-          <li><button type="button" class="clip-step" aria-pressed="true" aria-controls="clip" data-src="img/studio-agents.mp4" data-poster="img/studio-agents-poster.jpg"><span class="clip-n">1</span><span class="clip-text"><b>Drag the agents</b><small>Presets with a role, a model and skills, or “+ new agent” for one of your own.</small></span><i class="clip-bar"></i></button></li>
-          <li><button type="button" class="clip-step" aria-pressed="false" aria-controls="clip" data-src="img/studio-arrows.mp4" data-poster="img/studio-arrows-poster.jpg"><span class="clip-n">2</span><span class="clip-text"><b>Pull the arrows</b><small>On release: ⇄ answers or → executes, and the prompt of that relation.</small></span><i class="clip-bar"></i></button></li>
-          <li><button type="button" class="clip-step" aria-pressed="false" aria-controls="clip" data-src="img/studio-skills.mp4" data-poster="img/studio-skills-poster.jpg"><span class="clip-n">3</span><span class="clip-text"><b>Give them skills</b><small>Open-source skills, fetched only when the team starts, never into your project.</small></span><i class="clip-bar"></i></button></li>
-          <li><button type="button" class="clip-step" aria-pressed="false" aria-controls="clip" data-src="img/studio-start.mp4" data-poster="img/studio-start-poster.jpg"><span class="clip-n">4</span><span class="clip-text"><b>Start the team</b><small>A name, a folder from Choose…, Create team: each agent is a Claude Code session.</small></span><i class="clip-bar"></i></button></li>
-        </ol>
-        <figure class="shot">
-          <video id="clip" src="img/studio-agents.mp4" poster="img/studio-agents-poster.jpg" width="1440" height="960" muted playsinline preload="none" data-clips aria-label="The studio of Forchetta: agents dragged onto a canvas, arrows pulled between them with the relation chosen on release, a skill dropped on the junior, and the team started, its four sessions open."></video>
-          <figcaption>Recorded in the <a href="demo/">demo</a>, where you can try it: the app and the daemon are real, the sessions are scripted stand-ins for Claude Code. <a href="manual.html#teams">Teams in the manual</a>.</figcaption>
-        </figure>
-      </div>
+      <figure class="shot">
+        <div class="yt">
+          <a href="https://www.youtube.com/watch?v=ZFPHyaAibCA" data-youtube="ZFPHyaAibCA" aria-label="Play the video, 3 minutes 23 seconds: Run parallel Claude Code sessions without collisions">
+            <img src="img/video-poster.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async">
+            <span class="yt-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 6 3.5z"/></svg>Play <small>3:23</small></span>
+          </a>
+        </div>
+        <figcaption>The player comes from YouTube, and the page loads it only when you press play. <a href="https://www.youtube.com/watch?v=ZFPHyaAibCA">Watch it on YouTube</a>.</figcaption>
+      </figure>
     </section>
-
-
 
     <section class="part text" id="install" aria-labelledby="install-title">
       <h2 id="install-title">Install</h2>
@@ -864,6 +883,22 @@
         timer = setTimeout(function () { button.classList.remove('copied'); label.textContent = 'Copy'; }, 1600);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () {});
+    });
+  });
+
+  // ———— The YouTube video: nothing from YouTube until a click, then its player in place of the poster. ————
+  document.querySelectorAll('[data-youtube]').forEach(function (link) {
+    link.addEventListener('click', function (event) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      var frame = document.createElement('iframe');
+      frame.src = 'https://www.youtube-nocookie.com/embed/' + link.getAttribute('data-youtube') + '?autoplay=1&rel=0';
+      frame.title = 'Forchetta in three minutes (YouTube)';
+      frame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      frame.allowFullscreen = true;
+      frame.referrerPolicy = 'strict-origin-when-cross-origin';
+      link.replaceWith(frame);
+      frame.focus();
     });
   });
 

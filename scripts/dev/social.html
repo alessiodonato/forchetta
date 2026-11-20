@@ -4,7 +4,7 @@
   Social preview of the repository on GitHub (Settings → Social preview, uploaded by hand).
   To make it again: open this page in Chrome at 1280×640 and take a screenshot of the whole page, for example with
   headless Chrome and Page.captureScreenshot through the DevTools protocol. The panel on the right is a crop of
-  docs/img/guard.png.
+  docs/img/studio.png.
 -->
 <html lang="en">
 <head>
@@ -38,16 +38,19 @@
   h1 em { display: block; font-style: normal; color: var(--claude); }
   p { width: 540px; margin: 24px 0 0; font-size: 20px; line-height: 1.5; color: var(--text-2); }
   code { margin-top: 40px; padding: 11px 17px; border: 1px solid var(--line); border-radius: 8px; background: #262522; font-family: var(--mono); font-size: 18px; color: var(--text); }
-  /* The pane of rate-limit, stopped by the guard: a crop of docs/img/guard.png (2800×1572, shown at half size). */
+  /* A team on the canvas of the studio: a crop of docs/img/studio.png (2400×1520, shown at half size). */
   .shot {
     position: absolute;
     left: 676px;
     top: 58px;
     width: 568px;
     height: 640px;
-    background: url(../../docs/img/guard.png) no-repeat;
-    background-size: 1400px 786px;
-    background-position: -818px -44px;
+    border: 1px solid var(--line);
+    border-bottom: 0;
+    border-radius: 12px 12px 0 0;
+    background: url(../../docs/img/studio.png) no-repeat;
+    background-size: 1200px 760px;
+    background-position: -204px -56px;
   }
 </style>
 </head>
@@ -57,10 +60,10 @@
       <svg viewBox="0 0 18 18" aria-hidden="true"><g fill="#d97757"><rect x="5.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="7.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="10.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="12.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="5.1" y="6.4" width="8.8" height="2.6" rx="1.3"/><path d="M7.4 8.6h4.2l-1.5 2.8H8.9z"/><rect x="8.6" y="10.8" width="1.8" height="6.4" rx=".9"/></g></svg>
       Forchetta
     </div>
-    <h1>Run several Claude Code sessions in the same repo. <em>They won't step on each other.</em></h1>
-    <p>When two sessions reach for the same file, one waits, and goes on by itself when the file is free.</p>
+    <h1>Draw a team of Claude Code agents. <em>Put it to work.</em></h1>
+    <p>Each agent is a Claude Code session. They split the work, and they don't step on each other's files.</p>
     <code>brew install alessiodonato/tap/forchetta</code>
   </div>
-  <div class="shot" role="img" aria-label="The pane of rate-limit: its edit of src/api.ts stopped by the guard, because retries is changing it, and Claude saying it will wait."></div>
+  <div class="shot" role="img" aria-label="A team in the studio: you above the manager, the manager leading a senior and a reviewer, the senior leading a junior."></div>
 </body>
 </html>

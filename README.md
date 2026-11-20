@@ -4,9 +4,9 @@
 
 # Forchetta
 
-### Run several Claude Code sessions in the same repo. They won't step on each other.
+### Draw a team of Claude Code agents, and put it to work.
 
-When two sessions reach for the same file, Forchetta makes one wait, tells Claude why, and lets it go on by itself when the file is free. Around that: every Claude Code session on your Mac in one window, permission prompts answered from there, a notification when one needs you, and teams of agents.
+Drag the agents onto a canvas, draw who leads whom, and start the team in your project. Each agent is a Claude Code session: they split the work, and Forchetta keeps them off each other's files. Every session on your Mac, in a team or not, sits in one window.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#install)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#install)
@@ -17,75 +17,46 @@ When two sessions reach for the same file, Forchetta makes one wait, tells Claud
 [![Website](https://img.shields.io/badge/website-forchetta.dev-d97757?style=flat-square)](https://forchetta.dev/)
 
 [Install](#install) ·
-[Try it in your browser](https://forchetta.dev/demo/) ·
-[The guard](#the-guard) ·
-[How it compares](#how-it-compares) ·
+[Draw a team in your browser](https://forchetta.dev/studio/) ·
+[Try the whole app](https://forchetta.dev/demo/) ·
 [Manual](https://forchetta.dev/manual.html) ·
 [🇮🇹 Italiano](README.it.md)
 
 <br>
 
+<a href="https://www.youtube.com/watch?v=ZFPHyaAibCA"><img src="docs/img/video-poster-play.jpg" alt="Forchetta in three minutes: play the video on YouTube" width="100%"></a>
+
+<sub>Forchetta in three minutes, on YouTube.</sub>
+
+</div>
+
+## Draw a team
+
+<img src="docs/img/studio.png" alt="The studio of Forchetta: agents on the left, a team on the canvas with you above the manager, the manager leading a senior and a reviewer, the senior leading a junior; on the right, the junior's role, model and skills." width="100%">
+
+A team is a few Claude Code sessions that work together. In the studio you drag the agents onto a canvas, each with a role, a model and its skills, and pull an arrow from each one to the agents it leads.
+
+Then you start it with a goal. The lead, a Claude session or you, splits it into requests; the others do the work, and ask the one above them when they're stuck. You see what each agent costs while it works. Save the team as a template, and start it again in another project.
+
+The studio is also in your browser, as the [Studio Maker](https://forchetta.dev/studio/): draw a team, export it as a file, open it in Forchetta. [Teams in the manual](https://forchetta.dev/manual.html#teams).
+
+## The guard
+
 <img src="docs/img/guard.gif" alt="Two sessions in Forchetta on the same file: retries changes src/api.ts and runs its tests; rate-limit tries to edit src/api.ts, is stopped with the reason, and says it waits; when retries ends its turn, the notice that the file is free is typed into rate-limit, which makes its change." width="100%">
 
 <sub>Two sessions, one file: <code>rate-limit</code> is stopped while <code>retries</code> changes <code>src/api.ts</code>, and goes on by itself when the file is free. Recorded in the repository's simulation: the app, the daemon and the guard are real; the two sessions are scripted.</sub>
 
-</div>
+Agents in the same folder sooner or later reach for the same file. Forchetta sees every edit before it happens: the second one is stopped and told why, and goes on by itself when the file is free.
 
-## Why Forchetta
+So there's no worktree to set up: one folder, one set of dependencies, one dev server, nothing to merge at the end. It works for every session, also one you start with plain `claude`, and it tells each session what the others changed, right when it matters. [The guard in the manual](https://forchetta.dev/manual.html#guard).
 
-### The guard
-
-The usual way to run agents in parallel is a git worktree for each one. Then each worktree needs its own dependencies, its own `.env` and its own dev server, and you merge at the end. Forchetta lets sessions work side by side in one folder too:
-
-- a session **holds** the files it writes during its turn;
-- another session that tries to edit one of them is stopped, and Claude reads why: it works on something else, or ends its turn saying it waits;
-- when the turn that held the file ends, the waiting session is told the file is free, and goes on by itself;
-- a git command that would change the files under another session (`checkout`, `reset --hard`, `stash`, `pull`…) asks you first.
-
-And it tells each session what the others did, right when it matters:
-
-- **when it arrives**: who is halfway through which files, so it plans around them from the start;
-- **a file it read changed since**: who changed it, and the lines. With worktrees you find out at the merge; here the session adapts at once;
-- **before tests or a build**: which files the others are halfway through, so their errors are not taken for its bugs;
-- **lines another session added**, about to be taken away: stopped once, so no work is undone without knowing;
-- **a `git add -A`** that would sweep in the changes of another session: stopped once, with its own files to add instead;
-- **a dev server already running** in the folder: its address, instead of a second one; a kill of another session's process asks you first.
-
-It works for every session, also those started with plain `claude`. **let it through** in the box overrides it. [The guard in the manual](https://forchetta.dev/manual.html#guard).
-
-### It works with the `claude` you already run
-
-Forchetta listens to Claude Code through its hooks, so your sessions show up wherever you started them: the Terminal, iTerm, your editor. Same CLI, same settings, same hooks of yours. No account, no new agent runtime, and nothing about your sessions leaves your Mac.
-
-Start a session with `forchetta run claude`, or from the app, and Forchetta can also open its terminal and type commands into it.
-
-### One window for all of them
+## Every session in one window
 
 <img src="docs/img/overview.png" alt="The Forchetta window: twelve sessions, each in a box with its state, what it is doing, a summary, its context and its cost. Two wait for you, in amber." width="100%">
 
-- A live box per session: its state, what it is doing now, a short summary, its context and its cost. Amber when it waits for you, green when it's done, red on an error, and a dot on a result you haven't looked at yet.
-- The limits of your plan at the top (`5h 62% · week 31%`), and when the 5-hour one runs out at this pace.
-- Answer permission prompts from the box, once or "always".
-- A notification when a session waits for you, seems stuck, goes in circles (the same command failing the same way, again and again), or ends with an error.
-- What the guard did this week, at the top; `forchetta stats` in the terminal.
-- Up to four real terminals side by side.
+Every Claude Code session on your Mac shows up by itself, wherever you started it: the Terminal, iTerm, your editor. Same CLI, same settings, same hooks of yours. Each box tells you what the session is doing, how full its context is and what it costs, and turns amber when it waits for you.
 
-### Teams, when you want them
-
-A lead, which is a Claude session or you, and as many members as you need, on as many levels as you need: a junior can report to a senior that reports to the lead, and each relation has a prompt of its own. Each member is a full Claude Code session with its own role and model, and by default its own worktree. Requests go down the chart through an MCP server; members answer, or ask the one above them when they're stuck, and a senior's answer goes up only when its junior's work is done. Give a member its own files, and the guard keeps it in them and the others out of them. A member that reviews approves commits, and the guard asks you before a merge of anything it did not approve. The tokens and the cost of each agent, and of the team, show as they work. Draw a team in the studio, dragging agents, whole teams and skills (open-source ones, or your own) onto a canvas and pulling arrows between them (a skill is fetched only when a team uses it, outside your project); save it as a template and start it again in another project, or describe your teams in a document and ask any session to set them up: it saves the templates, and you start them from the app. You can also draw a team in your browser with the [Studio Maker](https://forchetta.dev/studio/) and open its file in Forchetta. [Teams in the manual](https://forchetta.dev/manual.html#teams).
-
-## How it compares
-
-| | What it is | How Forchetta differs |
-|---|---|---|
-| **Agent View** (`claude agents`) | Anthropic's full-screen list of your background sessions, in the terminal | A window that stays open next to your work, with terminals side by side, and the guard. |
-| **Claude Desktop** | Anthropic's app, with parallel sessions in its sidebar | It works with the `claude` CLI you already run in your terminals, with your hooks and settings. |
-| **Agent teams** (experimental in Claude Code) | A lead session that spawns teammates and shares a task list with them | Teams are set up in a panel or drawn in a studio, on as many levels as you need, and saved as templates: role, model, permissions, worktree and skills for each member. The lead can be you. |
-| **Conductor** and similar Mac apps | Apps that run several coding agents, each in an isolated workspace | Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely. |
-| **Orca**, **Paseo** | Open-source desktop and phone apps that run many kinds of coding agents, each in its own git worktree | No worktree to set up: sessions share one folder, and the guard keeps them off each other's files. It works with the `claude` you already run, in any terminal. |
-| **cmux**, **Claude Squad** | Terminals and session managers for many kinds of coding agents | Built for Claude Code only, through its hooks: the guard, permissions from the box, context and cost per session, subagents. |
-
-They don't rule each other out: sessions started in any terminal show up in Forchetta.
+Answer a permission from the box. Click it, and its terminal opens next to the others. A notification tells you when a session waits for you, or seems stuck. Start a session with `forchetta run claude`, or from the app, and Forchetta can also type commands into it. [The window in the manual](https://forchetta.dev/manual.html#window).
 
 ## Install
 
@@ -110,21 +81,22 @@ To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 The second session is stopped, says it will wait for `src/api.ts`, and goes on when the first one ends its turn. In Forchetta, both boxes show who holds the file and who waits.
 
-## What else it does
+## How it compares
 
-- **Commands**: `/btw`, `/compact` and `/clear` to one session or to several, typed only when it's safe: never into a dialog, never over a draft of yours. [More](https://forchetta.dev/manual.html#commands)
-- **Hand-offs**: select text in a terminal to ask Claude about it, or to send it to another session. [More](https://forchetta.dev/manual.html#selection)
-- **What each session did**: the files it changed, its subagents at work, the artifacts it published on claude.ai, and a warning when two sessions wrote the same file. [More](https://forchetta.dev/manual.html#changes)
-- **New sessions and teams from the app**, with model, permission mode and worktree. [More](https://forchetta.dev/manual.html#new-session)
-- **Names, groups and roles**, with an org chart. [More](https://forchetta.dev/manual.html#window)
-- **Menu bar icon**, Dock badge and the shortcut ⌃⌥F. [More](https://forchetta.dev/manual.html#alerts)
-- **Teams in the repository**: `.forchetta/` holds team files, rules for every team and the guard settings of the repo, reviewed with the code; `forchetta team start review-squad --goal "…"` starts one from a terminal or a script, and a budget per team warns you when it costs more. [More](https://forchetta.dev/manual.html#repo-teams)
-- **Reports**: every turn, cost, file, step of the guard, request and review goes in a local ledger; `forchetta report --since 7d --by team` reads it as a table, CSV or JSON. [More](https://forchetta.dev/manual.html#report)
-- **Settings, ⌘K and shortcuts**: the settings in the app, a palette for every command and session, a light theme, boxes you open from the keyboard. [More](https://forchetta.dev/manual.html#settings)
-- **`forchetta doctor`** says what is not in place and how to fix it; `--bundle` writes a file for an issue, with your names taken out. [More](https://forchetta.dev/manual.html#cli)
-- **`forchetta ls --json`**, for scripts. [More](https://forchetta.dev/manual.html#cli)
+| | What it is | How Forchetta differs |
+|---|---|---|
+| **Agent View** (`claude agents`) | Anthropic's full-screen list of your background sessions, in the terminal | A window that stays open next to your work, with terminals side by side, and the guard. |
+| **Claude Desktop** | Anthropic's app, with parallel sessions in its sidebar | It works with the `claude` CLI you already run in your terminals, with your hooks and settings. |
+| **Agent teams** (experimental in Claude Code) | A lead session that spawns teammates and shares a task list with them | Teams are set up in a panel or drawn in a studio, on as many levels as you need, and saved as templates: role, model, permissions, worktree and skills for each member. The lead can be you. |
+| **Conductor** and similar Mac apps | Apps that run several coding agents, each in an isolated workspace | Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely. |
+| **Orca**, **Paseo** | Open-source desktop and phone apps that run many kinds of coding agents, each in its own git worktree | No worktree to set up: sessions share one folder, and the guard keeps them off each other's files. It works with the `claude` you already run, in any terminal. |
+| **cmux**, **Claude Squad** | Terminals and session managers for many kinds of coding agents | Built for Claude Code only, through its hooks: the guard, permissions from the box, context and cost per session, subagents. |
 
-Everything is in the [manual](https://forchetta.dev/manual.html).
+They don't rule each other out: sessions started in any terminal show up in Forchetta.
+
+## And more
+
+Commands to one session or to several, text handed from one terminal to another, the files each session changed, teams kept in the repository, a local ledger with reports, a palette for every command (⌘K), and `forchetta doctor` when something is not in place. Everything is in the [manual](https://forchetta.dev/manual.html).
 
 ## What it touches on your Mac
 
