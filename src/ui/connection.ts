@@ -40,7 +40,12 @@ export class Connection {
   private lastAsk = 0;
 
   constructor(private readonly store: Store) {
-    store.send = (message) => this.send(message);
+    store.send = (message) => {
+      const sent = this.send(message);
+      // Not sent: what waits for its answer is told now, not left "…" forever.
+      if (!sent) store.notSent();
+      return sent;
+    };
     window.forchettaAuth = (auth) => {
       this.token = auth.token;
       currentToken = auth.token;
@@ -61,8 +66,11 @@ export class Connection {
     this.send({ type: 'visibility', visible });
   }
 
-  send(message: unknown): void {
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
+  /** Sends a message to the daemon; false when the connection is not open (nothing is kept to send later). */
+  send(message: unknown): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    this.socket.send(JSON.stringify(message));
+    return true;
   }
 
   private open(): void {

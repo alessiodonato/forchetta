@@ -1,4 +1,5 @@
-import { accessSync, constants, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { accessSync, constants } from 'node:fs';
+import { readDataJson, writeDataJson } from './data-file.ts';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { UserError } from './errors.ts';
@@ -66,13 +67,10 @@ export const DEFAULT_CONFIG: Config = {
 
 const positive = (value: unknown, fallback: number): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback);
 
-export function loadConfig(file = paths.config): Config {
-  let raw: Record<string, unknown> = {};
-  try {
-    if (existsSync(file)) raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-  } catch {
-    // A broken file falls back to the defaults; `hooks install` writes it again.
-  }
+export function loadConfig(file = paths.config, log: (message: string) => void = () => {}): Config {
+  // A broken file is set aside (config.json.corrupt-<time>), never written over: the version before, or the defaults.
+  const read = readDataJson(file, 'configurazione', log);
+  const raw: Record<string, unknown> = read && typeof read === 'object' && !Array.isArray(read) ? (read as Record<string, unknown>) : {};
   const toolPaths: Partial<Record<Tool, string>> = {};
   const given = raw.paths;
   if (given && typeof given === 'object') {
@@ -140,7 +138,7 @@ export function detectArricurdai(settingsText: string | undefined, find: (name: 
 
 export function saveConfig(config: Config, file = paths.config): void {
   ensurePrivateDir(paths.varDir);
-  writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  writeDataJson(file, config);
 }
 
 function executable(path: string): boolean {

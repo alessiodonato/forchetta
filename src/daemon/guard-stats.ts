@@ -1,4 +1,5 @@
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { writeDataJson } from '../shared/data-file.ts';
 import { dayOf, type GuardCounts, type GuardStatKind, type GuardStatsInfo } from '../shared/guard-stats.ts';
 
 // What the guard did, by day (shared/guard-stats.ts): kept in var/guard-stats.json, on this Mac only. Nothing of a
@@ -68,10 +69,8 @@ export class GuardStats {
   private save(): void {
     if (!this.file) return;
     try {
-      const temporary = `${this.file}.${process.pid}`;
       const saved: Saved = { version: 1, days: this.days };
-      writeFileSync(temporary, `${JSON.stringify(saved)}\n`, { mode: 0o600 });
-      renameSync(temporary, this.file);
+      writeDataJson(this.file, saved, false);
     } catch (error) {
       this.options.log?.(`conteggi del vigile non salvati: ${String(error)}`);
     }

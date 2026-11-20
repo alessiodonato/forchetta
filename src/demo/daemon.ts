@@ -196,7 +196,7 @@ export class DemoDaemon {
         return crew ? { template: templateOf(crew), cwd: crew.cwd } : undefined;
       },
       // In a browser the page downloads the file itself; opening one works as on a Mac, without skills to fetch.
-      onImportTeam: (text) => importTeam(text, async () => ({ ok: false, error: 'skills of yours are not added in the demo' })),
+      onImportTeam: (text, choice) => importTeam(text, (link) => (this.events.skills ? this.events.skills.add(link) : Promise.resolve({ ok: false, error: 'skills of yours are not added in the demo' })), choice),
       onAddSkill: async (source) =>
         this.events.skills
           ? this.events.skills.add(source)

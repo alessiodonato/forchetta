@@ -6,12 +6,31 @@
 #
 # Daemon off, slow, or with nothing to say: it prints nothing and exits 0, and the tool goes on as usual. Claude
 # Code also lets the tool go on when the hook runs past its timeout.
+# The private folder of Forchetta, by the rule of src/shared/paths.ts: the daemon listens for the hooks on a socket
+# there (0700, so no other user or app can be in its place).
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+if [ -n "${FORCHETTA_VAR:-}" ]; then
+  data=$FORCHETTA_VAR
+elif [ -e "$root/.git" ]; then
+  data="$root/var"
+else
+  data="$HOME/Library/Application Support/Forchetta"
+fi
+socket="$data/hooks.sock"
+# A daemon from before the socket (0.9.12 and older) listens for the hooks on its port: the port, until it is
+# restarted. Once a newer daemon has run in this folder (it writes data-version), only the socket, also when the
+# daemon is off: nobody can stand in its place.
 port=${1:-47821}
-/usr/bin/curl --silent --fail --max-time 1 \
+if [ -S "$socket" ] || [ -e "$data/data-version" ]; then
+  via=--unix-socket target=$socket base=http://localhost
+else
+  via=--noproxy target='*' base="http://127.0.0.1:$port"
+fi
+/usr/bin/curl --silent --fail --max-time 1 "$via" "$target" \
   --header 'Content-Type: application/json' \
   --header "X-Forchetta-Pid: ${PPID:-}" \
   --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
   --header "X-Forchetta-Pane: ${TMUX_PANE:-}" \
   --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
-  --data-binary @- "http://127.0.0.1:$port/forchetta/guard" 2>/dev/null
+  --data-binary @- "$base/forchetta/guard" 2>/dev/null
 exit 0

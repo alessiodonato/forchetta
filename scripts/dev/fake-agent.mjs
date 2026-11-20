@@ -10,6 +10,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { request } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -63,19 +64,31 @@ const shownCwd = home && (cwd === home || cwd.startsWith(`${home}/`)) ? `~${cwd.
 const daemon = () => JSON.parse(readFileSync(join(varDir, 'daemon.json'), 'utf8'));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** A request to the daemon on the socket of the hooks (as bin/forchetta-hook sends it): its status and its body. */
+function toHooks(socketPath, path, headers, body, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const req = request({ socketPath, method: 'POST', path, headers: { host: 'localhost', ...headers }, timeout: timeoutMs }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => (text += chunk));
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, text }));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+
 async function hook(event, extra = {}) {
   try {
-    await fetch(`http://127.0.0.1:${daemon().port}/forchetta/hook`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-forchetta-claude-pid': String(process.pid),
-        'x-forchetta-pane': process.env.TMUX_PANE ?? '',
-        'x-forchetta-agent': agentId,
-      },
-      body: JSON.stringify({ session_id: sessionId, cwd, transcript_path: `/tmp/fake-${sessionId}.jsonl`, hook_event_name: event, ...extra }),
-      signal: AbortSignal.timeout(2000),
-    });
+    await toHooks(
+      join(varDir, 'hooks.sock'),
+      '/forchetta/hook',
+      { 'content-type': 'application/json', 'x-forchetta-claude-pid': String(process.pid), 'x-forchetta-pane': process.env.TMUX_PANE ?? '', 'x-forchetta-agent': agentId },
+      JSON.stringify({ session_id: sessionId, cwd, transcript_path: `/tmp/fake-${sessionId}.jsonl`, hook_event_name: event, ...extra }),
+      2000,
+    );
   } catch {
     // The daemon is not there: a real session does not notice either.
   }
@@ -84,13 +97,13 @@ async function hook(event, extra = {}) {
 /** The guard of the daemon, as bin/forchetta-guard asks it before a tool that writes: its decision, or undefined. */
 async function guard(toolName, toolInput) {
   try {
-    const response = await fetch(`http://127.0.0.1:${daemon().port}/forchetta/guard`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forchetta-claude-pid': String(process.pid), 'x-forchetta-pane': process.env.TMUX_PANE ?? '', 'x-forchetta-agent': agentId },
-      body: JSON.stringify({ session_id: sessionId, cwd, hook_event_name: 'PreToolUse', tool_name: toolName, tool_input: toolInput }),
-      signal: AbortSignal.timeout(1000),
-    });
-    const text = await response.text();
+    const { text } = await toHooks(
+      join(varDir, 'hooks.sock'),
+      '/forchetta/guard',
+      { 'content-type': 'application/json', 'x-forchetta-claude-pid': String(process.pid), 'x-forchetta-pane': process.env.TMUX_PANE ?? '', 'x-forchetta-agent': agentId },
+      JSON.stringify({ session_id: sessionId, cwd, hook_event_name: 'PreToolUse', tool_name: toolName, tool_input: toolInput }),
+      1000,
+    );
     return text ? JSON.parse(text).hookSpecificOutput : undefined;
   } catch {
     return undefined;

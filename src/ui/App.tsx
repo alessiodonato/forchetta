@@ -221,7 +221,7 @@ export function App({ store }: { store: Store }) {
   }, [startedId]);
 
   return (
-    <div class={`app${working ? ' with-panes' : ''}`}>
+    <div class={`app${working ? ' with-panes' : ''}${state.ready && !state.connected ? ' offline' : ''}`}>
       <header class="top">
         <h1>Forchetta</h1>
         <div class="top-right">
@@ -296,7 +296,11 @@ export function App({ store }: { store: Store }) {
         />}
       {state.ready && panel === 'recall' && <RecallPanel agents={agents} store={store} onClose={() => toggle('recall')} />}
       {state.ready && panel === 'prompts' && <PromptsPanel store={store} onClose={() => setPanel(undefined)} />}
-      {state.ready && !state.connected && <p class="notice">Daemon unreachable: trying again…</p>}
+      {state.ready && !state.connected && (
+        <p class="notice offline-notice" role="status">
+          The daemon of Forchetta is not answering: what you see may be old, and nothing can be sent until it is back. Trying again…
+        </p>
+      )}
       {!state.ready ? (
         <p class="empty">Connecting to the daemon…</p>
       ) : working ? (

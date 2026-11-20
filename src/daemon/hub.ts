@@ -33,7 +33,7 @@ export type ServerMessage =
   /** A running team in full, for the studio: its template (roles, relations, rules) and its folder. */
   | { type: 'crewTemplate'; now: number; crewId: string; template?: CrewTemplate; cwd?: string }
   /** A team saved as a file (its path), or opened from one (its template, and what changed on the way). */
-  | { type: 'teamFile'; now: number; action: 'save' | 'import'; ok: boolean; error?: string; path?: string; template?: CrewTemplate; notes?: string[] }
+  | { type: 'teamFile'; now: number; action: 'save' | 'import'; ok: boolean; error?: string; path?: string; template?: CrewTemplate; notes?: string[]; ask?: { id: string; repo: string; path: string; commit: string }[] }
   /** The skills you added, after a change: next to the catalog. */
   | { type: 'customSkills'; now: number; skills: SkillInfo[] }
   /** How adding or taking away a skill of yours went, for the window that asked. */
@@ -118,7 +118,7 @@ export type ClientMessage =
   | { type: 'crewTemplate'; crewId: string }
   /** A team as a file: saved in your Downloads (the app cannot save a file itself), or opened from its text. */
   | { type: 'saveTeamFile'; name: string; text: string }
-  | { type: 'importTeam'; text: string }
+  | { type: 'importTeam'; text: string; choice?: 'ask' | 'fetch' | 'skip' }
   /** A skill of yours, from a link of GitHub or a folder of this Mac; or taken away. */
   | { type: 'addSkill'; source: string }
   | { type: 'removeSkill'; id: string }
@@ -169,7 +169,7 @@ export interface HubOptions {
   crewTemplate?: (crewId: string) => { template: CrewTemplate; cwd: string } | undefined;
   /** A team as a file: saved, or opened. */
   onSaveTeamFile?: (name: string, text: string) => { ok: boolean; error?: string; path?: string };
-  onImportTeam?: (text: string) => Promise<{ ok: boolean; error?: string; template?: CrewTemplate; notes?: string[] }>;
+  onImportTeam?: (text: string, choice: 'ask' | 'fetch' | 'skip') => Promise<{ ok: boolean; error?: string; template?: CrewTemplate; notes?: string[]; ask?: { id: string; repo: string; path: string; commit: string }[] }>;
   /** The skills you added, and adding or taking one away. */
   customSkills?: () => readonly SkillInfo[];
   onAddSkill?: (source: string) => Promise<{ ok: boolean; error?: string; id?: string }>;
@@ -347,9 +347,19 @@ export class Hub {
           const result = this.options.onSaveTeamFile(String(message.name ?? 'team').slice(0, 80), String(message.text ?? ''));
           this.send(ws, { type: 'teamFile', now: Date.now(), action: 'save', ok: result.ok, ...(result.error ? { error: result.error } : {}), ...(result.path ? { path: result.path } : {}) });
         } else if (message.type === 'importTeam' && this.options.onImportTeam) {
-          void this.options.onImportTeam(String(message.text ?? '')).then(
+          const choice = message.choice === 'fetch' || message.choice === 'skip' ? message.choice : 'ask';
+          void this.options.onImportTeam(String(message.text ?? ''), choice).then(
             (result) => {
-              this.send(ws, { type: 'teamFile', now: Date.now(), action: 'import', ok: result.ok, ...(result.error ? { error: result.error } : {}), ...(result.template ? { template: result.template } : {}), ...(result.notes ? { notes: result.notes } : {}) });
+              this.send(ws, {
+                type: 'teamFile',
+                now: Date.now(),
+                action: 'import',
+                ok: result.ok,
+                ...(result.error ? { error: result.error } : {}),
+                ...(result.template ? { template: result.template } : {}),
+                ...(result.notes ? { notes: result.notes } : {}),
+                ...(result.ask ? { ask: result.ask } : {}),
+              });
               if (result.ok) this.broadcast({ type: 'customSkills', now: Date.now(), skills: [...(this.options.customSkills?.() ?? [])] });
             },
             (error: unknown) => this.send(ws, { type: 'teamFile', now: Date.now(), action: 'import', ok: false, error: String(error) }),

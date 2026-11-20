@@ -1,10 +1,10 @@
-import type { AddressInfo } from 'node:net';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Limits, type RateLimits, rateLimitsOf, runsOutAt } from '../src/daemon/limits.ts';
 import { Registry } from '../src/daemon/registry.ts';
 import { createDaemonServer, STATUS_PATH } from '../src/daemon/server.ts';
 import { limitParts, LIMITS_PACE_FRESH_MS } from '../src/shared/present.ts';
-import { http, sleep } from './helpers.ts';
+import { http, sleep, tempDir } from './helpers.ts';
 
 // The limits of the Claude plan, from `rate_limits` of the status line: the share of the 5-hour and weekly windows,
 // when they reset, and when the 5-hour one runs out at the pace of the last half hour.
@@ -45,18 +45,21 @@ describe('the status line route', () => {
   it('passes the limits of an input on, with the cost of its session', async () => {
     const taken: RateLimits[] = [];
     const registry = new Registry({});
-    const server = createDaemonServer({ registry, token: 'c'.repeat(64), port: () => port, log: () => {}, info: () => ({}), onShutdown: () => {}, onRateLimits: (limits) => taken.push(limits) });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const port = (server.address() as AddressInfo).port;
+    const server = createDaemonServer({ registry, token: 'c'.repeat(64), port: () => 0, log: () => {}, info: () => ({}), onShutdown: () => {}, onRateLimits: (limits) => taken.push(limits) });
+    // The status line talks on the socket of the hooks, as bin/forchetta-statusline does.
+    const temp = tempDir('limits');
+    const socket = join(temp.dir, 'hooks.sock');
+    await new Promise<void>((resolve) => server.hooks.listen(socket, resolve));
     try {
       const body = JSON.stringify({ ...STATUS_INPUT, cost: { total_cost_usd: 0.5 } });
-      const reply = await http(port, { method: 'POST', path: STATUS_PATH, headers: { 'Content-Type': 'application/json' }, body });
+      const reply = await http(socket, { method: 'POST', path: STATUS_PATH, headers: { 'Content-Type': 'application/json' }, body });
       expect(reply.status).toBe(200);
       await sleep(20);
       expect(taken).toEqual([{ fiveHour: { percent: 21, resetsAt: 1794367800_000 }, sevenDay: { percent: 37, resetsAt: 1794571200_000 } }]);
     } finally {
       registry.dispose();
-      await new Promise((resolve) => server.close(resolve));
+      await new Promise((resolve) => server.hooks.close(resolve));
+      temp.cleanup();
     }
   });
 });

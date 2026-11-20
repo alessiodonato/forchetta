@@ -106,6 +106,30 @@ export function renameSync(from: unknown, to: unknown): void {
   else putFile(key(to), entry.text);
 }
 
+// Files written whole (shared/data-file.ts): a descriptor is the path; the text goes in at writeSync.
+const open = new Map<number, string>();
+let nextFd = 3;
+export function openSync(path: unknown, _flags?: unknown, _mode?: unknown): number {
+  writeFileSync(path, '');
+  const fd = nextFd++;
+  open.set(fd, key(path));
+  return fd;
+}
+export function writeSync(fd: number, data: unknown): number {
+  const path = open.get(fd);
+  if (path === undefined) throw errno('EBADF', String(fd));
+  const text = textOf(data);
+  putFile(path, (readText(path) ?? '') + text);
+  return text.length;
+}
+export const fsyncSync = (_fd: number): void => {};
+export const closeSync = (fd: number): void => void open.delete(fd);
+export function linkSync(from: unknown, to: unknown): void {
+  const text = readText(key(from));
+  if (text === undefined) throw errno('ENOENT', key(from));
+  putFile(key(to), text);
+}
+
 export function readdirSync(path: unknown, options?: { withFileTypes?: boolean }): unknown[] {
   const at = key(path);
   if (!entries.get(at)?.dir) throw errno('ENOENT', at);
@@ -140,4 +164,4 @@ export const promises = {
   writeFile: async (path: unknown, data: unknown) => writeFileSync(path, data),
 };
 
-export default { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, rmSync, unlinkSync, renameSync, readdirSync, statSync, lstatSync, chmodSync, realpathSync, createReadStream, promises };
+export default { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, rmSync, unlinkSync, renameSync, openSync, writeSync, fsyncSync, closeSync, linkSync, readdirSync, statSync, lstatSync, chmodSync, realpathSync, createReadStream, promises };

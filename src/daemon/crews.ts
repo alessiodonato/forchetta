@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
+import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { isAbsolute, join, relative } from 'node:path';
 import { type Agent, type QueuedCommand, TEAM_TEXT_MAX, type TeamInfo } from '../shared/agent.ts';
 import {
@@ -247,12 +248,9 @@ export class Crews {
     if (!dir || !existsSync(dir)) return;
     for (const file of readdirSync(dir)) {
       if (!file.endsWith('.json')) continue;
-      try {
-        const crew = JSON.parse(readFileSync(join(dir, file), 'utf8')) as Crew;
-        if (typeof crew.id === 'string' && typeof crew.name === 'string' && Array.isArray(crew.members)) this.crews.set(crew.id, crew);
-      } catch {
-        this.log(`team ${file} illeggibile, ignorato`);
-      }
+      const crew = readDataJson(join(dir, file), `team ${file}`, this.log) as Crew | undefined;
+      if (crew && typeof crew.id === 'string' && typeof crew.name === 'string' && Array.isArray(crew.members)) this.crews.set(crew.id, crew);
+      else if (crew !== undefined) this.log(`team ${file}: non è un team, ignorato (il file resta com'è)`);
     }
     for (const crew of this.crews.values()) this.restoreWaits(crew);
   }
@@ -1272,10 +1270,7 @@ export class Crews {
     if (!this.dir) return;
     try {
       ensurePrivateDir(this.dir);
-      const file = join(this.dir, `${crew.id}.json`);
-      const temporary = `${file}.${process.pid}`;
-      writeFileSync(temporary, `${JSON.stringify(crew, null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, file);
+      writeDataJson(join(this.dir, `${crew.id}.json`), crew);
     } catch (error) {
       this.log(`team «${crew.name}» non salvato: ${String(error)}`);
     }
@@ -1361,16 +1356,15 @@ export class CrewTemplates {
     private readonly file: string | undefined,
     private readonly log: (message: string) => void = () => {},
   ) {
-    if (!file || !existsSync(file)) return;
-    try {
-      const raw = JSON.parse(readFileSync(file, 'utf8')) as unknown;
-      for (const item of Array.isArray(raw) ? raw : []) {
-        const checked = cleanTemplate(item);
-        if ('template' in checked) this.saved.push(checked.template);
-      }
-    } catch {
-      this.log('modelli dei team illeggibili, ignorati');
+    if (!file) return;
+    const raw = readDataJson(file, 'modelli dei team', log);
+    const rejected: unknown[] = [];
+    for (const item of Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]) {
+      const checked = cleanTemplate(item);
+      if ('template' in checked) this.saved.push(checked.template);
+      else rejected.push(item);
     }
+    keepRejected(file, rejected, 'modelli dei team', log);
   }
 
   list(): CrewTemplate[] {
@@ -1420,9 +1414,7 @@ export class CrewTemplates {
   private write(): void {
     if (!this.file) return;
     try {
-      const temporary = `${this.file}.${process.pid}`;
-      writeFileSync(temporary, `${JSON.stringify(this.saved, null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, this.file);
+      writeDataJson(this.file, this.saved);
     } catch (error) {
       this.log(`modelli dei team non salvati: ${String(error)}`);
     }
@@ -1440,16 +1432,15 @@ export class RolePresets {
     private readonly file: string | undefined,
     private readonly log: (message: string) => void = () => {},
   ) {
-    if (!file || !existsSync(file)) return;
-    try {
-      const raw = JSON.parse(readFileSync(file, 'utf8')) as unknown;
-      for (const item of Array.isArray(raw) ? raw : []) {
-        const checked = cleanRolePreset(item);
-        if ('preset' in checked) this.saved.push(checked.preset);
-      }
-    } catch {
-      this.log('preset dello studio illeggibili, ignorati');
+    if (!file) return;
+    const raw = readDataJson(file, 'preset dello studio', log);
+    const rejected: unknown[] = [];
+    for (const item of Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]) {
+      const checked = cleanRolePreset(item);
+      if ('preset' in checked) this.saved.push(checked.preset);
+      else rejected.push(item);
     }
+    keepRejected(file, rejected, 'preset dello studio', log);
   }
 
   private static same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
@@ -1488,9 +1479,7 @@ export class RolePresets {
   private write(): void {
     if (!this.file) return;
     try {
-      const temporary = `${this.file}.${process.pid}`;
-      writeFileSync(temporary, `${JSON.stringify(this.saved, null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, this.file);
+      writeDataJson(this.file, this.saved);
     } catch (error) {
       this.log(`preset dello studio non salvati: ${String(error)}`);
     }

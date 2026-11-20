@@ -1,4 +1,4 @@
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { type Agent, cleanTeam, type TeamInfo } from '../shared/agent.ts';
 
 // Names, groups and roles of the sessions, for the chart of a team of agents. They are set from the box of a
@@ -15,15 +15,15 @@ export class Teams {
     private readonly log: (message: string) => void = () => {},
   ) {
     if (!file) return;
-    try {
-      const saved = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-      for (const [folder, team] of Object.entries(saved)) {
-        const clean = cleanTeam(team);
-        if (clean && folder.startsWith('/')) this.byFolder[folder] = clean;
-      }
-    } catch {
-      // No file yet, or one that cannot be read: no team remembered.
+    const saved = readDataJson(file, 'team delle cartelle', log);
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+    const rejected: unknown[] = [];
+    for (const [folder, team] of Object.entries(saved)) {
+      const clean = cleanTeam(team);
+      if (clean && folder.startsWith('/')) this.byFolder[folder] = clean;
+      else rejected.push({ [folder]: team });
     }
+    keepRejected(file, rejected, 'team delle cartelle', log);
   }
 
   /** Gives a new session the team remembered for its folder. Returns whether it changed the agent. */
@@ -70,9 +70,7 @@ export class Teams {
   private save(): void {
     if (!this.file) return;
     try {
-      const temporary = `${this.file}.${process.pid}`;
-      writeFileSync(temporary, `${JSON.stringify(this.byFolder, null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, this.file);
+      writeDataJson(this.file, this.byFolder);
     } catch (error) {
       this.log(`team non salvati: ${String(error)}`);
     }

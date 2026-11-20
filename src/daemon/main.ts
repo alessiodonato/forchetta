@@ -1,6 +1,7 @@
 import { execFile, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { migrateData, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { contextWindowOf, detectArricurdai, loadConfig, resolveTool } from '../shared/config.ts';
@@ -75,7 +76,14 @@ const CONTEXT_EVENTS = new Set(['Stop', 'StopFailure', 'PostCompact', 'SessionSt
 function main(): void {
   process.title = 'forchetta-daemon';
   ensurePrivateDir(paths.varDir);
-  const config = loadConfig();
+  // Data of a newer Forchetta is not touched: this daemon would not understand it, and could write over it.
+  const migrated = migrateData(paths.varDir, log);
+  if (!migrated.ok) {
+    log(migrated.error);
+    process.stderr.write(`forchetta: ${migrated.error}\n`);
+    process.exit(1);
+  }
+  const config = loadConfig(paths.config, log);
   const tmux = new Tmux(resolveTool('tmux', config), paths.tmuxSocket, paths.tmuxConf);
   let claude: string | undefined;
   try {
@@ -99,9 +107,7 @@ function main(): void {
   let saveTimer: NodeJS.Timeout | undefined;
   const save = (): void => {
     saveTimer = undefined;
-    const temporary = `${paths.state}.${process.pid}`;
-    writeFileSync(temporary, `${JSON.stringify({ savedAt: Date.now(), agents: registry.list(), writes: conflicts.dump() })}\n`, { mode: 0o600 });
-    renameSync(temporary, paths.state);
+    writeDataJson(paths.state, { savedAt: Date.now(), agents: registry.list(), writes: conflicts.dump() }, false);
   };
   const saveSoon = (): void => {
     saveTimer ??= setTimeout(save, 1000);
@@ -381,8 +387,8 @@ function main(): void {
     for (const delay of REFUSAL_CHECKS_MS) setTimeout(() => void checkRefused(agent, at, prompt), delay).unref();
   };
   try {
-    if (existsSync(paths.state)) {
-      const saved = JSON.parse(readFileSync(paths.state, 'utf8')) as { agents?: Agent[]; writes?: unknown };
+    const saved = readDataJson(paths.state, 'stato salvato', log) as { agents?: Agent[]; writes?: unknown } | undefined;
+    if (saved) {
       registry.restore(saved.agents ?? []);
       // What the guard held lives in its memory only: after a restart nothing is held, and the boxes say so.
       for (const agent of registry.agents.values()) {
@@ -470,7 +476,7 @@ function main(): void {
       const saved = saveTeamFile(name, text);
       return saved.ok ? { ok: true, path: saved.path.replace(homedir(), '~') } : saved;
     },
-    onImportTeam: (text) => importTeam(text, (link) => yourSkills.add(link)),
+    onImportTeam: (text, choice) => importTeam(text, (link) => yourSkills.add(link), choice),
     onAddSkill: async (source) => {
       const result = await yourSkills.add(source);
       return result.ok ? { ok: true, id: result.skill.id } : result;
@@ -614,6 +620,7 @@ function main(): void {
   commander = new Commander({ registry, tmux, log, notes, onRequest: (_agent, command) => crews.commandChanged(command) });
   const queue = commander;
   crews.enqueue = (agentId, text, link) => queue.enqueueRequest(agentId, text, link);
+  commander.restored();
 
   // Whether a claude process shows its dialogs in a terminal: read once per pid (see process.ts).
   const interactiveByPid = new Map<number, boolean>();
@@ -813,6 +820,12 @@ function main(): void {
     } catch {
       // Already gone.
     }
+    server.hooks.close();
+    try {
+      rmSync(paths.hooksSocket, { force: true });
+    } catch {
+      // Already gone.
+    }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();
   }
@@ -824,7 +837,31 @@ function main(): void {
     process.exit(1);
   });
 
+  // The hooks talk on a socket of the private folder: one left by a daemon that did not stop is taken away first
+  // (this one holds the port, so no other daemon is running). macOS takes paths of 104 bytes at most.
+  const listenForHooks = (): void => {
+    const socket = paths.hooksSocket;
+    if (Buffer.byteLength(socket) > 103) {
+      log(`socket degli hook non creato: il percorso è troppo lungo (${socket})`);
+      return;
+    }
+    try {
+      rmSync(socket, { force: true });
+    } catch {
+      // Nothing there.
+    }
+    server.hooks.on('error', (error) => log(`socket degli hook: ${String(error)}`));
+    server.hooks.listen(socket, () => {
+      try {
+        chmodSync(socket, 0o600);
+      } catch {
+        // The folder is 0700 anyway.
+      }
+    });
+  };
+
   server.listen(config.port, '127.0.0.1', () => {
+    listenForHooks();
     writeFileSync(paths.daemonInfo, `${JSON.stringify({ pid: process.pid, port: config.port, token, startedAt, version: VERSION })}\n`, { mode: 0o600 });
     log(`daemon ${VERSION} attivo su 127.0.0.1:${config.port} (pid ${process.pid})`);
 

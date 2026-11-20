@@ -1,11 +1,12 @@
 import type { AddressInfo } from 'node:net';
-import { type ClientRequest, request, type Server } from 'node:http';
+import { type ClientRequest, request } from 'node:http';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DENY_MESSAGE, decisionOutput, Permissions } from '../src/daemon/permissions.ts';
 import { isInteractiveCommand } from '../src/daemon/process.ts';
 import { Registry } from '../src/daemon/registry.ts';
 import { createDaemonServer, HOOK_PATH, PERMISSION_PATH } from '../src/daemon/server.ts';
-import { http, sleep } from './helpers.ts';
+import { http, sleep, tempDir } from './helpers.ts';
 
 // The permission dialog answered from the box, through the real HTTP routes: bin/forchetta-permission posts the
 // request, gets a ticket and waits on it; the box answers; or the terminal does first.
@@ -13,8 +14,12 @@ import { http, sleep } from './helpers.ts';
 const json = { 'content-type': 'application/json' };
 const SESSION = 's-perm';
 
-let server: Server;
+let server: ReturnType<typeof createDaemonServer>;
 let port = 0;
+const temp = tempDir('permissions');
+let sockets = 0;
+/** The socket of the hooks of this test, as the daemon opens it in its private folder. */
+let hooks = '';
 let registry: Registry;
 let permissions: Permissions;
 let interactive = true;
@@ -50,6 +55,8 @@ beforeEach(async () => {
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = (server.address() as AddressInfo).port;
+  hooks = join(temp.dir, `hooks-${++sockets}.sock`);
+  await new Promise<void>((resolve) => server.hooks.listen(hooks, resolve));
   // A session that is working: its pid comes with the hook, as from bin/forchetta-hook.
   await hook({ hook_event_name: 'UserPromptSubmit', session_id: SESSION, cwd: '/tmp/progetto', prompt: 'crea il file' });
 });
@@ -58,13 +65,15 @@ afterEach(async () => {
   permissions.stop();
   registry.dispose();
   server.closeAllConnections();
+  server.hooks.closeAllConnections();
+  await new Promise((resolve) => server.hooks.close(resolve));
   await new Promise((resolve) => server.close(resolve));
 });
 
 const agent = () => registry.list().find((candidate) => candidate.sessionId === SESSION)!;
 
 function hook(body: Record<string, unknown>) {
-  return http(port, { method: 'POST', path: HOOK_PATH, headers: { ...json, 'x-forchetta-claude-pid': '4321' }, body: JSON.stringify(body) });
+  return http(hooks, { method: 'POST', path: HOOK_PATH, headers: { ...json, 'x-forchetta-claude-pid': '4321' }, body: JSON.stringify(body) });
 }
 
 const bash = (command: string, extra: Record<string, unknown> = {}) => ({
@@ -77,14 +86,14 @@ const bash = (command: string, extra: Record<string, unknown> = {}) => ({
 });
 
 function ask(body: Record<string, unknown>, wait = '60') {
-  return http(port, { method: 'POST', path: PERMISSION_PATH, headers: { ...json, 'x-forchetta-claude-pid': '4321', 'x-forchetta-wait': wait }, body: JSON.stringify(body) });
+  return http(hooks, { method: 'POST', path: PERMISSION_PATH, headers: { ...json, 'x-forchetta-claude-pid': '4321', 'x-forchetta-wait': wait }, body: JSON.stringify(body) });
 }
 
 /** The hook waiting on its ticket: the answer, or the moment its connection is cut. */
 function wait(ticket: string): { reply: Promise<{ status: number; body: string }>; cut: () => void } {
   let req: ClientRequest | undefined;
   const reply = new Promise<{ status: number; body: string }>((resolve, reject) => {
-    req = request({ host: '127.0.0.1', port, path: `${PERMISSION_PATH}/${ticket}`, headers: { host: `127.0.0.1:${port}` } }, (res) => {
+    req = request({ socketPath: hooks, path: `${PERMISSION_PATH}/${ticket}`, headers: { host: 'localhost' } }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk: string) => (body += chunk));
@@ -251,10 +260,10 @@ describe('requests Forchetta does not hold', () => {
 describe('the waiting route', () => {
   it('refuses web pages and unknown tickets', async () => {
     const ticket = (await ask(bash('touch l.txt'))).body;
-    expect((await http(port, { path: `${PERMISSION_PATH}/${ticket}`, headers: { origin: 'https://evil.example' } })).status).toBe(403);
-    expect((await http(port, { path: `${PERMISSION_PATH}/zz` })).status).toBe(404);
-    expect((await http(port, { path: `${PERMISSION_PATH}/${'0'.repeat(32)}` })).body).toBe('');
-    expect((await http(port, { method: 'POST', path: PERMISSION_PATH, headers: { ...json, origin: 'https://evil.example' }, body: '{}' })).status).toBe(403);
+    expect((await http(hooks, { path: `${PERMISSION_PATH}/${ticket}`, headers: { origin: 'https://evil.example' } })).status).toBe(403);
+    expect((await http(hooks, { path: `${PERMISSION_PATH}/zz` })).status).toBe(404);
+    expect((await http(hooks, { path: `${PERMISSION_PATH}/${'0'.repeat(32)}` })).body).toBe('');
+    expect((await http(hooks, { method: 'POST', path: PERMISSION_PATH, headers: { ...json, origin: 'https://evil.example' }, body: '{}' })).status).toBe(403);
   });
 
   it('at shutdown every waiting hook ends empty', async () => {

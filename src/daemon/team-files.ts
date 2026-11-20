@@ -23,26 +23,43 @@ export function saveTeamFile(name: string, text: string, dir = join(homedir(), '
   }
 }
 
+/** A skill a team file brings from GitHub, to fetch only when you say so. */
+export type SkillToFetch = { id: string; repo: string; path: string; commit: string };
+
 /**
- * A team file opened: its template, checked; the skills of GitHub it needs and this Mac does not have are added
- * (at their commit); those that cannot come (a folder of the other Mac, or a fetch that failed) are left out, and
- * said in the notes.
+ * A team file opened: its template, checked. The skills of GitHub it needs and this Mac does not have are code
+ * someone else chose: with `choice` "ask" (the first time) nothing is fetched, and they come back in `ask`, for
+ * you to look at; "fetch" adds them at their commit, "skip" leaves them out. Those that cannot come (a folder of
+ * the other Mac, or a fetch that failed) are left out too, and said in the notes.
  */
 export async function importTeam(
   text: string,
   addSkill: (link: string) => Promise<{ ok: boolean; error?: string }>,
-): Promise<{ ok: true; template: CrewTemplate; notes: string[] } | { ok: false; error: string }> {
+  choice: 'ask' | 'fetch' | 'skip' = 'ask',
+): Promise<{ ok: true; template: CrewTemplate; notes: string[] } | { ok: true; ask: SkillToFetch[] } | { ok: false; error: string }> {
   const parsed = parseTeamFile(text);
   if ('error' in parsed) return { ok: false, error: parsed.error };
   const { template, skills = [] } = parsed.file;
+  const missing = skillsOfTemplate(template).filter((id) => !skillById(id));
+  const toFetch = skills.filter((skill) => missing.includes(skill.id));
+  if (choice === 'ask' && toFetch.length > 0) {
+    // Checked before anything is fetched: a template that cannot be opened is said now.
+    const checked = cleanTemplate(withoutSkills(template, new Set(missing)));
+    if ('error' in checked) return { ok: false, error: checked.error };
+    return { ok: true, ask: toFetch };
+  }
   const notes: string[] = [];
   const gone = new Set<string>();
-  for (const id of skillsOfTemplate(template)) {
-    if (skillById(id)) continue;
-    const source = skills.find((skill) => skill.id === id);
+  for (const id of missing) {
+    const source = toFetch.find((skill) => skill.id === id);
     if (!source) {
       gone.add(id);
       notes.push(`${id} is left out: it was a skill from a folder of the Mac the team comes from`);
+      continue;
+    }
+    if (choice === 'skip') {
+      gone.add(id);
+      notes.push(`${id} is left out, as you chose`);
       continue;
     }
     const added = await addSkill(`https://github.com/${source.repo}/tree/${source.commit}/${source.path}`);

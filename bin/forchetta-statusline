@@ -3,16 +3,9 @@
 # message; this script sends its input to the local daemon in the background, then prints the status line you
 # had: the command `forchetta hooks install` saved in the private folder of Forchetta, run with the same input.
 # With the daemon off nothing changes: curl fails in the background, your status line prints as before.
-port=${1:-47821}
+# The private folder of Forchetta, by the rule of src/shared/paths.ts: the daemon listens for the hooks on a socket
+# there (0700, so no other user or app can be in its place).
 root=$(cd "$(dirname "$0")/.." && pwd -P)
-input=$(cat)
-printf '%s' "$input" | /usr/bin/curl --silent --max-time 1 --output /dev/null \
-  --header 'Content-Type: application/json' \
-  --header "X-Forchetta-Pid: ${PPID:-}" \
-  --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
-  --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
-  --data-binary @- "http://127.0.0.1:$port/forchetta/status" >/dev/null 2>&1 &
-# The private folder of Forchetta, by the rule of src/shared/paths.ts.
 if [ -n "${FORCHETTA_VAR:-}" ]; then
   data=$FORCHETTA_VAR
 elif [ -e "$root/.git" ]; then
@@ -20,6 +13,23 @@ elif [ -e "$root/.git" ]; then
 else
   data="$HOME/Library/Application Support/Forchetta"
 fi
+socket="$data/hooks.sock"
+# A daemon from before the socket (0.9.12 and older) listens for the hooks on its port: the port, until it is
+# restarted. Once a newer daemon has run in this folder (it writes data-version), only the socket, also when the
+# daemon is off: nobody can stand in its place.
+port=${1:-47821}
+if [ -S "$socket" ] || [ -e "$data/data-version" ]; then
+  via=--unix-socket target=$socket base=http://localhost
+else
+  via=--noproxy target='*' base="http://127.0.0.1:$port"
+fi
+input=$(cat)
+printf '%s' "$input" | /usr/bin/curl --silent --max-time 1 --output /dev/null "$via" "$target" \
+  --header 'Content-Type: application/json' \
+  --header "X-Forchetta-Pid: ${PPID:-}" \
+  --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
+  --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
+  --data-binary @- "$base/forchetta/status" >/dev/null 2>&1 &
 saved="$data/statusline-command"
 if [ -s "$saved" ]; then
   printf '%s' "$input" | /bin/sh -c "$(cat "$saved")"

@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { safeRepoPath } from '../shared/skill-links.ts';
 import { type SkillInfo, skillById } from '../shared/skills.ts';
 
 // The skills of the agents of a team (shared/skills.ts), on this Mac. The first time a team uses a skill, its folder
@@ -27,6 +28,15 @@ export const gitRunner =
     });
 
 export const slug = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+/** Whether a folder holds a symbolic link, at any depth. */
+export function hasLinks(dir: string): boolean {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) return true;
+    if (entry.isDirectory() && hasLinks(join(dir, entry.name))) return true;
+  }
+  return false;
+}
 
 export function bytesOf(dir: string): number {
   let total = 0;
@@ -117,8 +127,12 @@ export class SkillCache {
       await run(['fetch', '-q', '--depth', '1', '--filter=blob:none', 'origin', commit]);
       await run(['checkout', '-q', 'FETCH_HEAD']);
       for (const skill of skills) {
+        // The folder must be inside the work folder, and hold no link: a link could make Claude read any file.
+        if (!safeRepoPath(skill.path)) throw new Error(`${skill.id}: the folder ${skill.path} is not a plain folder of the repository`);
         const from = join(work, skill.path);
+        if (!resolve(from).startsWith(`${resolve(work)}/`)) throw new Error(`${skill.id}: the folder ${skill.path} is outside the repository`);
         if (!existsSync(join(from, 'SKILL.md'))) throw new Error(`${skill.id}: no SKILL.md in ${skill.path}`);
+        if (hasLinks(from)) throw new Error(`${skill.id}: it holds symbolic links, which a skill does not need`);
         if (bytesOf(from) > MAX_BYTES) throw new Error(`${skill.id}: more than ${MAX_BYTES / 1024 / 1024} MB`);
         const to = this.folderOf(skill);
         mkdirSync(dirname(to), { recursive: true, mode: 0o700 });

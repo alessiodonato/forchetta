@@ -64,7 +64,18 @@ export interface UiState {
   /** A running team in full, as the studio asked for it (requestCrewTemplate). */
   liveTeam?: { crewId: string; template?: CrewTemplate; cwd?: string; at: number };
   /** A team saved as a file, or opened from one: under way, or how it went. */
-  teamFile?: { action: 'save' | 'import'; busy: boolean; ok?: boolean; error?: string; path?: string; template?: CrewTemplate; notes?: string[]; at: number };
+  teamFile?: {
+    action: 'save' | 'import';
+    busy: boolean;
+    ok?: boolean;
+    error?: string;
+    path?: string;
+    template?: CrewTemplate;
+    notes?: string[];
+    /** The skills of GitHub the team brings, waiting for you to say whether to fetch them (answerImport). */
+    ask?: { id: string; repo: string; path: string; commit: string }[];
+    at: number;
+  };
   /** Adding or taking away a skill of yours: under way, or how it went. */
   skillEdit?: { action: 'add' | 'remove'; busy: boolean; ok?: boolean; error?: string; id?: string; at: number };
   /** The last change of a team or of the templates asked from a panel, and how it went. */
@@ -130,10 +141,17 @@ function loadSeen(): Record<string, number> | undefined {
 /** A session whose terminal can be shown: run in the tmux of Forchetta, and not ended. */
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
+/** The actions of the page that wait for an answer of the daemon, each with its busy flag. */
+const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest'] as const satisfies readonly (keyof UiState)[];
+
+/** What an action says when the daemon was not there to take it. */
+export const NOT_SENT = 'not sent: the daemon of Forchetta is not connected (the page reconnects by itself; try again in a moment)';
+
 export class Store {
   state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [], roles: [], customSkills: [], prompts: [] };
   /** Sends a message to the daemon (set by the connection). */
-  send: (message: ClientMessage) => void = () => {};
+  /** Sends a message to the daemon (connection.ts); false when it could not go. */
+  send: (message: ClientMessage) => boolean = () => false;
   /** A notification asked by the daemon (see attention.ts). */
   onNotify: (message: Extract<ServerMessage, { type: 'notify' }>) => void = () => {};
   /** Agents that arrived after the first list: their box enters with an animation, once. */
@@ -246,9 +264,11 @@ export class Store {
           ...(message.path ? { path: message.path } : {}),
           ...(message.template ? { template: message.template } : {}),
           ...(message.notes ? { notes: message.notes } : {}),
+          ...(message.ask ? { ask: message.ask } : {}),
           at: Date.now(),
         },
       });
+      if (!message.ask) this.importing = undefined;
       return;
     }
     if (message.type === 'skillEdited') {
@@ -344,6 +364,24 @@ export class Store {
 
   setConnected(connected: boolean): void {
     if (connected !== this.state.connected) this.set({ connected });
+    // An answer that was coming will not: whatever waited for it says so.
+    if (!connected) this.dropBusy();
+  }
+
+  /** A message did not go (the daemon is not connected): what set itself busy for it is told, once it has. */
+  notSent(): void {
+    queueMicrotask(() => this.dropBusy());
+  }
+
+  /** Every action that waits for an answer of the daemon, now told that none will come. */
+  private dropBusy(): void {
+    const patch: Record<string, unknown> = {};
+    for (const key of BUSY_KEYS) {
+      const value = this.state[key] as { busy?: boolean; at?: number } | undefined;
+      if (!value?.busy) continue;
+      patch[key] = { ...value, busy: false, ok: false, error: NOT_SENT, ...(value.at !== undefined ? { at: Date.now() } : {}) };
+    }
+    if (Object.keys(patch).length > 0) this.set(patch as Partial<UiState>);
   }
 
   setVisible(visible: boolean): void {
@@ -542,10 +580,29 @@ export class Store {
     this.send({ type: 'crewTemplate', crewId });
   }
 
-  /** Opens the text of a team file: the daemon checks it and adds the skills of GitHub it needs (teamFile). */
+  /** The text of the team file being opened, while its skills wait for your answer. */
+  private importing: string | undefined;
+
+  /**
+   * Opens the text of a team file: the daemon checks it. When it brings skills of GitHub this Mac does not have,
+   * nothing is fetched yet: teamFile.ask lists them, and answerImport says what to do.
+   */
   importTeam(text: string): void {
+    this.importing = text;
     this.set({ teamFile: { action: 'import', busy: true, at: Date.now() } });
-    this.send({ type: 'importTeam', text });
+    this.send({ type: 'importTeam', text, choice: 'ask' });
+  }
+
+  /** The answer about the skills of a team file: fetch them at their commit, open the team without them, or neither. */
+  answerImport(choice: 'fetch' | 'skip' | 'cancel'): void {
+    const text = this.importing;
+    if (choice === 'cancel' || text === undefined) {
+      this.importing = undefined;
+      this.set({ teamFile: undefined });
+      return;
+    }
+    this.set({ teamFile: { action: 'import', busy: true, at: Date.now() } });
+    this.send({ type: 'importTeam', text, choice });
   }
 
   /** A skill of yours from a link of GitHub or a folder; the daemon fetches it, and says how it went (skillEdit). */

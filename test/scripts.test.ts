@@ -1,7 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { daemonEnv, envFileText, paneEnv } from '../src/cli/pane-env.ts';
@@ -29,13 +28,52 @@ function run(file: string, args: string[], env: NodeJS.ProcessEnv, input?: strin
   });
 }
 
-const BASE_ENV = { PATH: '/usr/bin:/bin' };
+// The hooks talk on the socket of the private folder: in the tests always one of their own, never the folder of
+// this checkout, where a daemon may be running.
+const NOWHERE = join(temp.dir, 'no-daemon');
+mkdirSync(NOWHERE, { recursive: true });
+const BASE_ENV = { PATH: '/usr/bin:/bin', FORCHETTA_VAR: NOWHERE };
+
+let sockets = 0;
+/** A server on the socket of a private folder of its own, as the daemon listens for the hooks; that folder. */
+async function onSocket(server: { listen: (path: string, done: () => void) => unknown }): Promise<string> {
+  const dir = join(temp.dir, `sock-${++sockets}`);
+  mkdirSync(dir, { recursive: true });
+  await new Promise<void>((resolve) => server.listen(join(dir, 'hooks.sock'), resolve));
+  return dir;
+}
 
 describe('bin/forchetta-hook', () => {
   it('prints nothing and exits 0 at once when the daemon is not running', async () => {
     const result = await run(paths.hookScript, ['1'], BASE_ENV, '{"hook_event_name":"SessionStart","session_id":"x"}');
     expect(result).toMatchObject({ code: 0, stdout: '', stderr: '' });
     expect(result.ms).toBeLessThan(1500);
+  });
+
+  it('talks on the port to a daemon from before the socket, never once a newer one has run in the folder', async () => {
+    const seen: string[] = [];
+    const server = createServer((req, res) => {
+      seen.push(req.url ?? '');
+      req.resume();
+      req.on('end', () => res.end());
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = String((server.address() as { port: number }).port);
+    const input = '{"hook_event_name":"Stop","session_id":"abc"}';
+    // A folder where only an older daemon ran: no socket, no data-version.
+    const older = join(temp.dir, 'older-daemon');
+    mkdirSync(older, { recursive: true });
+    await run(paths.hookScript, [port], { ...BASE_ENV, FORCHETTA_VAR: older }, input);
+    expect(seen).toEqual(['/forchetta/hook']);
+    // A newer daemon ran here and is off now: nothing goes to the port, whoever listens there.
+    const newer = join(temp.dir, 'newer-daemon');
+    mkdirSync(newer, { recursive: true });
+    writeFileSync(join(newer, 'data-version'), '1\n');
+    const guard = await run(paths.guardScript, [port], { ...BASE_ENV, FORCHETTA_VAR: newer }, '{"hook_event_name":"PreToolUse","session_id":"abc","tool_name":"Edit"}');
+    await run(paths.hookScript, [port], { ...BASE_ENV, FORCHETTA_VAR: newer }, input);
+    await new Promise((resolve) => server.close(resolve));
+    expect(seen).toEqual(['/forchetta/hook']);
+    expect(guard).toMatchObject({ code: 0, stdout: '' });
   });
 
   it('sends the input with pid, pane and agent', async () => {
@@ -48,10 +86,9 @@ describe('bin/forchetta-hook', () => {
         res.end();
       });
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const port = (server.address() as AddressInfo).port;
+    const varDir = await onSocket(server);
     const input = '{"hook_event_name":"SessionStart","session_id":"abc","source":"startup"}';
-    const result = await run(paths.hookScript, [String(port)], { ...BASE_ENV, TMUX_PANE: '%5', FORCHETTA_AGENT: 'agent-1', CLAUDE_PID: '777' }, input);
+    const result = await run(paths.hookScript, ['1'], { ...BASE_ENV, FORCHETTA_VAR: varDir, TMUX_PANE: '%5', FORCHETTA_AGENT: 'agent-1', CLAUDE_PID: '777' }, input);
     await new Promise((resolve) => server.close(resolve));
     expect(result).toMatchObject({ code: 0, stdout: '' });
     expect(received?.url).toBe('/forchetta/hook');
@@ -79,8 +116,8 @@ describe('bin/forchetta-guard', () => {
         res.end(body);
       });
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    return { port: (server.address() as AddressInfo).port, received: () => received, close: () => new Promise((resolve) => server.close(resolve)) };
+    const varDir = await onSocket(server);
+    return { varDir, received: () => received, close: () => new Promise((resolve) => server.close(resolve)) };
   }
 
   it('prints nothing and exits 0 at once when the daemon is not running: the tool goes on', async () => {
@@ -94,7 +131,7 @@ describe('bin/forchetta-guard', () => {
   it('prints the decision of the daemon, as it came, for Claude Code to read', async () => {
     const decision = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"busy"}}';
     const server = await daemon(200, decision);
-    const result = await run(paths.guardScript, [String(server.port)], { ...BASE_ENV, FORCHETTA_AGENT: 'agent-1', TMUX_PANE: '%3' }, INPUT);
+    const result = await run(paths.guardScript, ['1'], { ...BASE_ENV, FORCHETTA_VAR: server.varDir, FORCHETTA_AGENT: 'agent-1', TMUX_PANE: '%3' }, INPUT);
     await server.close();
     expect(result).toMatchObject({ code: 0, stdout: decision, stderr: '' });
     expect(server.received()?.url).toBe('/forchetta/guard');
@@ -108,7 +145,7 @@ describe('bin/forchetta-guard', () => {
       [500, '{"error":"x"}'],
     ] as const) {
       const server = await daemon(status, body);
-      const result = await run(paths.guardScript, [String(server.port)], BASE_ENV, INPUT);
+      const result = await run(paths.guardScript, ['1'], { ...BASE_ENV, FORCHETTA_VAR: server.varDir }, INPUT);
       await server.close();
       expect(result).toMatchObject({ code: 0, stdout: '', stderr: '' });
     }
@@ -140,9 +177,8 @@ describe('bin/forchetta-permission', () => {
       req.resume();
       req.on('end', () => res.end());
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const port = (server.address() as AddressInfo).port;
-    const result = await run(paths.permissionScript, [String(port)], BASE_ENV, input);
+    const varDir = await onSocket(server);
+    const result = await run(paths.permissionScript, ['1'], { ...BASE_ENV, FORCHETTA_VAR: varDir }, input);
     await new Promise((resolve) => server.close(resolve));
     expect(result).toMatchObject({ code: 0, stdout: '' });
   });
@@ -159,9 +195,8 @@ describe('bin/forchetta-permission', () => {
         else setTimeout(() => res.end(decision), 300);
       });
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const port = (server.address() as AddressInfo).port;
-    const result = await run(paths.permissionScript, [String(port), '30'], { ...BASE_ENV, CLAUDE_PID: '777', FORCHETTA_AGENT: 'agent-1' }, input);
+    const varDir = await onSocket(server);
+    const result = await run(paths.permissionScript, ['1', '30'], { ...BASE_ENV, FORCHETTA_VAR: varDir, CLAUDE_PID: '777', FORCHETTA_AGENT: 'agent-1' }, input);
     await new Promise((resolve) => server.close(resolve));
     expect(result).toMatchObject({ code: 0, stdout: decision });
     expect(seen.map((request) => `${request.method} ${request.url}`)).toEqual(['POST /forchetta/permission', `GET /forchetta/permission/${TICKET}`]);
@@ -183,9 +218,8 @@ describe('bin/forchetta-permission', () => {
         waiting();
       });
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const port = (server.address() as AddressInfo).port;
-    const child = spawn(paths.permissionScript, [String(port), '30'], { env: BASE_ENV });
+    const varDir = await onSocket(server);
+    const child = spawn(paths.permissionScript, ['1', '30'], { env: { ...BASE_ENV, FORCHETTA_VAR: varDir } });
     child.stdin.end(input);
     let stdout = '';
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));

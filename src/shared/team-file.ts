@@ -1,4 +1,5 @@
 import type { CrewTemplate } from './crew.ts';
+import { safeRepoPath } from './skill-links.ts';
 import { type SkillInfo, skillById } from './skills.ts';
 
 // A team as a file, to give to someone else: its template (roles, models, relations, rules, where its boxes and
@@ -52,7 +53,14 @@ export function parseTeamFile(text: string): { file: TeamFile } | { error: strin
   if (file.version !== 1) return { error: 'this team was saved by a newer Forchetta: update it to open the team' };
   const skills = (Array.isArray(file.skills) ? file.skills : []).filter(
     (skill): skill is NonNullable<TeamFile['skills']>[number] =>
-      !!skill && typeof skill.id === 'string' && typeof skill.repo === 'string' && /^[\w.-]+\/[\w.-]+$/.test(skill.repo) && typeof skill.path === 'string' && typeof skill.commit === 'string' && /^[0-9a-f]{40}$/.test(skill.commit),
+      !!skill &&
+      typeof skill.id === 'string' &&
+      typeof skill.repo === 'string' &&
+      /^[\w.-]+\/[\w.-]+$/.test(skill.repo) &&
+      typeof skill.path === 'string' &&
+      safeRepoPath(skill.path) &&
+      typeof skill.commit === 'string' &&
+      /^[0-9a-f]{40}$/.test(skill.commit),
   );
   return { file: { kind: TEAM_FILE_KIND, version: 1, template: file.template as PortableTemplate, ...(skills.length > 0 ? { skills } : {}) } };
 }

@@ -54,6 +54,8 @@ export function defaultVarDir(root = ROOT, env: NodeJS.ProcessEnv = process.env,
 export interface Paths {
   varDir: string;
   daemonInfo: string;
+  /** The socket the hooks of Claude Code talk to the daemon on (bin/forchetta-hook and the others find it the same way). */
+  hooksSocket: string;
   config: string;
   state: string;
   teams: string;
@@ -96,6 +98,7 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
   return {
     varDir,
     daemonInfo: join(varDir, 'daemon.json'),
+    hooksSocket: join(varDir, 'hooks.sock'),
     config: join(varDir, 'config.json'),
     state: join(varDir, 'state.json'),
     teams: join(varDir, 'teams.json'),

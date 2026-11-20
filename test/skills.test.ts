@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { Crews } from '../src/daemon/crews.ts';
@@ -68,10 +68,13 @@ describe('the cache of skills', () => {
       ['skills/alpha/reference.md', 'more'],
       ['skills/beta/SKILL.md', '---\nname: beta\ndescription: Beta.\n---\n'],
       ['big/other.txt', 'x'.repeat(50_000)],
+      ['skills/linky/SKILL.md', '---\nname: linky\ndescription: Linky.\n---\n'],
     ] as const) {
       mkdirSync(join(dir, path, '..'), { recursive: true });
       writeFileSync(join(dir, path), text);
     }
+    // A skill with a link to a file outside it.
+    symlinkSync('/etc/hosts', join(dir, 'skills', 'linky', 'hosts'));
     const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
     git('init', '-q');
     git('add', '.');
@@ -82,6 +85,8 @@ describe('the cache of skills', () => {
       alpha: { ...base, id: 'alpha', path: 'skills/alpha' },
       beta: { ...base, id: 'beta', path: 'skills/beta' },
       ghost: { ...base, id: 'ghost', path: 'skills/ghost' },
+      linky: { ...base, id: 'linky', path: 'skills/linky' },
+      climber: { ...base, id: 'climber', path: 'skills/../big' },
     };
     return { url: `file://${dir}`, commit, catalog: (id) => catalog[id] };
   }
@@ -111,6 +116,10 @@ describe('the cache of skills', () => {
     const cache = new SkillCache(join(temp.dir, 'cache-two'), gitRunner(), () => {}, () => source.url, source.catalog);
     expect(await cache.ensure(['ghost'])).toEqual({ failed: [{ id: 'ghost', error: 'ghost: no SKILL.md in skills/ghost' }] });
     expect(await cache.ensure(['nobody'])).toEqual({ failed: [{ id: 'nobody', error: 'not in the catalog' }] });
+    // A link inside a skill, or a folder that climbs out of where it should be, is not taken.
+    expect(await cache.ensure(['linky'])).toEqual({ failed: [{ id: 'linky', error: 'linky: it holds symbolic links, which a skill does not need' }] });
+    expect(await cache.ensure(['climber'])).toEqual({ failed: [{ id: 'climber', error: 'climber: the folder skills/../big is not a plain folder of the repository' }] });
+    expect(cache.has('linky')).toBe(false);
     const offline = new SkillCache(join(temp.dir, 'cache-three'), gitRunner(), () => {}, () => `file://${join(temp.dir, 'no-such-repo')}`, source.catalog);
     const result = await offline.ensure(['alpha']);
     expect(result.failed).toEqual([{ id: 'alpha', error: expect.stringMatching(/^git fetch: /) }]);

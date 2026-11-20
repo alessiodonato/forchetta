@@ -407,7 +407,40 @@ function Minimap({ doc, size, zoom, view }: { doc: StudioDoc; size: { width: num
 /** A team from its file: dropped on the studio, or its text pasted here. */
 function ImportTeam({ store }: { store: Store }) {
   const [text, setText] = useState('');
-  const busy = store.state.teamFile?.action === 'import' && store.state.teamFile.busy;
+  const file = store.state.teamFile?.action === 'import' ? store.state.teamFile : undefined;
+  const busy = file?.busy === true;
+  // The skills of GitHub it brings are code someone else chose: they are fetched only when you say so.
+  if (file?.ask && !busy)
+    return (
+      <>
+        <p class="studio-title">This team brings skills</p>
+        <p class="studio-hint">
+          {file.ask.length === 1 ? 'One skill' : `${file.ask.length} skills`} from GitHub, that this Mac does not have. A skill is instructions and files that Claude reads and may run: open each to see what it holds, at the commit the team names, before fetching it.
+        </p>
+        <ul class="studio-ask">
+          {file.ask.map((skill) => (
+            <li key={skill.id}>
+              <strong>{skill.id}</strong>{' '}
+              <a href={`https://github.com/${skill.repo}/tree/${skill.commit}/${skill.path}`} target="_blank" rel="noreferrer">
+                {skill.repo}/{skill.path}
+              </a>{' '}
+              <code>{skill.commit.slice(0, 7)}</code>
+            </li>
+          ))}
+        </ul>
+        <div class="studio-actions">
+          <button type="button" class="primary" onClick={() => store.answerImport('fetch')}>
+            Fetch them and open
+          </button>
+          <button type="button" onClick={() => store.answerImport('skip')}>
+            Open without them
+          </button>
+          <button type="button" class="quiet" onClick={() => store.answerImport('cancel')}>
+            Cancel
+          </button>
+        </div>
+      </>
+    );
   return (
     <>
       <p class="studio-title">Open a team from its file</p>
@@ -915,6 +948,10 @@ export function Studio({
     if (!teamFile || teamFile.busy) return;
     if (!teamFile.ok) return setNote({ text: teamFile.error ?? 'it did not work', error: true });
     if (teamFile.action === 'save') return setNote({ text: `Saved in ${teamFile.path}: give it to whoever should have the team.` });
+    if (teamFile.ask) {
+      setSelection({ kind: 'import' });
+      return setNote({ text: 'This team brings skills from GitHub: look at them on the right before they are fetched.' });
+    }
     if (teamFile.template) {
       setDoc(docOfTemplate(teamFile.template, docRef.current.folder));
       setSelection(undefined);

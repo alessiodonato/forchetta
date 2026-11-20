@@ -4171,3 +4171,42 @@ html[data-hidden] *::after {
 .studio-top .studio-spacer {
   flex: 1 1 0;
 }
+
+/* The skills a team file brings, before they are fetched. */
+.studio-ask {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.studio-ask li {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+/* The daemon is not answering: the boxes may be old, and what would send something waits for it. */
+.offline-notice {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  margin: 8px 32px 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(240, 164, 60, 0.45);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+.app.offline .box,
+.app.offline .rail {
+  opacity: 0.6;
+}
+.app.offline button.primary,
+.app.offline .new-menu > button {
+  opacity: 0.45;
+  pointer-events: none;
+}

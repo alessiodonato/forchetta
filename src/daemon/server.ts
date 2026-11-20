@@ -211,7 +211,18 @@ function forRecord(raw: Record<string, unknown>): Record<string, unknown> {
   return copy;
 }
 
-export function createDaemonServer(options: ServerOptions): Server {
+/** The routes of the hooks of Claude Code: only on the socket of the private folder (DaemonServer.hooks). */
+const isHookRoute = (path: string): boolean => path === HOOK_PATH || path === PERMISSION_PATH || path === GUARD_PATH || path === STATUS_PATH || path.startsWith(`${PERMISSION_PATH}/`);
+
+/**
+ * The server of the daemon on 127.0.0.1 (the page, its WebSocket, /api with the token), and `hooks`: the same
+ * routes for the hooks of Claude Code, on a Unix socket in the private folder of Forchetta (0700). The hooks talk
+ * only there: no other user or app can open that socket, nor be there in its place when the daemon is off, so
+ * what a hook prints to Claude Code (a decision of the guard, the answer to a permission) comes from this daemon.
+ */
+export type DaemonServer = Server & { hooks: Server };
+
+export function createDaemonServer(options: ServerOptions): DaemonServer {
   const { registry, token, log } = options;
 
   /** A hook input: recorded if asked, applied to its agent, passed on. Undefined when it is not one. */
@@ -246,11 +257,14 @@ export function createDaemonServer(options: ServerOptions): Server {
     return { agent, payload };
   }
 
-  async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async function handle(req: IncomingMessage, res: ServerResponse, viaSocket: boolean): Promise<void> {
     const port = options.port();
-    if (!isLocalHost(req.headers.host, port)) return send(res, 403);
+    // Over the socket there is no host to check (no browser reaches it); over TCP the host stops DNS rebinding.
+    if (!viaSocket && !isLocalHost(req.headers.host, port)) return send(res, 403);
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     const ownOrigin = `http://127.0.0.1:${port}`;
+    // The hooks only over the socket; the socket only for the hooks.
+    if (viaSocket !== isHookRoute(url.pathname)) return send(res, viaSocket ? 404 : 403);
 
     if (url.pathname === HOOK_PATH || url.pathname === PERMISSION_PATH) {
       if (req.method !== 'POST') return send(res, 405);
@@ -361,12 +375,16 @@ export function createDaemonServer(options: ServerOptions): Server {
     return send(res, 404);
   }
 
-  const server = createServer((req, res) => {
-    handle(req, res).catch((error: unknown) => {
-      log(`richiesta ${req.method} ${req.url}: ${String(error)}`);
-      if (!res.headersSent) send(res, 500);
-    });
-  });
+  const handler =
+    (viaSocket: boolean) =>
+    (req: IncomingMessage, res: ServerResponse): void => {
+      handle(req, res, viaSocket).catch((error: unknown) => {
+        log(`richiesta ${req.method} ${req.url}: ${String(error)}`);
+        if (!res.headersSent) send(res, 500);
+      });
+    };
+  const server = createServer(handler(false)) as DaemonServer;
+  server.hooks = createServer(handler(true));
   server.on('upgrade', (req, socket, head) => {
     const path = (req.url ?? '').split('?')[0];
     if (path === '/term' && options.terminals) options.terminals.handleUpgrade(req, socket, head);

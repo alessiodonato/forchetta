@@ -22,6 +22,7 @@ const tmuxCount = Number(option('tmux', '0'));
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { request } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,11 +45,26 @@ const TOOLS = [
 
 const session = (index) => ({ session_id: `sim-${String(index).padStart(2, '0')}`, cwd: `/Users/dev/projects/${PROJECTS[index]}`, transcript_path: `/tmp/sim-${index}.jsonl` });
 
+/** A request to the daemon on the socket of the hooks (as bin/forchetta-hook sends it): its status and its body. */
+function toHooks(socketPath, path, headers, body, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const req = request({ socketPath, method: 'POST', path, headers: { host: 'localhost', ...headers }, timeout: timeoutMs }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => (text += chunk));
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, text }));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
 async function post(index, event, extra = {}) {
   const body = JSON.stringify({ ...session(index), hook_event_name: event, ...extra });
   const agent = agents.get(index);
   const headers = { 'content-type': 'application/json', ...(agent ? { 'x-forchetta-agent': agent } : {}) };
-  await fetch(`http://127.0.0.1:${port}/forchetta/hook`, { method: 'POST', headers, body });
+  await toHooks(join(VAR, 'hooks.sock'), '/forchetta/hook', headers, body, 2000);
 }
 
 /** The first sessions in tmux, announced to the daemon as `forchetta run` does. */

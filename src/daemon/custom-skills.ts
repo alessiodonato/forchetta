@@ -1,9 +1,10 @@
-import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { ensurePrivateDir } from '../shared/paths.ts';
 import { customSkills, setCustomSkills, type SkillInfo, skillById, skillUsers } from '../shared/skills.ts';
-import { describeSkill, githubLink } from '../shared/skill-links.ts';
+import { describeSkill, githubLink, safeRepoPath } from '../shared/skill-links.ts';
 import { bytesOf, type Git, gitRunner, type SkillCache, slug } from './skills.ts';
 
 export { describeSkill, githubLink, skillUsers };
@@ -30,7 +31,7 @@ const clean = (raw: unknown): SkillInfo | undefined => {
   const item = raw as Partial<SkillInfo> | undefined;
   if (!item || typeof item.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(item.id)) return undefined;
   if (item.local !== undefined && (typeof item.local !== 'string' || !isAbsolute(item.local))) return undefined;
-  if (item.local === undefined && (typeof item.repo !== 'string' || typeof item.path !== 'string' || typeof item.commit !== 'string' || !/^[0-9a-f]{40}$/.test(item.commit))) return undefined;
+  if (item.local === undefined && (typeof item.repo !== 'string' || typeof item.path !== 'string' || !safeRepoPath(item.path) || typeof item.commit !== 'string' || !/^[0-9a-f]{40}$/.test(item.commit))) return undefined;
   return {
     id: item.id,
     group: 'yours',
@@ -55,13 +56,11 @@ export class CustomSkills {
     private readonly remote: (repo: string) => string = (repo) => `https://github.com/${repo}.git`,
     private readonly home: string = homedir(),
   ) {
-    if (!file || !existsSync(file)) return;
-    try {
-      const raw = JSON.parse(readFileSync(file, 'utf8')) as unknown;
-      setCustomSkills((Array.isArray(raw) ? raw : []).flatMap((item) => clean(item) ?? []));
-    } catch {
-      this.log('skill aggiunte illeggibili, ignorate');
-    }
+    if (!file) return;
+    const raw = readDataJson(file, 'skill aggiunte', log);
+    const items = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+    setCustomSkills(items.flatMap((item) => clean(item) ?? []));
+    keepRejected(file, items.filter((item) => !clean(item)), 'skill aggiunte', log);
   }
 
   list(): readonly SkillInfo[] {
@@ -118,6 +117,7 @@ export class CustomSkills {
       const commit = await this.commitOf(link.repo, ref, cwd);
       if (!commit) continue;
       const path = link.rest.slice(parts).join('/');
+      if (!safeRepoPath(path)) return { error: 'Forchetta takes folders named with letters, digits, ".", "_" and "-" only: that folder of the skill has other characters' };
       const id = slug(basename(path)).slice(0, 64);
       if (!id) return { error: 'the name of the folder makes no name for a skill' };
       if (skillById(id)) return { error: `there is a skill called ${id} already` };
@@ -143,9 +143,7 @@ export class CustomSkills {
     if (!this.file) return;
     try {
       ensurePrivateDir(dirname(this.file));
-      const temporary = `${this.file}.${process.pid}`;
-      writeFileSync(temporary, `${JSON.stringify(customSkills(), null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, this.file);
+      writeDataJson(this.file, customSkills());
     } catch (error) {
       this.log(`skill aggiunte non salvate: ${String(error)}`);
     }

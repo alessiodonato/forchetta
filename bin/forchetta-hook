@@ -3,12 +3,31 @@
 # input lacks: the pid of the claude process, its tmux pane and the Forchetta agent it belongs to.
 # It prints nothing and always exits 0 within about a second, also when the daemon is not running: Claude Code
 # shows nothing (what a SessionStart hook prints would become context for Claude, a failure would show an error).
+# The private folder of Forchetta, by the rule of src/shared/paths.ts: the daemon listens for the hooks on a socket
+# there (0700, so no other user or app can be in its place).
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+if [ -n "${FORCHETTA_VAR:-}" ]; then
+  data=$FORCHETTA_VAR
+elif [ -e "$root/.git" ]; then
+  data="$root/var"
+else
+  data="$HOME/Library/Application Support/Forchetta"
+fi
+socket="$data/hooks.sock"
+# A daemon from before the socket (0.9.12 and older) listens for the hooks on its port: the port, until it is
+# restarted. Once a newer daemon has run in this folder (it writes data-version), only the socket, also when the
+# daemon is off: nobody can stand in its place.
 port=${1:-47821}
-/usr/bin/curl --silent --max-time 1 --output /dev/null \
+if [ -S "$socket" ] || [ -e "$data/data-version" ]; then
+  via=--unix-socket target=$socket base=http://localhost
+else
+  via=--noproxy target='*' base="http://127.0.0.1:$port"
+fi
+/usr/bin/curl --silent --max-time 1 --output /dev/null "$via" "$target" \
   --header 'Content-Type: application/json' \
   --header "X-Forchetta-Pid: ${PPID:-}" \
   --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
   --header "X-Forchetta-Pane: ${TMUX_PANE:-}" \
   --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
-  --data-binary @- "http://127.0.0.1:$port/forchetta/hook" >/dev/null 2>&1
+  --data-binary @- "$base/forchetta/hook" >/dev/null 2>&1
 exit 0

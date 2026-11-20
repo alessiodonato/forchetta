@@ -49,6 +49,11 @@ describe('a team as a file', () => {
     expect(parseTeamFile(`{"x":"${'y'.repeat(600_000)}"}`)).toEqual({ error: 'this file is too large for a team' });
     const odd = parseTeamFile(JSON.stringify({ kind: 'forchetta-team', version: 1, template: { name: 'x' }, skills: [{ id: 'a', repo: 'no repo', path: 'p', commit: 'b'.repeat(40) }, { id: 'b', repo: 'o/r', path: 'p', commit: 'short' }] }));
     expect(odd).toEqual({ file: { kind: 'forchetta-team', version: 1, template: { name: 'x' } } });
+    // A folder that leads out of the repository, or is not plain, is not taken.
+    const commit = 'c'.repeat(40);
+    for (const path of ['../../outside', 'skills/../..', '/etc', 'skills//x', '.', 'a b', 'skills/./x', '']) {
+      expect(parseTeamFile(JSON.stringify({ kind: 'forchetta-team', version: 1, template: { name: 'x' }, skills: [{ id: 'a', repo: 'o/r', path, commit }] }))).toEqual({ file: { kind: 'forchetta-team', version: 1, template: { name: 'x' } } });
+    }
     expect(withoutSkills(team, new Set(['pdf', 'release-notes'])).members[0]!.skills).toEqual(['house-style']);
     expect(withoutSkills(team, new Set(['brainstorming', 'release-notes'])).lead).toEqual({ kind: 'claude', name: 'editor', role: 'Edits.' });
   });
@@ -58,11 +63,18 @@ describe('a team as a file', () => {
     const text = JSON.stringify(teamFileOf(team));
     setCustomSkills([]);
     const links: string[] = [];
-    const opened = await importTeam(text, async (link) => {
+    const add = async (link: string): Promise<{ ok: boolean }> => {
       links.push(link);
       setCustomSkills([fromGitHub]);
       return { ok: true };
-    });
+    };
+    // First nothing is fetched: the skills of GitHub come back, for the user to look at.
+    expect(await importTeam(text, add)).toEqual({ ok: true, ask: [{ id: 'release-notes', repo: 'someone/skills', path: 'skills/release-notes', commit: 'a'.repeat(40) }] });
+    expect(links).toEqual([]);
+    // Left out, as chosen: the team opens without them.
+    expect(await importTeam(text, add, 'skip')).toMatchObject({ ok: true, notes: ['release-notes is left out, as you chose', expect.stringContaining('house-style is left out')] });
+    expect(links).toEqual([]);
+    const opened = await importTeam(text, add, 'fetch');
     expect(links).toEqual([`https://github.com/someone/skills/tree/${'a'.repeat(40)}/skills/release-notes`]);
     expect(opened).toMatchObject({
       ok: true,
@@ -72,7 +84,7 @@ describe('a team as a file', () => {
     expect((opened as { template: CrewTemplate }).template.builtin).toBeUndefined();
     // A fetch that fails leaves the skill out too, and says why.
     setCustomSkills([]);
-    const failed = await importTeam(text, async () => ({ ok: false, error: 'no network' }));
+    const failed = await importTeam(text, async () => ({ ok: false, error: 'no network' }), 'fetch');
     expect(failed).toMatchObject({ ok: true, notes: ['release-notes is left out: no network', expect.stringContaining('house-style is left out')] });
     expect(await importTeam(JSON.stringify({ kind: 'forchetta-team', version: 1, template: { name: 'empty', lead: { kind: 'you' }, members: [] } }), async () => ({ ok: true }))).toEqual({ ok: false, error: 'add at least one member' });
   });

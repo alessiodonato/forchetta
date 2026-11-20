@@ -93,7 +93,9 @@ describe('quick prompts', () => {
 
       writeFileSync(file, '{"prompts": "broken"}');
       expect(new QuickPrompts(file, (line) => logs.push(line)).list()).toEqual(DEFAULT_PROMPTS);
-      expect(logs.at(-1)).toContain('illeggibili');
+      expect(logs.at(-2)).toContain('non valide');
+      // What could not be read is kept, not lost at the next save.
+      expect(JSON.parse(readFileSync(`${file}.rejected.json`, 'utf8'))).toEqual([{ prompts: 'broken' }]);
     } finally {
       temp.cleanup();
     }

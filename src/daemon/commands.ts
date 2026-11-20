@@ -154,6 +154,29 @@ export class Commander {
     clearInterval(this.timer);
   }
 
+  /**
+   * After a restart, with the agents of the state saved: a command waiting goes when its session is ready, as
+   * before; one that was sent and not confirmed yet cannot be confirmed any more (what waited for the hook is
+   * gone), so it is said, and for a request of a team the Stop of the session decides, as for any unconfirmed one.
+   */
+  restored(): void {
+    for (const agent of this.options.registry.agents.values()) {
+      let changed = false;
+      for (const command of agent.commands ?? []) {
+        if (command.status !== 'inviato') continue;
+        command.status = 'non-confermato';
+        command.reason = 'the daemon restarted before Claude Code confirmed it: see the terminal';
+        command.doneAt = this.now();
+        changed = true;
+        this.changed(agent, command);
+      }
+      if (changed) {
+        this.prune(agent);
+        this.options.registry.touch(agent);
+      }
+    }
+  }
+
   enqueue(agentId: string, kind: string, arg?: unknown, confirmed?: unknown, fromSelection = false): EnqueueResult {
     const agent = this.options.registry.agents.get(agentId);
     if (!agent) return { ok: false, error: 'unknown session' };

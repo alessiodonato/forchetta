@@ -314,6 +314,20 @@ describe('requests of a team', () => {
     expect(registry.agents.get(A)?.commands?.at(-1)).toMatchObject({ kind: 'request', request: { crew: 'c1', n: 1 } });
   });
 
+  it('after a restart: one waiting goes when the session is ready, one sent and not confirmed is said so', async () => {
+    setupRequests();
+    // The state a stopped daemon saved: a request sent, with no confirmation yet, and one still waiting.
+    registry.agents.get(A)!.commands = [{ id: 'old-sent', kind: 'request', arg: 'Request #3 from the user:\nGo.', request: { crew: 'c1', n: 3 }, status: 'inviato', createdAt: 1, sentAt: 2 }];
+    registry.agents.get(B)!.commands = [{ id: 'old-queued', kind: 'request', arg: 'Request #4 from the user:\nGo.', request: { crew: 'c1', n: 4 }, status: 'in-coda', createdAt: 1 }];
+    commander.restored();
+    expect(registry.agents.get(A)?.commands?.[0]).toMatchObject({ status: 'non-confermato', reason: expect.stringContaining('daemon restarted') });
+    expect(seen).toEqual(['non-confermato']);
+    commander.tick();
+    await settle();
+    expect(tmux.typed).toEqual([{ pane: '%2', text: 'Request #4 from the user:' }]);
+    expect(status(B)).toBe('inviato');
+  });
+
   it('a long request shows as a pasted text, and that is enough to press Enter', async () => {
     setupRequests();
     const text = `Request #2 from the user:\n${'a line of the request\n'.repeat(60)}the end`;

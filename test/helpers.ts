@@ -27,11 +27,12 @@ export interface Reply {
   headers: Record<string, string | string[] | undefined>;
 }
 
-/** An HTTP request with full control of the headers, Host and Origin included. */
-export function http(port: number, options: { method?: string; path: string; headers?: Record<string, string>; body?: string }): Promise<Reply> {
+/** An HTTP request with full control of the headers, Host and Origin included: to a port, or (a path) to a socket. */
+export function http(to: number | string, options: { method?: string; path: string; headers?: Record<string, string>; body?: string }): Promise<Reply> {
+  const where = typeof to === 'string' ? { socketPath: to, headers: { host: 'localhost' } } : { host: '127.0.0.1', port: to, headers: { host: `127.0.0.1:${to}` } };
   return new Promise((resolve, reject) => {
     const req = request(
-      { host: '127.0.0.1', port, method: options.method ?? 'GET', path: options.path, headers: { host: `127.0.0.1:${port}`, ...options.headers } },
+      { ...where, method: options.method ?? 'GET', path: options.path, headers: { ...where.headers, ...options.headers } },
       (res) => {
         let body = '';
         res.setEncoding('utf8');

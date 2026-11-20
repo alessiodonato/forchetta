@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.12. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.13. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -382,7 +382,7 @@ forchetta setup</pre>
         </ul>
 
         <h4 id="studio-files">A team as a file</h4>
-        <p><span class="ui">Export</span>, at the top (or on a team of the palette), saves the team as a file, <code>&lt;name&gt;.forchetta-team.json</code>, in your Downloads: roles, models, relations, rules, skills, where the boxes and the notes stand. <span class="ui">Import</span> opens one: drop the file anywhere on the studio, or paste its text. It opens on the canvas in place of what is there (<kbd>⌘</kbd><kbd>Z</kbd> brings that back). The skills of GitHub it needs and this Mac does not have are added at their commit; a skill that was a folder of the other Mac is left out, and the studio says so. Forchetta opens only files of its own format.</p>
+        <p><span class="ui">Export</span>, at the top (or on a team of the palette), saves the team as a file, <code>&lt;name&gt;.forchetta-team.json</code>, in your Downloads: roles, models, relations, rules, skills, where the boxes and the notes stand. <span class="ui">Import</span> opens one: drop the file anywhere on the studio, or paste its text. It opens on the canvas in place of what is there (<kbd>⌘</kbd><kbd>Z</kbd> brings that back). When it brings skills of GitHub this Mac does not have, nothing is fetched yet: the studio lists them, each with a link to its folder at the commit the team names, and you choose <span class="ui">Fetch them and open</span> or <span class="ui">Open without them</span>. A skill that was a folder of the other Mac is left out, and the studio says so. Forchetta opens only files of its own format.</p>
         <p>The <a href="studio/">Studio Maker</a>, on this site, is the same studio in a browser: make a team there, export it, and open the file here. It keeps what you draw in the browser as you go; it has no folder and starts nothing.</p>
 
         <h4 id="studio-live">The studio on a running team</h4>
@@ -676,12 +676,13 @@ Read them again before you write code that relies on them.</code></pre>
         <h2>Your data</h2>
         <p>Forchetta keeps what it writes in <code>~/Library/Application Support/Forchetta</code> (in a clone, <code>var/</code> inside it), readable only by you:</p>
         <ul>
-          <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
+          <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>hooks.sock</code>, where the hooks of Claude Code talk to the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
           <li><code>state.json</code>, the sessions; <code>teams.json</code>, names, groups and roles by folder;</li>
           <li><code>crews/</code>, the teams of agents, one file each; <code>crew-templates.json</code>, your templates; <code>crew-roles.json</code>, your presets of agents; <code>skills/</code>, the <a href="#skills">skills</a> downloaded, and the plugin of each session of a team that has some;</li>
           <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>guard-stats.json</code>, how many times a day the guard did each thing; <code>daemon.log</code>.</li>
         </ul>
-        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code> and, after asking, <code>~/.claude/settings.json</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception. Forchetta also downloads: when a team whose agents have <a href="#skills">skills</a> starts, it fetches the ones it does not have yet from GitHub, with <code>git</code>, at the commit of its catalog. Nothing of yours is sent.</p>
+        <p>Each file is written whole or not at all, and the version before stays next to it as <code>.bak</code>. A file that cannot be read is never written over: Forchetta sets it aside as <code>.corrupt-&lt;time&gt;</code> and goes on with the version before; entries that are not valid any more (a template, a skill) are kept in <code>&lt;file&gt;.rejected.json</code>. <code>data-version</code> says the format of the folder: a Forchetta older than its data does not start on it.</p>
+        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code> and, after asking, <code>~/.claude/settings.json</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token; the hooks talk to it on <code>hooks.sock</code>, in the data folder, which only you can open. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception. Forchetta also downloads: when a team whose agents have <a href="#skills">skills</a> starts, it fetches the ones it does not have yet from GitHub, with <code>git</code>, at the commit of its catalog. Nothing of yours is sent.</p>
       </section>
 
       <section id="trouble">

@@ -1,13 +1,16 @@
 import type { AddressInfo } from 'node:net';
-import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Registry } from '../src/daemon/registry.ts';
 import { createDaemonServer, GUARD_PATH, HOOK_PATH, hookMeta } from '../src/daemon/server.ts';
-import { http } from './helpers.ts';
+import { join } from 'node:path';
+import { http, tempDir } from './helpers.ts';
 
 const TOKEN = 'a'.repeat(64);
-let server: Server;
+let server: ReturnType<typeof createDaemonServer>;
 let port = 0;
+const temp = tempDir('server');
+/** The socket of the hooks, as the daemon opens it in its private folder. */
+const hooks = join(temp.dir, 'hooks.sock');
 let registry: Registry;
 let shutdowns = 0;
 
@@ -24,11 +27,14 @@ beforeAll(async () => {
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = (server.address() as AddressInfo).port;
+  await new Promise<void>((resolve) => server.hooks.listen(hooks, resolve));
 });
 
 afterAll(async () => {
   registry.dispose();
+  await new Promise((resolve) => server.hooks.close(resolve));
   await new Promise((resolve) => server.close(resolve));
+  temp.cleanup();
 });
 
 const json = { 'content-type': 'application/json' };
@@ -37,7 +43,7 @@ const event = (extra: Record<string, unknown>): string =>
 
 describe('hook endpoint', () => {
   it('answers 200 with an empty body, so it never decides, blocks or adds context', async () => {
-    const reply = await http(port, { method: 'POST', path: HOOK_PATH, headers: json, body: event({}) });
+    const reply = await http(hooks, { method: 'POST', path: HOOK_PATH, headers: json, body: event({}) });
     expect(reply.status).toBe(200);
     expect(reply.body).toBe('');
     expect(registry.list().find((agent) => agent.sessionId === 's-1')?.state).toBe('working');
@@ -45,21 +51,25 @@ describe('hook endpoint', () => {
 
   it('answers empty also to input it cannot read', async () => {
     for (const body of ['{not json', '{"session_id":"x"}', '[]']) {
-      const reply = await http(port, { method: 'POST', path: HOOK_PATH, headers: json, body });
+      const reply = await http(hooks, { method: 'POST', path: HOOK_PATH, headers: json, body });
       expect(reply).toMatchObject({ status: 200, body: '' });
     }
   });
 
   it('refuses web pages: Origin header, form types, wrong Host', async () => {
-    expect((await http(port, { method: 'POST', path: HOOK_PATH, headers: { ...json, origin: 'https://evil.example' }, body: event({}) })).status).toBe(403);
-    expect((await http(port, { method: 'POST', path: HOOK_PATH, headers: { 'content-type': 'text/plain' }, body: event({}) })).status).toBe(415);
-    expect((await http(port, { method: 'POST', path: HOOK_PATH, headers: { ...json, host: 'evil.example' }, body: event({}) })).status).toBe(403);
-    expect((await http(port, { method: 'GET', path: HOOK_PATH })).status).toBe(405);
+    expect((await http(hooks, { method: 'POST', path: HOOK_PATH, headers: { ...json, origin: 'https://evil.example' }, body: event({}) })).status).toBe(403);
+    expect((await http(hooks, { method: 'POST', path: HOOK_PATH, headers: { 'content-type': 'text/plain' }, body: event({}) })).status).toBe(415);
+    // On the port of the daemon, where any process or user of this Mac can talk, the hooks are refused.
+    expect((await http(port, { method: 'POST', path: HOOK_PATH, headers: json, body: event({}) })).status).toBe(403);
+    expect((await http(port, { method: 'POST', path: GUARD_PATH, headers: json, body: event({}) })).status).toBe(403);
+    // And the socket of the hooks is for the hooks only.
+    expect((await http(hooks, { path: '/api/health', headers: { authorization: `Bearer ${TOKEN}` } })).status).toBe(404);
+    expect((await http(hooks, { method: 'GET', path: HOOK_PATH })).status).toBe(405);
   });
 
   it('reads pid, pane and agent from the headers of the hook script', async () => {
     const agentId = '3f2b8c1e-1111-4222-8333-444455556666';
-    const reply = await http(port, {
+    const reply = await http(hooks, {
       method: 'POST',
       path: HOOK_PATH,
       headers: { ...json, 'x-forchetta-pid': '700', 'x-forchetta-claude-pid': '4242', 'x-forchetta-pane': '%3', 'x-forchetta-agent': agentId },
@@ -79,10 +89,10 @@ describe('guard endpoint', () => {
   const pre = (session: string, tool: string): string => JSON.stringify({ hook_event_name: 'PreToolUse', session_id: session, tool_name: tool, tool_input: { file_path: '/tmp/p/a.ts' } });
 
   it('answers with the decision of the guard for a known session, and applies nothing', async () => {
-    await http(port, { method: 'POST', path: HOOK_PATH, headers: json, body: event({ session_id: 's-guard' }) });
+    await http(hooks, { method: 'POST', path: HOOK_PATH, headers: json, body: event({ session_id: 's-guard' }) });
     const agent = registry.list().find((candidate) => candidate.sessionId === 's-guard')!;
     const before = JSON.stringify(agent);
-    const reply = await http(port, { method: 'POST', path: GUARD_PATH, headers: json, body: pre('s-guard', 'Edit') });
+    const reply = await http(hooks, { method: 'POST', path: GUARD_PATH, headers: json, body: pre('s-guard', 'Edit') });
     expect(reply.status).toBe(200);
     expect(JSON.parse(reply.body)).toEqual({ decided: 's-guard' });
     // The event comes through the hook endpoint too: here it changes nothing.
@@ -91,14 +101,14 @@ describe('guard endpoint', () => {
 
   it('answers empty when the guard has nothing to say, for a session it does not know, and for input it cannot read', async () => {
     for (const body of [pre('s-guard', 'Bash'), pre('unknown', 'Edit'), '{not json', '[]']) {
-      expect(await http(port, { method: 'POST', path: GUARD_PATH, headers: json, body })).toMatchObject({ status: 200, body: '' });
+      expect(await http(hooks, { method: 'POST', path: GUARD_PATH, headers: json, body })).toMatchObject({ status: 200, body: '' });
     }
     expect(registry.list().some((agent) => agent.sessionId === 'unknown')).toBe(false);
   });
 
   it('refuses web pages', async () => {
-    expect((await http(port, { method: 'POST', path: GUARD_PATH, headers: { ...json, origin: 'https://evil.example' }, body: pre('s-guard', 'Edit') })).status).toBe(403);
-    expect((await http(port, { method: 'GET', path: GUARD_PATH })).status).toBe(405);
+    expect((await http(hooks, { method: 'POST', path: GUARD_PATH, headers: { ...json, origin: 'https://evil.example' }, body: pre('s-guard', 'Edit') })).status).toBe(403);
+    expect((await http(hooks, { method: 'GET', path: GUARD_PATH })).status).toBe(405);
   });
 });
 

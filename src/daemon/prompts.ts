@@ -1,4 +1,4 @@
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { cleanPrompts, DEFAULT_PROMPTS, type QuickPrompt } from '../shared/prompts.ts';
 
 // The quick prompts of the menu of a selection (shared/prompts.ts), in one file of the private folder. Until you
@@ -12,18 +12,13 @@ export class QuickPrompts {
     private readonly log: (message: string) => void,
   ) {
     this.prompts = [...DEFAULT_PROMPTS];
-    let content: string | undefined;
-    try {
-      content = readFileSync(file, 'utf8');
-    } catch {
-      return;
-    }
-    try {
-      const checked = cleanPrompts((JSON.parse(content) as { prompts?: unknown }).prompts);
-      if ('prompts' in checked) this.prompts = checked.prompts;
-      else log(`domande pronte illeggibili (${checked.error}): uso quelle di partenza`);
-    } catch (error) {
-      log(`domande pronte illeggibili: ${String(error)}`);
+    const raw = readDataJson(file, 'domande pronte', log) as { prompts?: unknown } | undefined;
+    if (raw === undefined) return;
+    const checked = cleanPrompts(raw?.prompts);
+    if ('prompts' in checked) this.prompts = checked.prompts;
+    else {
+      log(`domande pronte non valide (${checked.error}): uso quelle di partenza`);
+      keepRejected(file, [raw], 'domande pronte', log);
     }
   }
 
@@ -35,9 +30,7 @@ export class QuickPrompts {
     const checked = cleanPrompts(input);
     if ('error' in checked) return { ok: false, error: checked.error };
     try {
-      const temporary = `${this.file}.${process.pid}`;
-      writeFileSync(temporary, `${JSON.stringify({ prompts: checked.prompts }, null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, this.file);
+      writeDataJson(this.file, { prompts: checked.prompts });
     } catch (error) {
       return { ok: false, error: `not saved: ${String(error)}` };
     }

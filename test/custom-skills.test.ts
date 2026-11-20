@@ -51,6 +51,10 @@ describe('a link of GitHub', () => {
     expect(githubLink('github.com/owner/repo/blob/v2/skills/pdf/SKILL.md')).toEqual({ repo: 'owner/repo', rest: ['v2', 'skills', 'pdf'] });
     expect(githubLink('https://github.com/owner/repo/tree/feature/x/skills/pdf/?tab=readme')).toEqual({ repo: 'owner/repo', rest: ['feature', 'x', 'skills', 'pdf'] });
     expect(githubLink('https://github.com/owner/repo')).toEqual({ error: expect.stringContaining('not of the whole repository') });
+    // A link that leads out of its folder is refused, also written with %2e or %2f.
+    for (const link of ['https://github.com/owner/repo/tree/main/../../x', 'https://github.com/owner/repo/tree/main/skills/%2e%2e/x', 'https://github.com/owner/repo/tree/main/a%2f..%2fb', 'https://github.com/owner/repo/tree/main/skills/%zz']) {
+      expect(githubLink(link)).toMatchObject({ error: expect.any(String) });
+    }
     expect(githubLink('https://gitlab.com/owner/repo/tree/main/x')).toBeUndefined();
     expect(githubLink('~/skills/pdf')).toBeUndefined();
   });
