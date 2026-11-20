@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import type { Agent } from '../shared/agent.ts';
+import { type Agent, displayName } from '../shared/agent.ts';
 import type { Store } from './store.ts';
 
 // The permission dialog of a session, answered from its box: what is asked, in full, with Consenti and Rifiuta,
@@ -38,13 +38,17 @@ function useAnswer(agent: Agent, store: Store) {
 
 const stop = (event: Event): void => event.stopPropagation();
 
-function Buttons({ ready, waiting, answer }: Pick<ReturnType<typeof useAnswer>, 'ready' | 'waiting' | 'answer'>) {
+/** The tool and the session a button answers for, for a screen reader: "Bash for checkout". */
+export const permissionTarget = (agent: Agent): string => `${agent.permission?.tool ?? 'the tool'} for ${displayName(agent)}`;
+
+function Buttons({ agent, ready, waiting, answer }: { agent: Agent } & Pick<ReturnType<typeof useAnswer>, 'ready' | 'waiting' | 'answer'>) {
+  const target = permissionTarget(agent);
   return (
     <>
-      <button type="button" class="allow" disabled={!ready} title="Allow once, as “Yes” in the terminal" onClick={answer('allow')}>
+      <button type="button" class="allow" disabled={!ready} title="Allow once, as “Yes” in the terminal" aria-label={`Allow ${target}, once`} onClick={answer('allow')}>
         Allow
       </button>
-      <button type="button" class="deny" disabled={!ready} title="Deny and stop Claude, as “No” in the terminal" onClick={answer('deny')}>
+      <button type="button" class="deny" disabled={!ready} title="Deny and stop Claude, as “No” in the terminal" aria-label={`Deny ${target}`} onClick={answer('deny')}>
         Deny
       </button>
       {waiting && <span class="permission-note">checking…</span>}
@@ -65,13 +69,15 @@ export function PermissionPrompt({ agent, store }: { agent: Agent; store: Store 
         {ask.detail}
       </pre>
       <div class="permission-actions">
-        <Buttons ready={ready} waiting={waiting} answer={answer} />
+        <Buttons agent={agent} ready={ready} waiting={waiting} answer={answer} />
         {always.length > 0 && !waiting && (
           <button
             type="button"
             class={`always-toggle${open ? ' on' : ''}`}
             disabled={!ready}
             title="The lasting choices: a rule, a folder, a mode"
+            aria-label={`Always allow ${permissionTarget(agent)}: the lasting choices`}
+            aria-expanded={open}
             onClick={() => setChoosing(open ? undefined : ask.ticket)}
           >
             always…
@@ -83,7 +89,7 @@ export function PermissionPrompt({ agent, store }: { agent: Agent; store: Store 
         <ul class="always-list">
           {always.map((option, index) => (
             <li key={index}>
-              <button type="button" disabled={!ready} onClick={answer('allow', index)}>
+              <button type="button" disabled={!ready} aria-label={`Allow ${permissionTarget(agent)}: ${option.label}, ${option.where}`} onClick={answer('allow', index)}>
                 <span class="always-label">{option.label}</span>
                 <span class="always-where">{option.where}</span>
               </button>
@@ -101,7 +107,7 @@ export function PermissionButtons({ agent, store }: { agent: Agent; store: Store
   if (!ask) return null;
   return (
     <span class="permission-actions compact" onClick={stop} onMouseDown={stop} onKeyDown={stop}>
-      <Buttons ready={ready} waiting={waiting} answer={answer} />
+      <Buttons agent={agent} ready={ready} waiting={waiting} answer={answer} />
     </span>
   );
 }

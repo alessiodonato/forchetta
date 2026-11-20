@@ -7,6 +7,7 @@ import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import { cleanSelection } from '../shared/selection.ts';
 import { setCustomSkills, type SkillInfo } from '../shared/skills.ts';
+import type { EditableSettings, SystemInfo } from '../shared/system.ts';
 import { teamFileName, teamFileOf } from '../shared/team-file.ts';
 import { shell } from './connection.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
@@ -84,6 +85,10 @@ export interface UiState {
   crewThread?: { crewId: string; requests?: CrewRequest[]; reviews?: ReviewRecord[] };
   /** The last request sent from the panel of a team: its number once it is in the queues, or why not. */
   crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
+  /** The installation, from the daemon: checks, optional features, settings (shared/system.ts). */
+  system?: SystemInfo;
+  /** Saving the settings from their panel: under way, or how it went (and what waits for a restart). */
+  settingsSave?: { busy: boolean; ok?: boolean; error?: string; restart?: string[]; at: number };
 }
 
 /**
@@ -142,7 +147,7 @@ function loadSeen(): Record<string, number> | undefined {
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
 /** The actions of the page that wait for an answer of the daemon, each with its busy flag. */
-const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest'] as const satisfies readonly (keyof UiState)[];
+const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest', 'settingsSave'] as const satisfies readonly (keyof UiState)[];
 
 /** What an action says when the daemon was not there to take it. */
 export const NOT_SENT = 'not sent: the daemon of Forchetta is not connected (the page reconnects by itself; try again in a moment)';
@@ -216,6 +221,16 @@ export class Store {
     }
     if (message.type === 'prompts') {
       this.set({ prompts: message.prompts });
+      return;
+    }
+    if (message.type === 'system') {
+      this.set({ system: message.system });
+      return;
+    }
+    if (message.type === 'settingsSaved') {
+      // The app reads the shortcut again from the configuration.
+      if (message.ok) shell()?.postMessage({ type: 'settingsSaved' });
+      this.set({ settingsSave: { busy: false, ok: message.ok, ...(message.error ? { error: message.error } : {}), ...(message.restart?.length ? { restart: message.restart } : {}), at: Date.now() } });
       return;
     }
     if (message.type === 'promptsSaved') {
@@ -334,6 +349,7 @@ export class Store {
         extra.limits = message.limits;
         extra.guardStats = message.guardStats;
         extra.claudeUpdate = message.claudeUpdate;
+        extra.system = message.system;
         extra.prompts = message.prompts ?? [];
         extra.crews = message.crews ?? [];
         extra.templates = message.templates ?? [];
@@ -684,6 +700,25 @@ export class Store {
   insertText(agentId: string, text: string): void {
     this.set({ selectionSend: { action: 'insert', busy: true } });
     this.send({ type: 'insert', agentId, text });
+  }
+
+  /** The settings of the panel Settings: the daemon checks them, saves them and says what waits for a restart. */
+  saveSettings(settings: EditableSettings): void {
+    this.set({ settingsSave: { busy: true, at: Date.now() } });
+    this.send({ type: 'saveSettings', settings });
+  }
+
+  /** The checks of the installation again (after `forchetta hooks install` in a terminal, say). */
+  refreshSystem(): void {
+    this.send({ type: 'system' });
+  }
+
+  /** The next session that waits for you, after the one shown last (in the order of the boxes); undefined if none. */
+  nextWaiting(): string | undefined {
+    const waiting = [...this.state.agents.values()].filter((agent) => agent.state === 'waiting').sort((a, b) => a.createdAt - b.createdAt);
+    if (waiting.length === 0) return undefined;
+    const current = waiting.findIndex((agent) => agent.id === this.state.panes.active);
+    return waiting[(current + 1) % waiting.length]!.id;
   }
 
   savePrompts(prompts: readonly QuickPrompt[]): void {

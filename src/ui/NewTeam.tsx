@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, RELATION_MAX, ROLE_MAX, RULES_MAX, type Talk, treeOrder } from '../shared/crew.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
+import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
 
 // A new team of agents (shared/crew.ts): a name, a folder, a lead (Claude or you) and its members. For each member
@@ -180,6 +181,8 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
   const [members, setMembers] = useState<MemberDraft[]>(() => [member('developer'), member('reviewer')]);
   const [rules, setRules] = useState('');
   const first = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  useReturnFocus(panel);
   /** The member just added with "+ report" or "+ member": its name field takes the focus. */
   const added = useRef<number | undefined>(undefined);
   const add = (reportsTo?: number): void => {
@@ -251,13 +254,21 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
   };
 
   return (
-    <section class="broadcast new-team" aria-label="New team" onKeyDown={onKey}>
+    <section ref={panel} class="broadcast new-team" aria-label="New team" onKeyDown={onKey}>
       {store.state.templates.length > 0 && (
-        <div class="broadcast-row">
-          <span class="broadcast-label">Start from</span>
+        <div class="broadcast-row" role="group" aria-labelledby="new-team-from">
+          <span class="broadcast-label" id="new-team-from">
+            Start from
+          </span>
           {store.state.templates.map((template) => (
             <span key={template.name} class="template-chip">
-              <button type="button" class={`chip${applied === template.name ? ' on' : ''}`} title={template.members.map((spec) => spec.name).join(', ')} onClick={() => apply(template)}>
+              <button
+                type="button"
+                class={`chip${applied === template.name ? ' on' : ''}`}
+                title={template.members.map((spec) => spec.name).join(', ')}
+                aria-pressed={applied === template.name}
+                onClick={() => apply(template)}
+              >
                 {template.name}
               </button>
               {(!template.builtin || template.modified) &&
@@ -266,6 +277,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
                     type="button"
                     class="quiet template-delete armed"
                     title={template.builtin ? `Click again to bring back the template "${template.name}" of Forchetta` : `Click again to delete the template "${template.name}"`}
+                    aria-label={template.builtin ? `Click again to bring back the template "${template.name}" of Forchetta` : `Click again to delete the template "${template.name}"`}
                     onClick={() => store.deleteTemplate(template.name)}
                   >
                     {template.builtin ? 'restore?' : 'delete?'}
@@ -275,6 +287,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
                     type="button"
                     class="quiet template-delete"
                     title={template.builtin ? `Your version of "${template.name}": bring back the one of Forchetta` : `Delete the template "${template.name}"`}
+                    aria-label={template.builtin ? `Bring back the template "${template.name}" of Forchetta` : `Delete the template "${template.name}"`}
                     onClick={() => setArmed(template.name)}
                   >
                     {template.builtin ? '↺' : '×'}
@@ -285,9 +298,12 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
         </div>
       )}
       <div class="broadcast-row">
-        <span class="broadcast-label">Team</span>
+        <label class="broadcast-label" for="new-team-name">
+          Team
+        </label>
         <input
           ref={first}
+          id="new-team-name"
           class="command-input"
           type="text"
           value={name}
@@ -298,8 +314,10 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
         />
       </div>
       <div class="broadcast-row">
-        <span class="broadcast-label">Folder</span>
-        <input class="command-input mono" type="text" value={folder} placeholder="~/projects/app" spellcheck={false} onInput={(event) => setFolder((event.target as HTMLInputElement).value)} />
+        <label class="broadcast-label" for="new-team-folder">
+          Folder
+        </label>
+        <input id="new-team-folder" class="command-input mono" type="text" value={folder} placeholder="~/projects/app" spellcheck={false} onInput={(event) => setFolder((event.target as HTMLInputElement).value)} />
         <button type="button" title="Choose the folder in the panel of macOS" onClick={() => store.chooseFolder(folder)}>
           Choose…
         </button>
@@ -308,7 +326,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
         <div class="broadcast-row">
           <span class="broadcast-label" />
           {recent.map((path) => (
-            <button key={path} type="button" class={`chip${path === folder ? ' on' : ''}`} title={path} onClick={() => setFolder(path)}>
+            <button key={path} type="button" class={`chip${path === folder ? ' on' : ''}`} title={path} aria-pressed={path === folder} onClick={() => setFolder(path)}>
               {lastPart(path)}
             </button>
           ))}
@@ -318,10 +336,10 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
       <div class="broadcast-row">
         <span class="broadcast-label">Lead</span>
         <span class="view-switch" role="group" aria-label="Who leads">
-          <button type="button" class={leadKind === 'claude' ? 'on' : undefined} onClick={() => setLeadKind('claude')}>
+          <button type="button" class={leadKind === 'claude' ? 'on' : undefined} aria-pressed={leadKind === 'claude'} onClick={() => setLeadKind('claude')}>
             Claude
           </button>
-          <button type="button" class={leadKind === 'you' ? 'on' : undefined} onClick={() => setLeadKind('you')}>
+          <button type="button" class={leadKind === 'you' ? 'on' : undefined} aria-pressed={leadKind === 'you'} onClick={() => setLeadKind('you')}>
             you
           </button>
         </span>
@@ -353,6 +371,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
             value={leadRole}
             maxLength={ROLE_MAX}
             placeholder="What the lead does (optional): split the goal into requests, follow and check the work"
+            aria-label="Role of the lead"
             onInput={(event) => setLeadRole((event.target as HTMLInputElement).value)}
           />
         </div>
@@ -363,7 +382,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
         <span class="team-hint">by default</span>
         <span class="view-switch" role="group" aria-label="How the members talk by default">
           {(['twoway', 'oneway'] as const).map((value) => (
-            <button key={value} type="button" class={talk === value ? 'on' : undefined} title={value === 'twoway' ? 'By default a member answers the one it reports to' : 'By default a member only executes'} onClick={() => setTalk(value)}>
+            <button key={value} type="button" class={talk === value ? 'on' : undefined} aria-pressed={talk === value} title={value === 'twoway' ? 'By default a member answers the one it reports to' : 'By default a member only executes'} onClick={() => setTalk(value)}>
               {TALK_TEXT[value]}
             </button>
           ))}
@@ -414,13 +433,20 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
               <button type="button" class="quiet" disabled={full} title={full ? `${CREW_MAX_MEMBERS} members at most` : `Add a member that reports to ${label}: ${label} leads it, gives it requests and gets its answers`} onClick={() => add(draft.key)}>
                 + report
               </button>
-              <button type="button" class={`quiet${draft.more ? ' on' : ''}`} title="Model, permissions, worktree, its files, review" onClick={() => change(draft.key, { more: !draft.more })}>
+              <button
+                type="button"
+                class={`quiet${draft.more ? ' on' : ''}`}
+                title="Model, permissions, worktree, its files, review"
+                aria-expanded={draft.more === true}
+                aria-label={`More options of ${label}`}
+                onClick={() => change(draft.key, { more: !draft.more })}>
                 more
               </button>
               <button
                 type="button"
                 class="quiet"
                 title="Remove this member: the ones that report to it go up to the one above it"
+                aria-label={`Remove ${label}`}
                 disabled={members.length === 1}
                 onClick={() => setMembers((current) => withoutDraft(current, draft.key))}
               >
@@ -438,6 +464,8 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
                 class={`talk-toggle${draft.talk ? ' chosen' : ''}`}
                 data-talk={effective}
                 title={TALK_TITLE[effective]}
+                aria-label={`${label} answers the one it reports to`}
+                aria-pressed={effective === 'twoway'}
                 onClick={() => change(draft.key, { talk: (draft.talk ?? talk) === 'twoway' ? 'oneway' : 'twoway' })}
               >
                 {TALK_TEXT[effective]}
@@ -511,8 +539,11 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
         )}
       </div>
       <div class="broadcast-row top">
-        <span class="broadcast-label">Rules</span>
+        <label class="broadcast-label" for="new-team-rules">
+          Rules
+        </label>
         <textarea
+          id="new-team-rules"
           class="command-input prompt-input"
           rows={2}
           maxLength={RULES_MAX}

@@ -86,7 +86,7 @@ export interface PermissionsOptions {
   /** The status `claude agents --json` gives the session now ("waiting" while a dialog is open), if it lists it. */
   status: (agent: Agent) => Promise<string | undefined>;
   now?: () => number;
-  log: (message: string) => void;
+  log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** For the tests: shorter times. */
   attachMs?: number;
   marginMs?: number;
@@ -202,7 +202,7 @@ export class Permissions {
     try {
       status = await this.options.status(agent);
     } catch (error) {
-      this.options.log(`permesso: claude agents --json non riuscito, invio la risposta lo stesso: ${String(error)}`);
+      this.options.log(`permission: claude agents --json failed, the answer is sent all the same: ${String(error)}`, 'warn');
     }
     pending.deciding = false;
     if (this.pending.get(ticket) !== pending) {

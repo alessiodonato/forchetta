@@ -4,7 +4,7 @@ import { chmodSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:f
 import { migrateData, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { contextWindowOf, detectArricurdai, loadConfig, resolveTool } from '../shared/config.ts';
+import { contextWindowOf, detectArricurdai, loadConfig, resolveTool, saveConfig } from '../shared/config.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
 import { listPanes, Tmux } from '../shared/tmux.ts';
 import { VERSION } from '../shared/version.ts';
@@ -26,6 +26,7 @@ import { editOf, Patches } from './patches.ts';
 import { runRecall } from './recall.ts';
 import { folderOf, inGitRepo, spawnSession } from './spawn.ts';
 import { Teams } from './teams.ts';
+import { type GuardParts, RepoConfig, withRepoRules } from './repo-config.ts';
 import { crewApi, CrewTemplates, Crews, RolePresets, templateApi } from './crews.ts';
 import { CustomSkills, skillUsers } from './custom-skills.ts';
 import { FolderChooser } from './folder-chooser.ts';
@@ -39,6 +40,13 @@ import { Permissions } from './permissions.ts';
 import { isInteractiveCommand, readCommandLine } from './process.ts';
 import { Registry } from './registry.ts';
 import { createDaemonServer } from './server.ts';
+import { cliApi } from './cli-api.ts';
+import { Ledger, whoOf } from './ledger.ts';
+import { createLog } from './log.ts';
+import { editableSettings, readClaudeSettings, systemInfo } from './system.ts';
+import { cleanSettings, needsRestart } from '../shared/system.ts';
+import { versionIn } from './claude-update.ts';
+import { readDaemonInfo } from '../shared/daemon-client.ts';
 import { addArtifact, mergeArtifacts } from '../shared/artifacts.ts';
 import { artifactsInTranscript } from './transcript-artifacts.ts';
 import { promptEndingIn, transcriptTail } from './prompt-ending.ts';
@@ -54,7 +62,11 @@ import { Terminals } from './terminals.ts';
 // forchetta-daemon: one process, driven by events. It never ends a Claude process or a tmux session: when it
 // stops, the sessions go on, and the next daemon finds them again.
 
-const log = (message: string): void => console.log(`${new Date().toISOString()} ${message}`);
+// The log of the daemon, in its file (daemon/log.ts): written and rotated by the daemon itself.
+const { log, close: closeLog } = createLog(paths.log);
+
+/** Where a repository keeps the rules of its teams (daemon/repo-config.ts). */
+const REPO_RULES = '.forchetta/rules.md';
 
 const LIVENESS_MS = 5_000;
 const QUIET_CHECK_MS = 10_000;
@@ -89,7 +101,7 @@ function main(): void {
   try {
     claude = resolveTool('claude', config);
   } catch {
-    log('claude non trovato: niente riconciliazione con claude agents --json');
+    log('claude not found: no reconciliation with claude agents --json', 'warn');
   }
   let settingsText: string | undefined;
   try {
@@ -98,7 +110,24 @@ function main(): void {
     // No settings: arricurdAI is looked for in the PATH only.
   }
   const arricurdai = config.arricurdai ?? detectArricurdai(settingsText);
-  log(arricurdai ? `arricurdAI: ${arricurdai.join(' ')}` : 'arricurdAI non trovato: contesto e cache non disponibili');
+  log(arricurdai ? `arricurdAI: ${arricurdai.join(' ')}` : 'arricurdAI not found: no context and cache for the sessions');
+
+  // What the page shows of the installation (daemon/system.ts): the version of Claude Code is read once, and again
+  // after an update; a hook that arrives says the hooks work.
+  let claudeVersion: string | undefined;
+  let hookSeen = false;
+  let haikuOn = false;
+  const readClaudeVersion = (): void => {
+    if (!claude) return;
+    execFile(claude, ['--version'], { encoding: 'utf8', timeout: 10_000 }, (_error, stdout) => {
+      const found = versionIn(stdout ?? '');
+      if (!found || found === claudeVersion) return;
+      claudeVersion = found;
+      log(`Claude Code ${found}`);
+      hub?.systemChanged();
+    });
+  };
+  readClaudeVersion();
 
   const token = randomBytes(32).toString('hex');
   const startedAt = Date.now();
@@ -107,7 +136,13 @@ function main(): void {
   let saveTimer: NodeJS.Timeout | undefined;
   const save = (): void => {
     saveTimer = undefined;
-    writeDataJson(paths.state, { savedAt: Date.now(), agents: registry.list(), writes: conflicts.dump() }, false);
+    const counted = Object.fromEntries(
+      [...registry.agents.keys()].flatMap((id) => {
+        const known = ledger.countedOf(id);
+        return known ? [[id, known]] : [];
+      }),
+    );
+    writeDataJson(paths.state, { savedAt: Date.now(), agents: registry.list(), writes: conflicts.dump(), ledger: counted }, false);
   };
   const saveSoon = (): void => {
     saveTimer ??= setTimeout(save, 1000);
@@ -120,7 +155,7 @@ function main(): void {
     if (reconcileTimer || Date.now() - lastReconcile < QUIET_RECONCILE_MIN_MS) return;
     reconcileTimer = setTimeout(() => {
       reconcileTimer = undefined;
-      void reconcile('evento senza pid');
+      void reconcile('event without a pid');
     }, 2000);
   };
 
@@ -136,6 +171,11 @@ function main(): void {
   // Sessions going in circles: the same call failing the same way, again and again (daemon/loops.ts).
   const loops = new Loops();
   const conflicts = new Conflicts();
+  // .forchetta/ of the repositories: the parts of the guard on or off there, the rules of their teams.
+  const repoConfig = new RepoConfig(log);
+  const rootOf = (dir: string | undefined): string | undefined => (dir ? (conflicts.repoOf(dir) ?? dir) : undefined);
+  /** The guard for a session: var/config.json, then what its repository says. */
+  const guardFor = (agent: Agent): GuardParts => ({ ...config.guard, ...repoConfig.guard(rootOf(agent.cwd)) });
   let guard: Guard | undefined;
   // What each session read and what the others changed since (daemon/coherence.ts), for the notes of the guard.
   const coherence = new Coherence();
@@ -150,6 +190,13 @@ function main(): void {
   const skillCache = new SkillCache(join(paths.varDir, 'skills'), gitRunner(), log);
   const yourSkills = new CustomSkills(join(paths.varDir, 'skills', 'yours.json'), skillCache, gitRunner(), log);
   const crews = new Crews(paths.crews, log);
+  // What the sessions and the teams did, for `forchetta report` (daemon/ledger.ts).
+  const ledger = new Ledger(join(paths.varDir, 'ledger'), log);
+  crews.record = (entry) => ledger.append(entry);
+  /** A session for the ledger: with its team, when it has one. */
+  const who = (agent: Agent) => whoOf(agent, agent.team?.crew ? crews.get(agent.team.crew)?.name : undefined);
+  /** The sessions whose end is in the ledger. */
+  const endedInLedger = new Set<string>();
   const templates = new CrewTemplates(paths.crewTemplates, log);
   const roles = new RolePresets(paths.crewRoles, log);
   crews.agent = (agentId) => registry.agents.get(agentId);
@@ -176,7 +223,7 @@ function main(): void {
         registry.touch(agent);
       }
     } catch (error) {
-      log(`token dei team: ${String(error)}`);
+      log(`tokens of the teams: ${String(error)}`, 'warn');
     } finally {
       countingTokens = false;
     }
@@ -185,7 +232,7 @@ function main(): void {
   // git for the verdicts of the reviewers and the merges: by its full path, briefly, its output or nothing.
   crews.git = (dir, args) =>
     new Promise((done) => {
-      execFile('/usr/bin/git', ['-C', dir, ...args], { encoding: 'utf8', timeout: 3000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(error ? undefined : stdout));
+      execFile('/usr/bin/git', ['-c', 'core.fsmonitor=false', '-C', dir, ...args], { encoding: 'utf8', timeout: 3000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(error ? undefined : stdout));
     });
   // The trust of Claude Code, read (never written) from its global configuration. Claude Code trusts a git
   // repository at its root (a folder inside a trusted repository asks nothing; a repository of its own inside a
@@ -209,7 +256,7 @@ function main(): void {
   crews.gitInfo = (dir) => {
     const git = (args: string[]): string | undefined => {
       // By its full path: the daemon started by the app has the short PATH of the Finder.
-      const result = spawnSync('/usr/bin/git', ['-C', dir, ...args], { encoding: 'utf8', timeout: 2000 });
+      const result = spawnSync('/usr/bin/git', ['-c', 'core.fsmonitor=false', '-C', dir, ...args], { encoding: 'utf8', timeout: 2000 });
       return result.status === 0 ? result.stdout.trim() || undefined : undefined;
     };
     return { root: git(['rev-parse', '--show-toplevel']), branch: git(['branch', '--show-current']) };
@@ -227,11 +274,19 @@ function main(): void {
       for (const agent of conflicts.update(registry.agents.values())) registry.touch(agent);
     }, 50);
   };
+  /** A team started in a repository with .forchetta/rules.md follows those rules too, before its own. */
+  const withRulesOfRepo = <T extends { cwd: string; rules?: string }>(spec: T): T => {
+    const repoRules = repoConfig.rulesOf(rootOf(spec.cwd));
+    if (!repoRules) return spec;
+    const rules = withRepoRules(spec.rules, repoRules);
+    if (rules !== spec.rules) log(`team in ${spec.cwd}: with the rules of ${REPO_RULES}`);
+    return { ...spec, ...(rules ? { rules } : {}) };
+  };
   const notes = new ArricurdaiNotes(arricurdai);
   let notesSupported = false;
   void notes.supported().then((supported) => {
     notesSupported = supported;
-    log(supported ? 'arricurdAI prepara la nota della sessione prima di /clear (handoff --prepare)' : 'arricurdAI non ha handoff --prepare: /clear parte senza nota');
+    log(supported ? 'arricurdAI writes the note of a session before /clear (handoff --prepare)' : 'arricurdAI has no handoff --prepare: /clear starts without a note');
   });
 
   const registry = new Registry({
@@ -244,6 +299,11 @@ function main(): void {
       attention.agentChanged(agent);
       if (agent.state === 'ended' && agent.conflicts) updateConflicts();
       if (agent.state === 'ended') guard?.ended(agent);
+      if (agent.state === 'ended' && !endedInLedger.has(agent.id)) {
+        endedInLedger.add(agent.id);
+        ledger.cost(agent, who(agent));
+        ledger.append({ t: Date.now(), kind: 'session', event: 'end', ...who(agent) });
+      }
       // A session in a folder with a remembered team gets it: one more change, once.
       if (teams.apply(agent)) registry.touch(agent);
       if (CONTEXT_EVENTS.has(agent.lastEvent.name)) poller?.soon();
@@ -255,6 +315,10 @@ function main(): void {
       attention.forget(ids);
       for (const id of ids) conflicts.forget(id);
       for (const id of ids) tokensCountedAt.delete(id);
+      for (const id of ids) {
+        ledger.forget(id);
+        endedInLedger.delete(id);
+      }
       coherence.forget(ids);
       loops.forget(ids);
       teams.forget(ids);
@@ -272,7 +336,7 @@ function main(): void {
     const names = files.map((file) => file.file);
     const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names.at(-1)!}`;
     const byName = files[0]?.withName ?? displayName(by);
-    log(`vigile: ${list} di nuovo libero per ${waiter.team?.label ?? waiter.project}`);
+    log(`guard: ${list} free again for ${waiter.team?.label ?? waiter.project}`);
     if (waiter.control.kind === 'tmux') {
       const earlier = notices.get(waiter.id);
       if (earlier) commander?.cancel(waiter.id, earlier.commandId);
@@ -287,7 +351,7 @@ function main(): void {
     agents: () => registry.agents.values(),
     repoOf: (dir) => conflicts.repoOf(dir),
     writesOf: (agentId) => conflicts.filesOf(agentId),
-    enabled: () => config.guard,
+    enabled: guardFor,
     touch: (agent) => registry.touch(agent),
     onFree: (waiter, files, by) => freed(waiter, files, by),
     // The files of the members of a team: their working tree tells where the folder of the team is for them.
@@ -308,21 +372,22 @@ function main(): void {
       }
     },
     dirty: async (repo) => {
-      const text = await runQuick('/usr/bin/git', ['-C', repo, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
+      // core.fsmonitor=false: the configuration of a repository cannot make this run a program of its own.
+      const text = await runQuick('/usr/bin/git', ['-c', 'core.fsmonitor=false', '-C', repo, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
       return text === undefined ? undefined : parseStatus(text, repo);
     },
   });
   const servers = new Servers({
     agents: () => registry.agents.values(),
     repoOf: (dir) => conflicts.repoOf(dir),
-    enabled: () => config.guard.servers,
+    enabled: (agent) => guardFor(agent).servers,
     run: runQuick,
   });
   /** A git merge of the branch of a member of a team, with commits its reviewer did not approve: you decide. */
   const mergeCheck = async (agent: Agent, payload: Parameters<Guard['decide']>[1]): Promise<GuardDecision | undefined> => {
     const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
     const cwd = agent.cwd ?? payload.cwd;
-    if (!config.guard.git || payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || typeof command !== 'string' || !cwd || agent.state === 'ended') return undefined;
+    if (!guardFor(agent).git || payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || typeof command !== 'string' || !cwd || agent.state === 'ended') return undefined;
     const found = await crews.decideMerge(agent.id, command, cwd);
     if (found) guardStats.count('merge');
     return found;
@@ -377,7 +442,7 @@ function main(): void {
       // A little before the hook: the refusal can be written before the hook of Forchetta reaches the daemon.
       const ending = promptEndingIn(await transcriptTail(agent.transcriptPath), at - 1_500, prompt);
       if (ending && registry.refusePrompt(agent.id, at, ending.reason)) {
-        log(`prompt di ${agent.team?.label ?? agent.project} rifiutato da un hook (${ending.kind}): nessun turno`);
+        log(`prompt of ${agent.team?.label ?? agent.project} refused by a hook (${ending.kind}): no turn`);
       }
     } catch {
       // No transcript to read: the reconciliation with claude agents corrects the state when the hooks are quiet.
@@ -387,9 +452,14 @@ function main(): void {
     for (const delay of REFUSAL_CHECKS_MS) setTimeout(() => void checkRefused(agent, at, prompt), delay).unref();
   };
   try {
-    const saved = readDataJson(paths.state, 'stato salvato', log) as { agents?: Agent[]; writes?: unknown } | undefined;
+    const saved = readDataJson(paths.state, 'saved state', log) as { agents?: Agent[]; writes?: unknown; ledger?: Record<string, { usd: number }> } | undefined;
     if (saved) {
       registry.restore(saved.agents ?? []);
+      // What the ledger counted of each session; a state from before the ledger: it counts from now.
+      for (const agent of registry.agents.values()) {
+        ledger.prime(agent.id, saved.ledger ? saved.ledger[agent.id] : { usd: agent.usage?.usd ?? 0, ...(agent.tokens ? { tokens: agent.tokens } : {}) });
+        if (agent.state === 'ended') endedInLedger.add(agent.id);
+      }
       // What the guard held lives in its memory only: after a restart nothing is held, and the boxes say so.
       for (const agent of registry.agents.values()) {
         agent.heldBack = undefined;
@@ -403,7 +473,7 @@ function main(): void {
       attention.prime(registry.agents.values());
     }
   } catch (error) {
-    log(`stato salvato illeggibile, ignorato: ${String(error)}`);
+    log(`saved state not readable, ignored: ${String(error)}`, 'warn');
   }
 
   // A failed automatic update of Claude Code: read from its file at start and every minute, said in the top line.
@@ -424,13 +494,57 @@ function main(): void {
     port: () => config.port,
     snapshot: () => registry.list(),
     settings: () => ({ replace: config.panes.replace, arricurdaiNotes: notesSupported, stallMin: config.stallMin }),
+    system: () =>
+      systemInfo({
+        config,
+        tmux: (() => {
+          try {
+            return resolveTool('tmux', config);
+          } catch {
+            return undefined;
+          }
+        })(),
+        claude,
+        claudeVersion,
+        arricurdai,
+        notesSupported,
+        haikuOn,
+        socket: server.hooks.listening,
+        hookSeen,
+        sessions: [...registry.agents.values()].filter((agent) => agent.state !== 'ended').length,
+        settingsText: readClaudeSettings(),
+      }),
+    onSaveSettings: (input) => {
+      const checked = cleanSettings(input);
+      if ('error' in checked) return { ok: false, error: checked.error };
+      const before = editableSettings(config);
+      const next = checked.settings;
+      // Saved over what the file has (paths of the tools, context windows…): only these fields change.
+      const stored = loadConfig(paths.config, log);
+      const saved = { ...stored, guard: next.guard, stallMin: next.stallMin, endedRetentionMin: next.endedRetentionMin, panes: { replace: next.replace }, hotkey: next.hotkey, port: next.port, summaries: { ...stored.summaries, haiku: next.haiku } };
+      try {
+        saveConfig(saved);
+      } catch (error) {
+        return { ok: false, error: `not saved: ${String(error)}` };
+      }
+      // What takes effect now: the guard, the times, the panes. The port and Haiku wait for a restart.
+      config.guard = next.guard;
+      config.stallMin = next.stallMin;
+      config.endedRetentionMin = next.endedRetentionMin;
+      config.panes = { replace: next.replace };
+      config.hotkey = next.hotkey;
+      attention.setStallMs(next.stallMin * 60_000);
+      const restart = needsRestart(before, next);
+      log(`settings saved from the app${restart.length > 0 ? ` (after a restart: ${restart.join(', ')})` : ''}`);
+      return { ok: true, restart };
+    },
     onCommand: (message) => {
       if (message.type === 'cancel') {
         commander?.cancel(message.agentId, message.commandId);
         return;
       }
       const result = commander?.enqueue(message.agentId, message.kind, message.arg, message.confirmed, message.fromSelection === true);
-      if (result && !result.ok) log(`comando rifiutato: ${result.error}`);
+      if (result && !result.ok) log(`command refused: ${result.error}`);
     },
     onFiles: (agentId) => changesOf(conflicts.filesOf(agentId), patches.byFile(agentId)),
     onSubagent: async (agentId, key) => {
@@ -448,7 +562,7 @@ function main(): void {
     },
     onScrollEnd: (agentId) => void scrollEnd(agentId),
     onLetThrough: (agentId, path) => {
-      if (guard?.letThrough(agentId, path)) log(`vigile: lasciata passare ${registry.agents.get(agentId)?.project ?? agentId} su ${path}`);
+      if (guard?.letThrough(agentId, path)) log(`guard: ${registry.agents.get(agentId)?.project ?? agentId} let through on ${path}`);
     },
     onSpawn: (input) => spawnSession({ tmux, registry, claude, log, teamMcp }, input),
     crews: () => crews.summaries(),
@@ -513,7 +627,7 @@ function main(): void {
       if ('error' in checked) return { ok: false, error: checked.error };
       // The folder as the team keeps it: ~ and the rest resolved, like a session started from the panel.
       checked.spec.cwd = folderOf(checked.spec.cwd) ?? checked.spec.cwd;
-      return crews.create(checked.spec);
+      return crews.create(withRulesOfRepo(checked.spec));
     },
     onRecall: (project, query) => runRecall(arricurdai, project, query),
     onSelection: async (agentId, phase) => {
@@ -533,7 +647,7 @@ function main(): void {
     claudeUpdate: () => claudeUpdates.info(),
     onClaudeUpdate: (action) => {
       if (action === 'dismiss') claudeUpdates.dismiss();
-      else void claudeUpdates.update().catch((error: unknown) => log(`claude update: ${String(error)}`));
+      else void claudeUpdates.update().then(readClaudeVersion, (error: unknown) => log(`claude update: ${String(error)}`, 'warn'));
     },
     onTeam: (agentId, team) => {
       const agent = registry.agents.get(agentId);
@@ -543,12 +657,12 @@ function main(): void {
     },
     onPermission: (message) => {
       void permissions?.decide(message.agentId, message.ticket, message.behavior, message.always).then((sent) => {
-        if (sent) log(`permesso: ${message.behavior === 'allow' ? (message.always !== undefined ? 'consentito sempre' : 'consentito') : 'rifiutato'} dal box`);
+        if (sent) log(`permission: ${message.behavior === 'allow' ? (message.always !== undefined ? 'always allowed' : 'allowed') : 'denied'} from the box`);
       });
     },
     log,
     onWatched: (watched) => {
-      log(watched ? 'una finestra mostra le sessioni' : 'nessuna finestra visibile: letture di arricurdAI sospese');
+      log(watched ? 'a window shows the sessions' : 'no window can be seen: readings of arricurdAI paused');
       if (watched) void poller?.refresh();
       else poller?.schedule();
     },
@@ -566,7 +680,7 @@ function main(): void {
         registry.applyArricurdai(sessions, (model) => contextWindowOf(model, config.contextWindows));
         if (today) hub?.setToday(today);
       } catch (error) {
-        log(`arricurdai status non riuscito: ${error instanceof Error ? error.message : String(error)}`);
+        log(`arricurdai status failed: ${error instanceof Error ? error.message : String(error)}`, 'warn');
       }
     },
   });
@@ -574,19 +688,20 @@ function main(): void {
   if (config.summaries.haiku) {
     const key = process.env.FORCHETTA_ANTHROPIC_API_KEY;
     if (!key) {
-      log('riassunti Haiku attivi nella configurazione, ma FORCHETTA_ANTHROPIC_API_KEY non è impostata: restano spenti');
+      log('Haiku summaries are on in the configuration, but FORCHETTA_ANTHROPIC_API_KEY is not set: they stay off', 'warn');
     } else {
       void haikuComplete(key, config.summaries.model).then(
         (complete) => {
+          haikuOn = true;
           summarizer = new Summarizer({
             complete,
             minIntervalMs: config.summaries.minIntervalSec * 1000,
             onSummary: (agentId, text) => registry.setModelSummary(agentId, text),
             log,
           });
-          log(`riassunti Haiku attivi (${config.summaries.model}, al massimo ogni ${config.summaries.minIntervalSec} s per sessione)`);
+          log(`Haiku summaries on (${config.summaries.model}, at most every ${config.summaries.minIntervalSec} s per session)`);
         },
-        (error: unknown) => log(`riassunti Haiku non disponibili: ${String(error)}`),
+        (error: unknown) => log(`Haiku summaries not available: ${String(error)}`, 'warn'),
       );
     }
   }
@@ -603,12 +718,12 @@ function main(): void {
         try {
           entries = await readClaudeAgents(claude);
         } catch (error) {
-          log(`claude agents --json non riuscito: ${String(error)}`);
+          log(`claude agents --json failed: ${String(error)}`, 'warn');
         }
       }
       const changed = registry.reconcile(entries, panes, isAlive);
       lastReconcile = Date.now();
-      log(`riconciliazione (${reason}): ${entries.length} sessioni da claude agents, ${panes.length} pane tmux${changed ? ', aggiornato' : ''}`);
+      log(`reconciliation (${reason}): ${entries.length} sessions from claude agents, ${panes.length} tmux panes${changed ? ', updated' : ''}`);
       return changed;
     } finally {
       reconciling = false;
@@ -659,7 +774,7 @@ function main(): void {
     crew: async (route, input) =>
       templateApi(templates, route, input, (name, replaced) => {
         hub?.templatesChanged();
-        log(`modello di team ${replaced ? 'sostituito' : 'salvato'} da una sessione: "${name}"`);
+        log(`team template ${replaced ? 'replaced' : 'saved'} by a session: "${name}"`);
       }) ?? (await crewApi(crews, route, input)),
     guard: async (agent, payload) => {
       const name = agent.team?.label ?? agent.project;
@@ -672,18 +787,20 @@ function main(): void {
         if (merge?.reason) stop = { decision: 'ask', reason: `${first.reason}\n${merge.reason}` };
       }
       if (stop?.decision) {
-        log(`guardia: ${stop.decision} per ${name} (${payload.tool_name})`);
+        log(`guard: ${stop.decision} for ${name} (${payload.tool_name})`);
+        if (stop.decision === 'deny' || stop.decision === 'ask') ledger.append({ t: Date.now(), kind: 'guard', decision: stop.decision, ...(payload.tool_name ? { tool: payload.tool_name } : {}), ...who(agent) });
         return hookOutput(stop);
       }
       // Notes that stop nothing: who else is halfway through what (once, at its first step), before tests, and the
       // files read that others changed. Those go to the session itself, not to its subagents: it is the session that
       // keeps what it read.
-      const changed = config.guard.notes && !payload.agent_id ? changedFilesNote(agent) : undefined;
+      const changed = guardFor(agent).notes && !payload.agent_id ? changedFilesNote(agent) : undefined;
       if (changed) guardStats.count('changed');
       const arrival = guard?.arrival(agent, payload, Boolean(first?.context));
       const context = [arrival, first?.context, changed].filter(Boolean).join('\n\n');
       if (!context) return undefined;
-      log(`vigile: nota per ${name} (${payload.tool_name}): ${context.split('\n')[0]!.slice(0, 160)}`);
+      ledger.append({ t: Date.now(), kind: 'guard', decision: 'note', ...(payload.tool_name ? { tool: payload.tool_name } : {}), ...who(agent) });
+      log(`guard: note for ${name} (${payload.tool_name}): ${context.split('\n')[0]!.slice(0, 160)}`);
       return hookOutput({ context });
     },
     onRateLimits: (windows, agent) => {
@@ -692,6 +809,10 @@ function main(): void {
     },
     onHook: (agent, payload) => {
       quietInterval = QUIET_RECONCILE_MIN_MS;
+      if (!hookSeen) {
+        hookSeen = true;
+        hub?.systemChanged();
+      }
       commander?.hook(agent, payload);
       crews.hook(agent, payload);
       permissions?.hook(agent, payload);
@@ -700,7 +821,7 @@ function main(): void {
         try {
           patches.add(agent.id, edit);
         } catch (error) {
-          log(`modifica di ${agent.id} non salvata: ${String(error)}`);
+          log(`edit of ${agent.id} not saved: ${String(error)}`, 'warn');
         }
       }
       if (payload.artifact) {
@@ -714,7 +835,7 @@ function main(): void {
       if (loops.hook(agent, payload, Date.now())) {
         if (agent.loop && agent.loop.since !== loopBefore) {
           guardStats.count('loop');
-          log(`${agent.team?.label ?? agent.project}: gira a vuoto su ${agent.loop.label} (${agent.loop.count} volte lo stesso errore)`);
+          log(`${agent.team?.label ?? agent.project}: going in circles on ${agent.loop.label} (${agent.loop.count} times the same error)`);
         }
         registry.touch(agent);
       }
@@ -725,6 +846,14 @@ function main(): void {
         if (typeof raw === 'string' && (isAbsolute(raw) || base)) coherence.read(agent.id, isAbsolute(raw) ? resolve(raw) : resolve(base!, raw));
       }
       const file = writtenFile(payload, agent.cwd);
+      if (file) {
+        const base = rootOf(agent.cwd ?? payload.cwd);
+        const shown = base ? relative(base, file) : file;
+        ledger.wrote(agent.id, shown && !shown.startsWith('..') ? shown : file);
+      }
+      if (!payload.agent_id && (payload.hook_event_name === 'Stop' || payload.hook_event_name === 'StopFailure')) {
+        ledger.turn(agent, who(agent), { failed: payload.hook_event_name === 'StopFailure' });
+      }
       if (file) {
         coherence.wrote(agent.id, file, edit && edit.file === file ? edit : undefined);
         guard?.wrote(agent, file);
@@ -745,8 +874,18 @@ function main(): void {
         }
       }
     },
+    api: cliApi({
+      crews,
+      templates,
+      agent: (id) => registry.agents.get(id),
+      importTeam: (text, choice) => importTeam(text, (link) => yourSkills.add(link), choice),
+      folderOf,
+      withRepoRules: withRulesOfRepo,
+      log,
+      system: () => hub?.system(),
+    }),
     info: () => ({ pid: process.pid, port: config.port, startedAt, version: VERSION, agents: registry.agents.size, windows: hub?.size ?? 0, terminals: terminals.size }),
-    onShutdown: () => shutdown('richiesta di arresto'),
+    onShutdown: () => shutdown('asked to stop'),
   });
 
   /** Which panes open in the app are scrolled back in tmux (daemon/scrollback.ts): one list-panes, if any is open. */
@@ -784,7 +923,7 @@ function main(): void {
     const mode = await tmux.run('display-message', ['-p', '-t', target, '#{pane_in_mode}']);
     if (mode.code === 0 && mode.stdout.trim() === '1') {
       await tmux.run('send-keys', ['-t', target, '-X', 'cancel']);
-      log(`${agent.project}: riquadro riportato in fondo (fuori dalla copy mode di tmux)`);
+      log(`${agent.project}: pane back to the end (out of the copy mode of tmux)`);
     }
     if (agent.scrolledBack) {
       agent.scrolledBack = undefined;
@@ -794,7 +933,7 @@ function main(): void {
 
   const timers: NodeJS.Timeout[] = [];
   function shutdown(reason: string): void {
-    log(`arresto: ${reason}. Le sessioni tmux e i processi claude restano attivi.`);
+    log(`stopping: ${reason}. The tmux sessions and the claude processes go on.`);
     for (const timer of timers) clearInterval(timer);
     if (saveTimer) clearTimeout(saveTimer);
     if (reconcileTimer) clearTimeout(reconcileTimer);
@@ -812,7 +951,7 @@ function main(): void {
     try {
       save();
     } catch (error) {
-      log(`salvataggio finale non riuscito: ${String(error)}`);
+      log(`last save failed: ${String(error)}`, 'error');
     }
     try {
       const info = JSON.parse(readFileSync(paths.daemonInfo, 'utf8')) as { pid?: number };
@@ -826,14 +965,38 @@ function main(): void {
     } catch {
       // Already gone.
     }
-    server.close(() => process.exit(0));
+    server.close(() => {
+      closeLog();
+      process.exit(0);
+    });
     setTimeout(() => process.exit(0), 1000).unref();
   }
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  // What nobody caught: said in the log. A promise is one call that went wrong, the daemon goes on; an exception
+  // leaves it in a state nobody knows, so it saves what it can and stops (the app, or launchd, starts it again).
+  process.on('unhandledRejection', (reason) => log(`unhandled rejection: ${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}`, 'error'));
+  process.on('uncaughtException', (error) => {
+    log(`uncaught exception, the daemon stops: ${error.stack ?? error.message}`, 'error');
+    try {
+      save();
+    } catch {
+      // What was saved last stays.
+    }
+    closeLog();
+    process.exit(70);
+  });
 
   server.on('error', (error: NodeJS.ErrnoException) => {
-    log(error.code === 'EADDRINUSE' ? `la porta ${config.port} è già in uso: un altro daemon è attivo?` : `server: ${String(error)}`);
+    // Another daemon of this folder holds the port: this one is not needed (exit 0, so that launchd does not start
+    // it again and again).
+    const other = error.code === 'EADDRINUSE' ? readDaemonInfo() : undefined;
+    if (other && other.pid !== process.pid && isAlive(other.pid)) {
+      log(`another daemon is running (pid ${other.pid}): this one stops`);
+      closeLog();
+      process.exit(0);
+    }
+    log(error.code === 'EADDRINUSE' ? `the port ${config.port} is already in use: is another daemon running?` : `server: ${String(error)}`, 'error');
     process.exit(1);
   });
 
@@ -842,7 +1005,7 @@ function main(): void {
   const listenForHooks = (): void => {
     const socket = paths.hooksSocket;
     if (Buffer.byteLength(socket) > 103) {
-      log(`socket degli hook non creato: il percorso è troppo lungo (${socket})`);
+      log(`socket of the hooks not created: the path is too long (${socket})`, 'error');
       return;
     }
     try {
@@ -850,7 +1013,7 @@ function main(): void {
     } catch {
       // Nothing there.
     }
-    server.hooks.on('error', (error) => log(`socket degli hook: ${String(error)}`));
+    server.hooks.on('error', (error) => log(`socket of the hooks: ${String(error)}`, 'error'));
     server.hooks.listen(socket, () => {
       try {
         chmodSync(socket, 0o600);
@@ -863,7 +1026,7 @@ function main(): void {
   server.listen(config.port, '127.0.0.1', () => {
     listenForHooks();
     writeFileSync(paths.daemonInfo, `${JSON.stringify({ pid: process.pid, port: config.port, token, startedAt, version: VERSION })}\n`, { mode: 0o600 });
-    log(`daemon ${VERSION} attivo su 127.0.0.1:${config.port} (pid ${process.pid})`);
+    log(`daemon ${VERSION} listening on 127.0.0.1:${config.port} (pid ${process.pid})`);
 
     timers.push(
       setInterval(() => {
@@ -874,17 +1037,28 @@ function main(): void {
       setInterval(() => {
         // A command waits for a session that only claude agents can say is ready again: every 10 s, while it waits.
         if (commander?.waitsOnAgentView() && Date.now() - lastReconcile >= QUIET_CHECK_MS) {
-          void reconcile('un comando aspetta la sessione');
+          void reconcile('a command waits for the session');
           return;
         }
         if (!registry.hasQuietActivity() || Date.now() - lastReconcile < quietInterval) return;
-        void reconcile('hook silenziosi').then((changed) => {
+        void reconcile('quiet hooks').then((changed) => {
           quietInterval = changed ? QUIET_RECONCILE_MIN_MS : Math.min(quietInterval * 2, QUIET_RECONCILE_MAX_MS);
         });
       }, QUIET_CHECK_MS),
-      setInterval(() => void reconcile('periodica'), config.reconcileIntervalMin * 60_000),
-      setInterval(() => void countTokens(), TOKENS_CHECK_MS),
-      setInterval(() => void checkScroll().catch((error: unknown) => log(`copy mode: ${String(error)}`)), SCROLL_CHECK_MS),
+      setInterval(() => void reconcile('periodic'), config.reconcileIntervalMin * 60_000),
+      setInterval(() => {
+        void countTokens();
+        // A team that passed its budget: you are told, once; nothing stops.
+        for (const { crew, usd } of crews.overBudget((agentId) => registry.agents.get(agentId)?.usage?.usd ?? 0)) {
+          const shown = (value: number): string => `$${value.toFixed(2)}`;
+          log(`team "${crew.name}": ${shown(usd)}, over its budget of ${shown(crew.budgetUsd ?? 0)}`, 'warn');
+          const agentId = crew.agents.lead ?? Object.values(crew.agents)[0];
+          if (agentId) {
+            hub?.notify({ agentId, kind: 'budget', title: `${crew.name} passed its budget`, body: `Its sessions cost ${shown(usd)}, its budget is ${shown(crew.budgetUsd ?? 0)}. Nothing stops: see its panel.` });
+          }
+        }
+      }, TOKENS_CHECK_MS),
+      setInterval(() => void checkScroll().catch((error: unknown) => log(`copy mode: ${String(error)}`, 'warn')), SCROLL_CHECK_MS),
       setInterval(() => {
         if (!anySubagentActive(registry.agents.values())) return;
         const now = Date.now();
@@ -892,13 +1066,15 @@ function main(): void {
       }, SUBAGENT_CHECK_MS),
       setInterval(() => {
         registry.sweep(config.endedRetentionMin * 60_000);
+        // What the sessions cost since their last entry in the ledger: also for a turn that goes on for long.
+        for (const agent of registry.agents.values()) if (agent.state !== 'ended') ledger.cost(agent, who(agent));
         updateConflicts();
         claudeUpdates.check();
         // The last days move with the clock: a day that leaves the week leaves the top line too.
         hub?.setGuardStats(guardStats.info());
       }, SWEEP_MS),
     );
-    void reconcile('avvio');
+    void reconcile('start');
   });
 }
 

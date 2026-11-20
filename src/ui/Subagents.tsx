@@ -3,6 +3,7 @@ import { useMotionAnchor } from './anchor.ts';
 import { type Agent, displayName, type Subagent, type SubagentStep } from '../shared/agent.ts';
 import { durationText, modelShort, shownSubagents, subagentActive, subagentDetail, subagentKey, subagentTime, WAITING_TEXT } from '../shared/present.ts';
 import { ToolIcon } from './icons.tsx';
+import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
 
 // The subagents a session starts with the Agent tool: under its box while they work and for a few minutes after,
@@ -234,6 +235,8 @@ function SubagentDetail({ agent, subagent, store, now }: { agent: Agent; subagen
 export function SubagentsPanel({ store, now }: { store: Store; now: number }) {
   const panel = store.state.subagents;
   const agent = panel ? store.state.agents.get(panel.agentId) : undefined;
+  const dialog = useRef<HTMLElement>(null);
+  useReturnFocus(dialog, panel !== undefined);
   useEffect(() => {
     if (!panel) return;
     const onKey = (event: KeyboardEvent): void => {
@@ -248,13 +251,13 @@ export function SubagentsPanel({ store, now }: { store: Store; now: number }) {
   const current = list.find((subagent) => subagentKey(subagent) === panel.key);
   return (
     <div class="files-backdrop" onClick={() => store.closeSubagents()}>
-      <section class="files subagents-panel" aria-label="Subagents of the session" onClick={(event) => event.stopPropagation()}>
+      <section ref={dialog} class="files subagents-panel" role="dialog" aria-modal="true" aria-label="Subagents of the session" onClick={(event) => event.stopPropagation()}>
         <header class="files-head">
           <span class="files-title">
             Subagents of <strong>{agent ? displayName(agent) : '?'}</strong>
           </span>
           <span class="files-sub">read only: they run inside the session, with no terminal of their own</span>
-          <button type="button" class="files-close" title="Close (Esc)" onClick={() => store.closeSubagents()}>
+          <button type="button" class="files-close" title="Close (Esc)" aria-label="Close" onClick={() => store.closeSubagents()}>
             ✕
           </button>
         </header>
@@ -267,7 +270,7 @@ export function SubagentsPanel({ store, now }: { store: Store; now: number }) {
                 const key = subagentKey(subagent);
                 return (
                   <li key={key}>
-                    <button type="button" class={key === panel.key ? 'on' : undefined} data-state={subagent.state} title={subagentTitle(subagent)} onClick={() => store.selectSubagent(key)}>
+                    <button type="button" class={key === panel.key ? 'on' : undefined} aria-current={key === panel.key ? 'true' : undefined} data-state={subagent.state} title={subagentTitle(subagent)} onClick={() => store.selectSubagent(key)}>
                       <span class="subagent-mark">{MARK[subagent.state]}</span>
                       <span class="files-name">
                         <span class="subagent-type">{subagent.type}</span> {subagent.description ?? ''}

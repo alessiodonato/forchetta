@@ -100,7 +100,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.9.13. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.10.0. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
@@ -120,6 +120,10 @@ La seconda sessione viene fermata, dice che aspetterà `src/api.ts`, e riparte q
 - **Nuove sessioni e nuovi team dall'app**, con modello, modalità dei permessi e worktree. [Altro](https://forchetta.dev/manual.html#new-session)
 - **Nomi, gruppi e ruoli**, con un organigramma. [Altro](https://forchetta.dev/manual.html#window)
 - **Icona nella barra dei menu**, badge nel Dock e la scorciatoia ⌃⌥F. [Altro](https://forchetta.dev/manual.html#alerts)
+- **Team nel repository**: `.forchetta/` tiene i file dei team, le regole per ogni team e le impostazioni del vigile per quel repo, revisionati col codice; `forchetta team start review-squad --goal "…"` ne avvia uno da un terminale o da uno script, e un budget per team ti avvisa quando costa di più. [Altro](https://forchetta.dev/manual.html#repo-teams)
+- **Report**: ogni turno, costo, file, passo del vigile, richiesta e revisione finisce in un registro locale; `forchetta report --since 7d --by team` lo legge come tabella, CSV o JSON. [Altro](https://forchetta.dev/manual.html#report)
+- **Impostazioni, ⌘K e scorciatoie**: le impostazioni nell'app, una palette per ogni comando e sessione, un tema chiaro, i box che si aprono da tastiera. [Altro](https://forchetta.dev/manual.html#settings)
+- **`forchetta doctor`** dice cosa non è a posto e come sistemarlo; `--bundle` scrive un file da allegare a una issue, senza i tuoi nomi. [Altro](https://forchetta.dev/manual.html#cli)
 - **`forchetta ls --json`**, per gli script. [Altro](https://forchetta.dev/manual.html#cli)
 
 Tutto il resto è nel [manuale](https://forchetta.dev/manual.html) (in inglese).
@@ -127,8 +131,9 @@ Tutto il resto è nel [manuale](https://forchetta.dev/manual.html) (in inglese).
 ## Cosa tocca sul tuo Mac
 
 - **`~/.claude/settings.json`**, solo con `forchetta setup` o `forchetta hooks install`, dopo averti mostrato ogni modifica, e con un backup. Gli hook di Forchetta si aggiungono accanto ai tuoi senza cambiarli; `forchetta hooks uninstall` toglie solo quelli.
-- **Gli hook sono piccoli script `sh` + `curl`.** Terminano sempre con 0 e stampano solo una decisione: la tua risposta a un permesso, o il vigile che ferma una modifica. Con Forchetta spenta, una sessione si comporta esattamente come senza. Quasi tutti girano in background; il vigile fa aspettare Claude circa 30 ms, solo prima delle modifiche ai file e dei comandi Bash. [Come funzionano gli hook](https://forchetta.dev/manual.html#hooks)
+- **Gli hook sono piccoli script `sh` + `curl`.** Terminano sempre con 0 e stampano solo una decisione: la tua risposta a un permesso, o il vigile che ferma una modifica. Con Forchetta spenta, una sessione si comporta esattamente come senza (la sua status line dice che Forchetta è spenta). Quasi tutti girano in background; il vigile fa aspettare Claude circa 30 ms, solo prima delle modifiche ai file e dei comandi Bash. [Come funzionano gli hook](https://forchetta.dev/manual.html#hooks)
 - **Tutto il resto** sta in `~/Library/Application Support/Forchetta`, leggibile solo da te. Il daemon ascolta solo su `127.0.0.1`, con un token. Nessuna telemetria. L'unica chiamata esterna che porta fuori qualcosa di tuo è facoltativa e spenta di default: un riassunto di una riga scritto da Haiku, attraverso la Claude API. Quando parte un team i cui agenti hanno delle skill, Forchetta le scarica da GitHub a un commit fissato, in quella cartella.
+- **`~/Library/LaunchAgents/dev.forchetta.daemon.plist`**, solo se lanci `forchetta daemon keepalive on`, perché macOS tenga acceso il daemon.
 - A riposo, app, pagina e daemon insieme restano sotto l'1% della CPU.
 
 ## Funziona con arricurdAI

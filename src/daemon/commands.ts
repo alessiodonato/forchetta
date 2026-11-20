@@ -49,7 +49,7 @@ export interface ResetNotes {
 export interface CommanderOptions {
   registry: Registry;
   tmux: CommanderTmux;
-  log: (message: string) => void;
+  log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   notes?: ResetNotes;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -195,7 +195,7 @@ export class Commander {
     }
     const command: QueuedCommand = { id: randomUUID(), kind, arg: question, status: 'in-coda', createdAt: this.now(), ...(fromSelection ? { afterSelection: this.now() } : {}) };
     agent.commands = [...(agent.commands ?? []), command];
-    this.options.log(`comando in coda per ${agent.project}: ${commandText(command)}`);
+    this.options.log(`command queued for ${agent.project}: ${commandText(command)}`);
     this.prune(agent);
     this.options.registry.touch(agent);
     this.kick(agent.id);
@@ -213,7 +213,7 @@ export class Commander {
     if (clean.length > MAX_REQUEST) return { ok: false, error: `request too long (more than ${MAX_REQUEST} characters)` };
     const command: QueuedCommand = { id: randomUUID(), kind: 'request', arg: clean, request, status: 'in-coda', createdAt: this.now() };
     agent.commands = [...(agent.commands ?? []), command];
-    this.options.log(`richiesta #${request.n} in coda per ${agent.team?.label ?? agent.project}`);
+    this.options.log(`request #${request.n} queued for ${agent.team?.label ?? agent.project}`);
     this.prune(agent);
     this.options.registry.touch(agent);
     this.changed(agent, command);
@@ -235,7 +235,7 @@ export class Commander {
     const now = this.now();
     const command: QueuedCommand = { id: randomUUID(), kind: 'ask', arg: clean, status: 'in-coda', createdAt: now, ...(fromSelection ? { afterSelection: now } : {}) };
     agent.commands = [...(agent.commands ?? []), command];
-    this.options.log(`domanda in coda per ${agent.team?.label ?? agent.project}`);
+    this.options.log(`question queued for ${agent.team?.label ?? agent.project}`);
     this.prune(agent);
     this.options.registry.touch(agent);
     this.kick(agent.id);
@@ -254,7 +254,7 @@ export class Commander {
     if (!clean) return { ok: false, error: 'the notice is empty' };
     const command: QueuedCommand = { id: randomUUID(), kind: 'free', arg: clean, status: 'in-coda', createdAt: this.now() };
     agent.commands = [...(agent.commands ?? []), command];
-    this.options.log(`avviso del vigile in coda per ${agent.team?.label ?? agent.project}`);
+    this.options.log(`notice of the guard queued for ${agent.team?.label ?? agent.project}`);
     this.prune(agent);
     this.options.registry.touch(agent);
     this.kick(agent.id);
@@ -286,7 +286,7 @@ export class Commander {
       if (mode.code === 0 && mode.stdout.trim() === '1') return { ok: false, error: 'the terminal is scrolled back (tmux copy mode): scroll to the end, or press q in it' };
       if (!readPromptBox(await this.capture(pane, true)).found) return { ok: false, error: 'a dialog or the answer of /btw is open in the terminal: close it with Esc' };
       await this.paste(pane, clean);
-      this.options.log(`testo messo nel prompt di ${agent.team?.label ?? agent.project} (${clean.length} caratteri)`);
+      this.options.log(`text put in the prompt of ${agent.team?.label ?? agent.project} (${clean.length} characters)`);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: String(error) };
@@ -396,7 +396,7 @@ export class Commander {
     command.reason = reason;
     command.doneAt = this.now();
     if (this.inflight.get(agent.id)?.command === command) this.inflight.delete(agent.id);
-    this.options.log(`comando ${commandLabel(command)} per ${agent.project}: ${status}${reason ? ` (${reason})` : ''}`);
+    this.options.log(`command ${commandLabel(command)} for ${agent.project}: ${status}${reason ? ` (${reason})` : ''}`);
     this.prune(agent);
     this.options.registry.touch(agent);
     this.changed(agent, command);
@@ -454,20 +454,20 @@ export class Commander {
         const box = readPromptBox(await this.capture(pane, true));
         if (!box.found) continue;
         if (box.typed) {
-          this.options.log(`prompt rifiutato non rimesso in ${agent.project}: nel prompt c'è già del testo`);
+          this.options.log(`refused prompt not put back in ${agent.project}: the prompt already holds text`);
           return;
         }
         await this.paste(pane, text);
-        this.options.log(`prompt rifiutato rimesso nel prompt di ${agent.project} (non inviato)`);
+        this.options.log(`refused prompt put back in the prompt of ${agent.project} (not sent)`);
         return;
       } catch (error) {
-        this.options.log(`prompt rifiutato non rimesso in ${agent.project}: ${String(error)}`);
+        this.options.log(`refused prompt not put back in ${agent.project}: ${String(error)}`, 'warn');
         return;
       } finally {
         this.dispatching.delete(agentId);
       }
     }
-    this.options.log(`prompt rifiutato non rimesso: il riquadro del prompt non è tornato`);
+    this.options.log(`refused prompt not put back: the prompt box did not come back`, 'warn');
   }
 
   /** Keeps the commands waiting or sent, and the last few done. */
@@ -577,7 +577,7 @@ export class Commander {
       if (refused !== undefined) {
         this.putBacks.set(command.id, refused);
         if (!(await this.emptyPrompt(pane, refused))) return this.finish(agent, command, 'fallito', 'the prompt refused by a hook did not go out of the input box: check the terminal');
-        this.options.log(`prompt rifiutato tolto dal prompt di ${agent.project}: torna dopo ${commandText(command)}`);
+        this.options.log(`refused prompt taken out of the prompt of ${agent.project}: it comes back after ${commandText(command)}`);
       }
 
       const text = commandText(command);
@@ -597,7 +597,7 @@ export class Commander {
       const shown = shows(typed);
       if (!shown) {
         // What the prompt showed, for the log: what went wrong is seen only here.
-        this.options.log(`${commandLabel(command)} per ${agent.project}: il prompt mostra ${typed.found ? JSON.stringify(typed.typed.slice(0, 300)) : 'niente (riquadro non trovato)'}`);
+        this.options.log(`${commandLabel(command)} for ${agent.project}: the prompt shows ${typed.found ? JSON.stringify(typed.typed.slice(0, 300)) : 'nothing (prompt box not found)'}`);
         return this.finish(agent, command, 'fallito', 'the prompt does not show the command as typed: Enter not pressed, check the terminal');
       }
       await tmux.run('send-keys', ['-t', pane, 'Enter']);
@@ -605,7 +605,7 @@ export class Commander {
       command.reason = undefined;
       command.sentAt = this.now();
       this.inflight.set(agentId, { command, deadline: this.now() + ACK_MS[command.kind] });
-      this.options.log(`comando inviato a ${agent.project} (${session}, ${pane}, pid ${agent.pid}): ${commandLabel(command)}`);
+      this.options.log(`command sent to ${agent.project} (${session}, ${pane}, pid ${agent.pid}): ${commandLabel(command)}`);
       this.options.registry.touch(agent);
       this.changed(agent, command);
 

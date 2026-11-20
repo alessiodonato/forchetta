@@ -48,7 +48,7 @@ export function unifiedDiff(before: string, after: string, label: string): strin
 }
 
 /** The answer to a question on the terminal, trimmed and in lower case. */
-async function ask(question: string, choices: string, io: RunIO): Promise<string> {
+export async function ask(question: string, choices: string, io: RunIO): Promise<string> {
   const s = io.style;
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {

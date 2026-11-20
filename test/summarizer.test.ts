@@ -60,7 +60,7 @@ describe('Haiku summary (optional)', () => {
     badKey.changed(agent({ id: 'b', state: 'idle' }));
     await sleep(100);
     expect(calls).toBe(1);
-    expect(logs[0]).toContain('non è valida');
+    expect(logs[0]).toContain('is not valid');
   });
 
   it('says nothing for a session with nothing to summarize', async () => {

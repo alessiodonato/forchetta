@@ -47,7 +47,7 @@ export const writeDataJson = (file: string, value: unknown, pretty = true): void
  * <file>.corrupt-<time> (so that nothing writes over it) and the version before, <file>.bak, is read in its place.
  * `label` names it in the log.
  */
-export function readDataJson(file: string, label: string, log: (message: string) => void, now = new Date()): unknown {
+export function readDataJson(file: string, label: string, log: (message: string, level?: 'info' | 'warn' | 'error') => void, now = new Date()): unknown {
   if (!existsSync(file)) return undefined;
   try {
     return JSON.parse(readFileSync(file, 'utf8')) as unknown;
@@ -55,13 +55,13 @@ export function readDataJson(file: string, label: string, log: (message: string)
     const aside = `${file}.corrupt-${stamp(now)}`;
     try {
       renameSync(file, aside);
-      log(`${label}: file illeggibile (${error instanceof Error ? error.message : String(error)}), messo da parte come ${basename(aside)}`);
+      log(`${label}: file not readable (${error instanceof Error ? error.message : String(error)}), set aside as ${basename(aside)}`, 'warn');
     } catch (moveError) {
-      log(`${label}: file illeggibile e non spostato: ${String(moveError)}`);
+      log(`${label}: file not readable, and not moved: ${String(moveError)}`, 'error');
     }
     try {
       const value = JSON.parse(readFileSync(`${file}.bak`, 'utf8')) as unknown;
-      log(`${label}: ripresa la versione precedente (${basename(file)}.bak)`);
+      log(`${label}: the version before is back (${basename(file)}.bak)`, 'warn');
       return value;
     } catch {
       return undefined;
@@ -73,7 +73,7 @@ export function readDataJson(file: string, label: string, log: (message: string)
  * Keeps the entries of a data file that are not valid any more in <file>.rejected.json, each once, so that the next
  * save does not lose them; says how many in the log.
  */
-export function keepRejected(file: string, rejected: readonly unknown[], label: string, log: (message: string) => void): void {
+export function keepRejected(file: string, rejected: readonly unknown[], label: string, log: (message: string, level?: 'info' | 'warn' | 'error') => void): void {
   if (rejected.length === 0) return;
   const target = `${file}.rejected.json`;
   let kept: unknown[] = [];
@@ -88,9 +88,9 @@ export function keepRejected(file: string, rejected: readonly unknown[], label: 
   if (fresh.length === 0) return;
   try {
     writeDataJson(target, [...kept, ...fresh]);
-    log(`${label}: ${fresh.length === 1 ? '1 voce non valida' : `${fresh.length} voci non valide`} tenuta da parte in ${basename(target)}`);
+    log(`${label}: ${fresh.length === 1 ? '1 entry not valid' : `${fresh.length} entries not valid`} kept aside in ${basename(target)}`, 'warn');
   } catch (error) {
-    log(`${label}: voci non valide non salvate: ${String(error)}`);
+    log(`${label}: entries not valid, not saved: ${String(error)}`, 'error');
   }
 }
 
@@ -101,10 +101,10 @@ export function keepRejected(file: string, rejected: readonly unknown[], label: 
 export const DATA_VERSION = 1;
 
 /** The steps from version n (index n - 1) to n + 1. None yet. */
-const MIGRATIONS: ((varDir: string, log: (message: string) => void) => void)[] = [];
+const MIGRATIONS: ((varDir: string, log: (message: string, level?: 'info' | 'warn' | 'error') => void) => void)[] = [];
 
 /** Brings the data of the private folder to DATA_VERSION; an error when it is newer than this Forchetta knows. */
-export function migrateData(varDir: string, log: (message: string) => void, current = DATA_VERSION, steps = MIGRATIONS): { ok: true } | { ok: false; error: string } {
+export function migrateData(varDir: string, log: (message: string, level?: 'info' | 'warn' | 'error') => void, current = DATA_VERSION, steps = MIGRATIONS): { ok: true } | { ok: false; error: string } {
   const file = join(varDir, 'data-version');
   let version = current;
   if (existsSync(file)) {
@@ -116,12 +116,12 @@ export function migrateData(varDir: string, log: (message: string) => void, curr
     // A folder from before the versions: the format of version 1.
     version = 1;
   }
-  if (version > current) return { ok: false, error: `i dati in ${varDir} sono di una versione più nuova di Forchetta (formato ${version}, questa conosce fino al ${current}): aggiorna Forchetta` };
+  if (version > current) return { ok: false, error: `the data in ${varDir} are of a newer Forchetta (format ${version}, this one knows up to ${current}): update Forchetta` };
   for (; version < current; version++) {
     const step = steps[version - 1];
-    if (!step) return { ok: false, error: `manca il passaggio dei dati dal formato ${version} al ${version + 1}` };
+    if (!step) return { ok: false, error: `no step brings the data from format ${version} to ${version + 1}` };
     step(varDir, log);
-    log(`dati portati dal formato ${version} al ${version + 1}`);
+    log(`data brought from format ${version} to ${version + 1}`);
     writeFileSync(file, `${version + 1}\n`, { mode: 0o600 });
   }
   writeFileSync(file, `${current}\n`, { mode: 0o600 });

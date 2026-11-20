@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type Agent, displayName } from '../shared/agent.ts';
 import { percentText, shortTokens } from '../shared/present.ts';
+import { useReturnFocus } from './focus.ts';
 import { canOpen, type Store } from './store.ts';
 
 // One command to several sessions: /compact to all those over 80% of their context, say. Each session gets its
@@ -21,7 +22,13 @@ export const overThreshold = (agents: readonly Agent[], threshold = CONTEXT_THRE
 export function BroadcastButton({ agents, open, onToggle }: { agents: readonly Agent[]; open: boolean; onToggle: () => void }) {
   if (commandable(agents).length < 2 && !open) return null;
   return (
-    <button type="button" class={`broadcast-toggle quiet${open ? ' active' : ''}`} title="One command to several sessions: /compact, /clear, /btw or a question" onClick={onToggle}>
+    <button
+      type="button"
+      class={`broadcast-toggle quiet${open ? ' active' : ''}`}
+      title="One command to several sessions: /compact, /clear, /btw or a question"
+      aria-pressed={open}
+      onClick={onToggle}
+    >
       to several
     </button>
   );
@@ -35,6 +42,8 @@ export function BroadcastPanel({ agents, store, onClose }: { agents: readonly Ag
   const [chosen, setChosen] = useState<Set<string>>(() => new Set(overThreshold(agents).map((agent) => agent.id)));
   const [confirming, setConfirming] = useState(false);
   const field = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  useReturnFocus(panel);
   useEffect(() => {
     if (kind === 'btw') field.current?.focus();
     setConfirming(false);
@@ -75,11 +84,13 @@ export function BroadcastPanel({ agents, store, onClose }: { agents: readonly Ag
     : 'This version of arricurdAI cannot save a note: the transcripts stay on disk, and recall finds them.';
 
   return (
-    <section class="broadcast" aria-label="Command to several sessions" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
-      <div class="broadcast-row">
-        <span class="broadcast-label">Command</span>
+    <section ref={panel} class="broadcast" aria-label="Command to several sessions" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
+      <div class="broadcast-row" role="group" aria-labelledby="broadcast-command">
+        <span class="broadcast-label" id="broadcast-command">
+          Command
+        </span>
         {(['compact', 'clear', 'btw'] as const).map((option) => (
-          <button key={option} type="button" class={`chip${kind === option ? ' on' : ''}`} onClick={() => setKind(option)}>
+          <button key={option} type="button" class={`chip${kind === option ? ' on' : ''}`} aria-pressed={kind === option} onClick={() => setKind(option)}>
             /{option}
           </button>
         ))}
@@ -91,13 +102,16 @@ export function BroadcastPanel({ agents, store, onClose }: { agents: readonly Ag
             value={question}
             maxLength={900}
             placeholder="Question for /btw"
+            aria-label="Question for /btw"
             onInput={(event) => setQuestion((event.target as HTMLInputElement).value)}
             onKeyDown={(event) => event.key === 'Enter' && send()}
           />
         )}
       </div>
-      <div class="broadcast-row">
-        <span class="broadcast-label">Sessions</span>
+      <div class="broadcast-row" role="group" aria-labelledby="broadcast-sessions">
+        <span class="broadcast-label" id="broadcast-sessions">
+          Sessions
+        </span>
         <button type="button" class="chip" onClick={() => pick(over)} disabled={over.length === 0}>
           context ≥ {CONTEXT_THRESHOLD}% ({over.length})
         </button>

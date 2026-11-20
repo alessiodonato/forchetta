@@ -212,8 +212,11 @@ export interface GuardOptions {
   repoOf: (dir: string) => string | undefined;
   /** The files an agent wrote, with when and in which working tree (daemon/conflicts.ts). */
   writesOf: (agentId: string) => Array<{ path: string; at: number; repo?: string }>;
-  /** What is on, from var/config.json: notes are those for Claude that stop nothing (before tests). */
-  enabled: () => { files: boolean; git: boolean; notes?: boolean };
+  /**
+   * What is on for this session: var/config.json, and .forchetta/guard.json of its repository. Notes are those for
+   * Claude that stop nothing (before tests).
+   */
+  enabled: (agent: Agent) => { files: boolean; git: boolean; notes?: boolean };
   /** Of the lines a session takes away from a file, those another session added in the last hour (daemon/coherence.ts). */
   addedByOthers?: (agentId: string, file: string, removed: string[]) => { agentId: string; at: number; lines: string[] } | undefined;
   /** Whether another session changed the file in the last hour: when not, the lines taken away are not even read. */
@@ -349,7 +352,7 @@ export class Guard {
   /** The answer to a PreToolUse: a decision, or undefined to let the tool go on as usual. */
   decide(agent: Agent, payload: HookPayload): GuardDecision | undefined {
     if (payload.hook_event_name !== 'PreToolUse' || agent.state === 'ended') return undefined;
-    const enabled = this.options.enabled();
+    const enabled = this.options.enabled(agent);
     const cwd = agent.cwd ?? payload.cwd;
     const file = targetFile(payload.tool_name, payload.tool_input, cwd);
     if (file) return enabled.files ? (this.decideLane(agent, file) ?? this.decideFile(agent, file) ?? this.decideUndo(agent, payload, file)) : undefined;
@@ -365,7 +368,7 @@ export class Guard {
    * into this commit is stopped once, with the files of this session to add instead.
    */
   async decideCommit(agent: Agent, payload: HookPayload): Promise<GuardDecision | undefined> {
-    if (payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || agent.state === 'ended' || !this.options.enabled().git) return undefined;
+    if (payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || agent.state === 'ended' || !this.options.enabled(agent).git) return undefined;
     const line = (payload.tool_input as { command?: unknown } | undefined)?.command;
     const cwd = agent.cwd ?? payload.cwd;
     if (typeof line !== 'string' || !cwd || !this.options.dirty) return undefined;
@@ -504,7 +507,7 @@ export class Guard {
     const conversation = agent.sessionId ?? payload.session_id ?? '';
     if (this.arrived.get(agent.id) === conversation) return undefined;
     this.arrived.set(agent.id, conversation);
-    if (said || this.options.enabled().notes === false) return undefined;
+    if (said || this.options.enabled(agent).notes === false) return undefined;
     const cwd = agent.cwd ?? payload.cwd;
     if (!cwd) return undefined;
     const busy = this.busyIn(this.options.repoOf(cwd) ?? cwd, agent);

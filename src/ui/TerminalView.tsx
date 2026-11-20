@@ -2,7 +2,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { type ILink, Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { SessionColor } from '../shared/agent.ts';
 import { linksIn } from '../shared/artifacts.ts';
 import { openLink } from './Artifacts.tsx';
@@ -11,6 +11,8 @@ import { GlyphFilter } from './glyphs.ts';
 import { isFocusReport, keyInput } from './layout.ts';
 import type { SelectionPlace } from './store.ts';
 import { terminalTheme } from './terminal-theme.ts';
+import { onThemeChange, resolvedTheme } from './theme.ts';
+import { onTerminalFontSize, terminalFontSize } from './prefs.ts';
 
 // The terminal of a pane: xterm.js on a WebSocket of the daemon, which runs `tmux attach` for the session. Closing
 // the pane closes the socket, and the daemon detaches that tmux client: the session goes on.
@@ -105,6 +107,9 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
   const host = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const callbacks = useRef({ onUse, onStatus, onDragStart, onDragEnd, onSelectText });
+  // Dark or light, as the page: the terminal follows a change of theme while it is open.
+  const [mode, setMode] = useState(resolvedTheme);
+  useEffect(() => onThemeChange(setMode), []);
   callbacks.current = { onUse, onStatus, onDragStart, onDragEnd, onSelectText };
 
   useEffect(() => {
@@ -113,7 +118,7 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
     if (!element || !auth) return;
     const term = new Terminal({
       fontFamily: fontReady ? FONTS : FALLBACK_FONTS,
-      fontSize: 13,
+      fontSize: terminalFontSize(),
       lineHeight: 1.3,
       // A safety net under the colors of terminal-theme.ts: xterm.js lightens any text that would read below this
       // contrast with its background. 3, not 4.5: higher, the subtle grays of Claude Code would become as light
@@ -125,7 +130,7 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
       macOptionClickForcesSelection: true,
       // The history is in tmux: the wheel scrolls it (mouse on). A second one here would only show a scrollbar.
       scrollback: 0,
-      theme: terminalTheme(color),
+      theme: terminalTheme(color, resolvedTheme()),
       // Links that the program marks itself (OSC 8): ⌘-click opens them, as in the Terminal.
       linkHandler: {
         activate: (event, text) => {
@@ -247,7 +252,17 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
     });
     observer.observe(element);
 
+    // A new size of the text (Settings, the palette): the cells are measured again and the pane fits them.
+    const stopFont = onTerminalFontSize((size) => {
+      term.options.fontSize = size;
+      try {
+        fit.fit();
+      } catch {
+        // Not visible right now: the ResizeObserver fits it later.
+      }
+    });
     return () => {
+      stopFont();
       disposed = true;
       observer.disconnect();
       cancelAnimationFrame(frame);
@@ -266,10 +281,10 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
     if (focusKey >= 0) terminal.current?.focus();
   }, [focusKey]);
 
-  // A color chosen or taken away while the pane is open: the terminal follows it.
+  // A color chosen or taken away, or another theme, while the pane is open: the terminal follows it.
   useEffect(() => {
-    if (terminal.current) terminal.current.options.theme = terminalTheme(color);
-  }, [color]);
+    if (terminal.current) terminal.current.options.theme = terminalTheme(color, mode);
+  }, [color, mode]);
 
   return <div class="terminal" ref={host} />;
 }

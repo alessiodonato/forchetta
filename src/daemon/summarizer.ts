@@ -27,7 +27,7 @@ export interface SummarizerOptions {
   complete: Complete;
   minIntervalMs: number;
   onSummary: (agentId: string, text: string) => void;
-  log: (message: string) => void;
+  log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   now?: () => number;
   /** Wait for the events of a change to settle before asking. */
   settleMs?: number;
@@ -74,12 +74,12 @@ export class Summarizer {
       const status = (error as { status?: unknown }).status;
       if (status === 401 || status === 403) {
         this.disabled = true;
-        this.options.log('riassunti Haiku disattivati: la chiave in FORCHETTA_ANTHROPIC_API_KEY non è valida');
+        this.options.log('Haiku summaries turned off: the key in FORCHETTA_ANTHROPIC_API_KEY is not valid', 'warn');
       } else if (status === 429) {
         this.pausedUntil = this.now + 60_000;
-        this.options.log('riassunti Haiku: limite di richieste, pausa di un minuto');
+        this.options.log('Haiku summaries: rate limited, a pause of one minute', 'warn');
       } else {
-        this.options.log(`riassunto Haiku non riuscito: ${error instanceof Error ? error.message : String(error)}`);
+        this.options.log(`Haiku summary failed: ${error instanceof Error ? error.message : String(error)}`, 'warn');
       }
     }
   }

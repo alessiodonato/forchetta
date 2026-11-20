@@ -7,6 +7,7 @@ import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate, ReviewRecord, RolePreset } from '../shared/crew.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import type { SkillInfo } from '../shared/skills.ts';
+import type { SystemInfo } from '../shared/system.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
 // that changed and the ids of those that went away. The page tells whether its window can be seen, so that the
@@ -15,7 +16,11 @@ import type { SkillInfo } from '../shared/skills.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo }
+  /** The installation (checks, optional features, settings), when it changed. */
+  | { type: 'system'; now: number; system: SystemInfo }
+  /** How saving the settings went, for the window that asked; what takes effect only after a restart. */
+  | { type: 'settingsSaved'; now: number; ok: boolean; error?: string; restart?: string[] }
   /** What you selected with the mouse in a pane, for the window where you did it. */
   | { type: 'selection'; now: number; agentId: string; text: string }
   /** How a question or a text from the menu of a selection went: queued, put in the prompt, or why not. */
@@ -67,7 +72,7 @@ export type ServerMessage =
   /** The transcript of a subagent, for the window that asked: its steps, or why there are none. */
   | { type: 'subagent'; now: number; agentId: string; key: string; steps: SubagentStep[]; model?: string; skipped?: number; note?: string }
   /** A session waits for you, seems stuck or ended with an error: the app shows a notification of macOS. */
-  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop'; title: string; body: string };
+  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget'; title: string; body: string };
 
 /** What the page needs to know of the configuration. */
 export interface UiSettings {
@@ -92,6 +97,8 @@ export type ClientMessage =
   | { type: 'ask'; agentId: string; text: string; fromSelection?: boolean }
   | { type: 'insert'; agentId: string; text: string }
   | { type: 'savePrompts'; prompts: unknown }
+  | { type: 'saveSettings'; settings: unknown }
+  | { type: 'system' }
   | { type: 'cancel'; agentId: string; commandId: string }
   | { type: 'permission'; agentId: string; ticket: string; behavior: 'allow' | 'deny'; always?: number }
   | { type: 'files'; agentId: string }
@@ -141,6 +148,10 @@ export interface HubOptions {
   /** The quick prompts, and saving them. */
   prompts?: () => QuickPrompt[];
   onSavePrompts?: (prompts: unknown) => { ok: boolean; error?: string };
+  /** The installation, for the page: the checklist, the optional features, the settings. */
+  system?: () => SystemInfo;
+  /** The settings of the panel Settings, checked and saved in var/config.json. */
+  onSaveSettings?: (settings: unknown) => { ok: true; restart: string[] } | { ok: false; error: string };
   /** A command from a box, or the cancel of one still waiting. */
   onCommand?: (message: Extract<ClientMessage, { type: 'command' | 'cancel' }>) => void;
   /** A search in the earlier sessions of a project. */
@@ -194,7 +205,7 @@ export interface HubOptions {
   onClaudeUpdate?: (action: 'run' | 'dismiss') => void;
   /** Called when the number of windows that can be seen goes from 0 to more, or back. */
   onWatched?: (watched: boolean) => void;
-  log: (message: string) => void;
+  log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
 function sameToken(given: string | null, token: string): boolean {
@@ -248,6 +259,7 @@ export class Hub {
       prompts: this.options.prompts?.(),
       limits: this.limits,
       guardStats: this.guardStats,
+      system: this.options.system?.(),
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -381,7 +393,7 @@ export class Hub {
             (path) => {
               if (path) this.send(ws, { type: 'folderChosen', now: Date.now(), path });
             },
-            (error: unknown) => this.options.log(`scelta della cartella: ${String(error)}`),
+            (error: unknown) => this.options.log(`choice of a folder: ${String(error)}`, 'warn'),
           );
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
@@ -393,7 +405,7 @@ export class Hub {
             (text) => {
               if (text) this.send(ws, { type: 'selection', now: Date.now(), agentId, text });
             },
-            (error: unknown) => this.options.log(`selezione in ${agentId}: ${String(error)}`),
+            (error: unknown) => this.options.log(`selection in ${agentId}: ${String(error)}`, 'warn'),
           );
         } else if (message.type === 'ask' && typeof message.agentId === 'string' && typeof message.text === 'string' && this.options.onAsk) {
           const result = this.options.onAsk(message.agentId, message.text, message.fromSelection === true);
@@ -404,6 +416,13 @@ export class Hub {
             (result) => this.send(ws, { type: 'selectionSent', now: Date.now(), agentId, action: 'insert', ...result }),
             (error: unknown) => this.send(ws, { type: 'selectionSent', now: Date.now(), agentId, action: 'insert', ok: false, error: String(error) }),
           );
+        } else if (message.type === 'system') {
+          const system = this.options.system?.();
+          if (system) this.send(ws, { type: 'system', now: Date.now(), system });
+        } else if (message.type === 'saveSettings' && this.options.onSaveSettings) {
+          const result = this.options.onSaveSettings(message.settings);
+          this.send(ws, { type: 'settingsSaved', now: Date.now(), ...result });
+          if (result.ok) this.systemChanged();
         } else if (message.type === 'savePrompts' && this.options.onSavePrompts) {
           const result = this.options.onSavePrompts(message.prompts);
           this.send(ws, { type: 'promptsSaved', now: Date.now(), ...result });
@@ -418,7 +437,7 @@ export class Hub {
           const agentId = message.agentId;
           void this.options.onFiles(agentId).then(
             (files) => this.send(ws, { type: 'files', now: Date.now(), agentId, files }),
-            (error: unknown) => this.options.log(`modifiche di ${agentId}: ${String(error)}`),
+            (error: unknown) => this.options.log(`changes of ${agentId}: ${String(error)}`, 'warn'),
           );
         } else if (message.type === 'subagent' && typeof message.agentId === 'string' && typeof message.key === 'string' && this.options.onSubagent) {
           const agentId = message.agentId;
@@ -436,7 +455,7 @@ export class Hub {
       this.clients.delete(ws);
       this.updateWatched();
     });
-    ws.on('error', (error) => this.options.log(`websocket: ${String(error)}`));
+    ws.on('error', (error) => this.options.log(`websocket: ${String(error)}`, 'warn'));
   }
 
   private updateWatched(): void {
@@ -511,6 +530,17 @@ export class Hub {
     this.broadcast({ type: 'limits', now: Date.now(), limits });
   }
 
+  /** The installation, as the page gets it. */
+  system(): SystemInfo | undefined {
+    return this.options.system?.();
+  }
+
+  /** The installation changed (a setting, the version of Claude Code, hooks installed): every window gets it. */
+  systemChanged(): void {
+    const system = this.options.system?.();
+    if (system) this.broadcast({ type: 'system', now: Date.now(), system });
+  }
+
   setGuardStats(stats: GuardStatsInfo): void {
     if (JSON.stringify(stats) === JSON.stringify(this.guardStats)) return;
     this.guardStats = stats;
@@ -521,7 +551,7 @@ export class Hub {
     this.broadcast({ type: 'claudeUpdate', now: Date.now(), update });
   }
 
-  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop'; title: string; body: string }): void {
+  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget'; title: string; body: string }): void {
     this.broadcast({ type: 'notify', now: Date.now(), ...notice });
   }
 

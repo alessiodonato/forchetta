@@ -95,6 +95,21 @@ export interface CrewSpec {
    * never to do. In the system prompt of each session, so nothing is written in the folder of the project.
    */
   rules?: string;
+  /**
+   * What the team may cost, in dollars at API prices: past it, you are told (once), and its panel shows it in amber.
+   * Nothing stops: it is a warning, not a limit.
+   */
+  budgetUsd?: number;
+}
+
+/** The largest budget a team takes, in dollars. */
+export const BUDGET_MAX = 100_000;
+
+/** A budget as written: a positive number of dollars, rounded to the cent; undefined for none or a wrong one. */
+export function cleanBudget(value: unknown): number | undefined {
+  const number = typeof value === 'string' ? Number(value.replace(/^\$/, '').trim()) : value;
+  if (typeof number !== 'number' || !Number.isFinite(number) || number <= 0) return undefined;
+  return Math.min(BUDGET_MAX, Math.round(number * 100) / 100);
 }
 
 /**
@@ -156,6 +171,8 @@ export interface Crew extends CrewSpec {
    * hello (its trust dialog answered).
    */
   waitingTrust?: string;
+  /** When you were told that its sessions cost more than its budget: once. */
+  budgetSaidAt?: number;
   /** The verdicts of its members that review, oldest first: the last ones only. */
   reviews?: ReviewRecord[];
 }
@@ -164,6 +181,8 @@ export interface Crew extends CrewSpec {
 export interface CrewSummary {
   id: string;
   name: string;
+  /** What it may cost before you are told (CrewSpec). */
+  budgetUsd?: number;
   /** The name of the lead when it is a Claude session; undefined when the lead is you. */
   lead?: string;
   /**
@@ -391,6 +410,7 @@ export function cleanCrewSpec(input: unknown): { spec: CrewSpec } | { error: str
   const talk: Talk = raw.talk === 'oneway' ? 'oneway' : 'twoway';
   const worktrees = raw.worktrees === true;
   const rules = block(raw.rules, RULES_MAX);
+  const budgetUsd = cleanBudget(raw.budgetUsd);
 
   const taken = new Set<string>();
   const memberName = (value: unknown, what: string): string | { error: string } => {
@@ -441,7 +461,7 @@ export function cleanCrewSpec(input: unknown): { spec: CrewSpec } | { error: str
   }
   const levels = cleanReportsTo(raw.members as unknown[], members, lead);
   if (levels) return levels;
-  return { spec: { name, cwd, lead, talk, ...(worktrees ? { worktrees } : {}), members, ...(rules ? { rules } : {}) } };
+  return { spec: { name, cwd, lead, talk, ...(worktrees ? { worktrees } : {}), members, ...(rules ? { rules } : {}), ...(budgetUsd ? { budgetUsd } : {}) } };
 }
 
 /**
@@ -708,6 +728,8 @@ export interface CrewTemplate {
   layout?: Record<string, [number, number]>;
   /** The rules of the whole team (CrewSpec). */
   rules?: string;
+  /** What the team may cost before you are told (CrewSpec). */
+  budgetUsd?: number;
   /** The notes written on its canvas in the studio, where they stand. */
   notes?: { x: number; y: number; text: string }[];
   /** One of the templates that come with Forchetta: it cannot be deleted. */
@@ -933,4 +955,5 @@ export const templateOf = (spec: CrewSpec, name = spec.name): CrewTemplate => ({
   ...(spec.worktrees ? { worktrees: true } : {}),
   members: spec.members.map(memberOfTemplate),
   ...(spec.rules ? { rules: spec.rules } : {}),
+  ...(spec.budgetUsd ? { budgetUsd: spec.budgetUsd } : {}),
 });

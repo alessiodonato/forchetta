@@ -51,16 +51,16 @@ export class CustomSkills {
     private readonly file: string | undefined,
     private readonly cache: Pick<SkillCache, 'fetchOne' | 'folderOf'>,
     private readonly git: Git = gitRunner(),
-    private readonly log: (message: string) => void = () => {},
+    private readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void = () => {},
     /** Where a repository is asked for its branches: GitHub; a local repository in the tests. */
     private readonly remote: (repo: string) => string = (repo) => `https://github.com/${repo}.git`,
     private readonly home: string = homedir(),
   ) {
     if (!file) return;
-    const raw = readDataJson(file, 'skill aggiunte', log);
+    const raw = readDataJson(file, 'added skills', log);
     const items = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
     setCustomSkills(items.flatMap((item) => clean(item) ?? []));
-    keepRejected(file, items.filter((item) => !clean(item)), 'skill aggiunte', log);
+    keepRejected(file, items.filter((item) => !clean(item)), 'added skills', log);
   }
 
   list(): readonly SkillInfo[] {
@@ -88,7 +88,7 @@ export class CustomSkills {
       if (skillById(skill.id)) return { ok: false, error: `there is a skill called ${skill.id} already` };
       setCustomSkills([...customSkills(), skill]);
       this.write();
-      this.log(`skill aggiunta: ${skill.id} (${skill.local ?? `${skill.repo}@${skill.commit.slice(0, 7)}`})`);
+      this.log(`skill added: ${skill.id} (${skill.local ?? `${skill.repo}@${skill.commit.slice(0, 7)}`})`);
       return { ok: true, skill };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -135,7 +135,7 @@ export class CustomSkills {
     if (usedBy.length > 0) return { ok: false, error: `${id} is used by ${usedBy.join(', ')}: take it away from them first` };
     setCustomSkills(customSkills().filter((skill) => skill.id !== id));
     this.write();
-    this.log(`skill tolta: ${id}`);
+    this.log(`skill removed: ${id}`);
     return { ok: true };
   }
 
@@ -145,7 +145,7 @@ export class CustomSkills {
       ensurePrivateDir(dirname(this.file));
       writeDataJson(this.file, customSkills());
     } catch (error) {
-      this.log(`skill aggiunte non salvate: ${String(error)}`);
+      this.log(`added skills not saved: ${String(error)}`, 'warn');
     }
   }
 }

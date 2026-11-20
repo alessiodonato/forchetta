@@ -57,7 +57,7 @@ export class Attention {
   private readonly timers = new Map<string, { key: string; timer: NodeJS.Timeout }>();
   private readonly notified = new Map<string, string>();
   private readonly delayMs: number;
-  private readonly stallMs: number;
+  private stallMs: number;
   private readonly now: () => number;
 
   constructor(private readonly options: AttentionOptions) {
@@ -115,6 +115,11 @@ export class Attention {
     }, Math.max(0, this.dueAt(agent, kind) - this.now()));
     timer.unref();
     this.timers.set(slot, { key, timer });
+  }
+
+  /** A new time after which a session at work seems stuck (Settings): for the timers set from now on. */
+  setStallMs(ms: number): void {
+    this.stallMs = ms;
   }
 
   forget(ids: readonly string[]): void {

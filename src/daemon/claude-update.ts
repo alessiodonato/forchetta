@@ -100,7 +100,7 @@ export interface ClaudeUpdatesOptions {
   handledFile: string;
   claude: () => string | undefined;
   onChange: (info: ClaudeUpdateInfo) => void;
-  log: (message: string) => void;
+  log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   timeoutMs?: number;
 }
 
@@ -166,12 +166,12 @@ export class ClaudeUpdates {
     }
     this.result = { state: 'running', at: Date.now() };
     this.changed(before);
-    this.options.log(`claude update avviato dall'app (${bin})`);
+    this.options.log(`claude update started from the app (${bin})`);
     const versionBefore = versionIn((await run(bin, ['--version'], VERSION_TIMEOUT_MS)).output);
     const result = await run(bin, ['update'], this.options.timeoutMs ?? UPDATE_TIMEOUT_MS);
     const versionAfter = versionIn((await run(bin, ['--version'], VERSION_TIMEOUT_MS)).output);
     const outcome = updateOutcome(result, versionBefore, versionAfter);
-    this.options.log(`claude update: ${outcome.ok ? 'riuscito' : 'non riuscito'} (${versionBefore ?? '?'} → ${versionAfter ?? '?'}): ${lastLines(result.output, 4) || 'nessun output'}`);
+    this.options.log(`claude update: ${outcome.ok ? 'done' : 'failed'} (${versionBefore ?? '?'} → ${versionAfter ?? '?'}): ${lastLines(result.output, 4) || 'no output'}`, outcome.ok ? 'info' : 'warn');
     const running = JSON.stringify(this.info());
     if (outcome.ok && this.last?.outcome === 'failed') this.remember(this.last.at);
     this.result = { state: outcome.ok ? 'done' : 'error', text: outcome.text, at: Date.now() };
@@ -187,7 +187,7 @@ export class ClaudeUpdates {
       writeFileSync(temporary, `${JSON.stringify({ handled: at })}\n`, { mode: 0o600 });
       renameSync(temporary, this.options.handledFile);
     } catch (error) {
-      this.options.log(`aggiornamento di Claude Code: stato non salvato: ${String(error)}`);
+      this.options.log(`update of Claude Code: state not saved: ${String(error)}`, 'warn');
     }
   }
 }

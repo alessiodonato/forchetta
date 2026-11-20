@@ -2,7 +2,9 @@ import { type SpawnOptions, spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { which } from '../shared/config.ts';
+import { loadConfig, resolveTool, which } from '../shared/config.ts';
+import { api, ensureDaemon, runningDaemon } from '../shared/daemon-client.ts';
+import { installLaunchAgent, launchAgentFile } from '../daemon/launch-agent.ts';
 import { UserError } from '../shared/errors.ts';
 import { ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
 import { VERSION } from '../shared/version.ts';
@@ -24,6 +26,8 @@ export interface SetupOptions {
   diff: boolean;
   /** Build the app even when the installed one is up to date. */
   force: boolean;
+  /** Start a daemon of another version again on this one (default). */
+  restart?: boolean;
   /** Where the app goes: ~/Applications unless told otherwise. */
   appDir: string;
 }
@@ -93,6 +97,40 @@ async function buildApp(target: string): Promise<void> {
 
 const running = (app: string): boolean => spawnSync('/usr/bin/pgrep', ['-f', join(app, 'Contents', 'MacOS', 'Forchetta')], { stdio: 'ignore' }).status === 0;
 
+/** A daemon of another version, or kept alive by macOS with old paths, starts again on this one. */
+async function restartOldDaemon(io: RunIO): Promise<void> {
+  const s = io.style;
+  const keepalive = existsSync(launchAgentFile());
+  const info = await runningDaemon();
+  let version: string | undefined;
+  if (info) {
+    try {
+      version = (await api<{ version: string }>(info, 'GET', '/api/health')).version;
+    } catch {
+      version = undefined;
+    }
+  }
+  if (!keepalive && (!info || version === VERSION)) return;
+  if (keepalive) {
+    // Written again with the paths of this version: macOS stops the old daemon and starts the new one.
+    if (info && version !== VERSION) {
+      await api(info, 'POST', '/api/shutdown').catch(() => undefined);
+      for (let attempt = 0; attempt < 30 && (await runningDaemon()); attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const installed = installLaunchAgent(resolveTool('node', loadConfig()));
+    io.stdout(installed.ok ? `${s.mark('✓', 'green', `Daemon kept alive by macOS, on ${VERSION}`)}\n` : `${s.mark('▲', 'amber', `The LaunchAgent was not loaded again: ${installed.error}`)}\n`);
+    return;
+  }
+  await api(info!, 'POST', '/api/shutdown').catch(() => undefined);
+  for (let attempt = 0; attempt < 30 && (await runningDaemon()); attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
+  const started = await ensureDaemon(resolveTool('node', loadConfig()));
+  io.stdout(
+    started
+      ? `${s.mark('✓', 'green', `Daemon started again on ${VERSION}`)} ${s.dim(`(it was ${version ?? 'older'}; the sessions go on)`)}\n`
+      : `${s.mark('▲', 'amber', 'The old daemon stopped; open the app to start the new one')}\n`,
+  );
+}
+
 export async function setupCommand(options: SetupOptions, io: RunIO): Promise<number> {
   const s = io.style;
   if (process.platform !== 'darwin') throw new UserError('Forchetta works only on macOS');
@@ -132,6 +170,8 @@ export async function setupCommand(options: SetupOptions, io: RunIO): Promise<nu
 
   const status = await hooksCommand('install', { yes: options.yes, diff: options.diff }, io);
   if (status !== 0) return status;
+  // After an upgrade the daemon that runs is the old one: it starts again on this version (the sessions go on).
+  if (options.restart !== false) await restartOldDaemon(io);
   io.stdout(
     `\n${s.mark('✓', 'green', s.bold('Ready.'))} Open the app with:\n\n    ${s.claude(`open ${JSON.stringify(app)}`)}\n\n` +
       `${code('Sessions started with `forchetta run claude`, or from the app, also open in its terminals.', s)}\n`,

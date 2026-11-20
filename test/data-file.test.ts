@@ -40,7 +40,7 @@ describe('a data file', () => {
     expect(readDataJson(file, 'modelli', (line) => logs.push(line), NOW)).toEqual(['good']);
     expect(readFileSync(`${file}.corrupt-2026-11-20T10-31-02`, 'utf8')).toBe('{ broken');
     expect(existsSync(file)).toBe(false);
-    expect(logs).toEqual([expect.stringContaining('messo da parte come templates.json.corrupt-2026-11-20T10-31-02'), 'modelli: ripresa la versione precedente (templates.json.bak)']);
+    expect(logs).toEqual([expect.stringContaining('set aside as templates.json.corrupt-2026-11-20T10-31-02'), 'modelli: the version before is back (templates.json.bak)']);
     // None at all: nothing.
     expect(readDataJson(join(folder(), 'none.json'), 'x', () => {})).toBeUndefined();
   });
@@ -82,7 +82,7 @@ describe('the version of the data', () => {
     expect(migrateData(dir, () => {})).toEqual({ ok: true });
     expect(readFileSync(join(dir, 'data-version'), 'utf8')).toBe('1\n');
     writeFileSync(join(dir, 'data-version'), '7\n');
-    expect(migrateData(dir, () => {})).toMatchObject({ ok: false, error: expect.stringContaining('più nuova di Forchetta') });
+    expect(migrateData(dir, () => {})).toMatchObject({ ok: false, error: expect.stringContaining('of a newer Forchetta') });
   });
 
   it('takes older data through each step', () => {

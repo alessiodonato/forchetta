@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type Agent, displayName, type FileChange, type SessionEdit } from '../shared/agent.ts';
 import { agoShort } from '../shared/present.ts';
+import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
 
 // The changes of a session: the files it wrote, and for each two views. "Di questa sessione": what the session
@@ -120,6 +121,8 @@ export function FilesPanel({ store, now }: { store: Store; now: number }) {
   const [selected, setSelected] = useState(0);
   const [view, setView] = useState<'session' | 'git'>('session');
   useEffect(() => setSelected(0), [files?.agentId]);
+  const dialog = useRef<HTMLElement>(null);
+  useReturnFocus(dialog, files !== undefined);
   useEffect(() => {
     if (!files) return;
     const onKey = (event: KeyboardEvent): void => {
@@ -133,16 +136,16 @@ export function FilesPanel({ store, now }: { store: Store; now: number }) {
   const current = list[Math.min(selected, list.length - 1)];
   return (
     <div class="files-backdrop" onClick={() => store.closeFiles()}>
-      <section class="files" aria-label="Changes of the session" onClick={(event) => event.stopPropagation()}>
+      <section ref={dialog} class="files" role="dialog" aria-modal="true" aria-label="Changes of the session" onClick={(event) => event.stopPropagation()}>
         <header class="files-head">
           <span class="files-title">
             Changes by <strong>{agent ? displayName(agent) : '?'}</strong>
           </span>
           <span class="view-switch" role="group" aria-label="View">
-            <button type="button" class={view === 'session' ? 'on' : undefined} onClick={() => setView('session')}>
+            <button type="button" class={view === 'session' ? 'on' : undefined} aria-pressed={view === 'session'} onClick={() => setView('session')}>
               by this session
             </button>
-            <button type="button" class={view === 'git' ? 'on' : undefined} onClick={() => setView('git')}>
+            <button type="button" class={view === 'git' ? 'on' : undefined} aria-pressed={view === 'git'} onClick={() => setView('git')}>
               since the last commit
             </button>
           </span>
@@ -150,7 +153,7 @@ export function FilesPanel({ store, now }: { store: Store; now: number }) {
           <button type="button" class="quiet" onClick={() => store.showFiles(files.agentId)} disabled={files.list === undefined}>
             refresh
           </button>
-          <button type="button" class="files-close" title="Close (Esc)" onClick={() => store.closeFiles()}>
+          <button type="button" class="files-close" title="Close (Esc)" aria-label="Close" onClick={() => store.closeFiles()}>
             ✕
           </button>
         </header>
@@ -163,7 +166,7 @@ export function FilesPanel({ store, now }: { store: Store; now: number }) {
             <ul class="files-list">
               {list.map((file, index) => (
                 <li key={file.path}>
-                  <button type="button" class={index === selected ? 'on' : undefined} title={file.path} onClick={() => setSelected(index)}>
+                  <button type="button" class={index === selected ? 'on' : undefined} title={file.path} aria-current={index === selected ? 'true' : undefined} onClick={() => setSelected(index)}>
                     <span class="files-name">{tailOf(file.name)}</span>
                     <span class="files-count">{countText(file, view)}</span>
                     <span class="files-when">{agoShort(now - file.at)}</span>

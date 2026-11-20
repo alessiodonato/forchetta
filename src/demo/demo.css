@@ -30,7 +30,26 @@ body {
 
 /* ---- The tour ---- */
 
+/* The tour stays dark on the light theme of the app (src/ui/theme.ts): its colors are those of the dark one. */
 .tour {
+  color-scheme: dark;
+  --bg: #1f1e1c;
+  --surface: #292825;
+  --surface-2: #33312d;
+  --surface-waiting: #352b1c;
+  --terminal: #262624;
+  --line: #3a3834;
+  --line-strong: #4c4944;
+  --text: #f3f1ec;
+  --text-2: #bdb8ae;
+  --text-3: #a39e94;
+  --accent: #f0a43c;
+  --claude: #d97757;
+  --claude-strong: #c96442;
+  --claude-soft: rgba(217, 119, 87, 0.16);
+  --green: #46c48a;
+  --red: #ef5b5b;
+  --tint: 232, 233, 235;
   display: flex;
   flex-direction: column;
   gap: 14px;

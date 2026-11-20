@@ -22,7 +22,8 @@ export const gitRunner =
   (git = 'git', timeoutMs = 90_000): Git =>
   (args, cwd) =>
     new Promise((resolve) => {
-      execFile(git, args, { cwd, timeout: timeoutMs, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+      // core.fsmonitor=false: the configuration of a repository cannot make git run a program of its own.
+      execFile(git, ['-c', 'core.fsmonitor=false', ...args], { cwd, timeout: timeoutMs, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
         resolve(error ? { ok: false, error: (stderr || error.message).trim().split('\n').at(-1) ?? 'git failed' } : { ok: true, out: stdout });
       });
     });
@@ -55,7 +56,7 @@ export class SkillCache {
   constructor(
     private readonly dir: string,
     private readonly git: Git = gitRunner(),
-    private readonly log: (message: string) => void = () => {},
+    private readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void = () => {},
     /** Where a repository is fetched from: GitHub; a local repository in the tests. */
     private readonly remote: (repo: string) => string = (repo) => `https://github.com/${repo}.git`,
     /** The skills it knows: the catalog; another one in the tests. */
@@ -120,7 +121,7 @@ export class SkillCache {
       if (!result.ok) throw new Error(`git ${args[0]}: ${result.error}`);
     };
     try {
-      this.log(`skill: scarico ${skills.map((skill) => skill.id).join(', ')} da ${repo}@${commit.slice(0, 7)}`);
+      this.log(`skills: fetching ${skills.map((skill) => skill.id).join(', ')} from ${repo}@${commit.slice(0, 7)}`);
       await run(['init', '-q']);
       await run(['remote', 'add', 'origin', this.remote(repo)]);
       await run(['sparse-checkout', 'set', '--no-cone', ...skills.map((skill) => `/${skill.path}/`)]);

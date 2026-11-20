@@ -2,11 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { type Agent, STATE_LABEL } from '../shared/agent.ts';
 import { crewUsage, shortTokens, tokensTotal, usdText } from '../shared/present.ts';
 import { type LinkKind, linkStates } from './org-lines.ts';
-import { CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, NOTE_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, RULES_MAX, type Talk } from '../shared/crew.ts';
+import { cleanBudget, CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, NOTE_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, RULES_MAX, type Talk } from '../shared/crew.ts';
 import { allSkills, SKILL_GROUPS, type SkillInfo, SKILLS_PER_AGENT_MAX, skillById, skillUrl } from '../shared/skills.ts';
 import { openLink } from './Artifacts.tsx';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { TALK_TEXT } from './NewTeam.tsx';
+import { useReturnFocus } from './focus.ts';
 import { canOpen, type Store } from './store.ts';
 import {
   addNode,
@@ -567,6 +568,7 @@ function RelationForm({
                 key={value}
                 type="button"
                 class={talk === value ? 'on' : undefined}
+                aria-pressed={talk === value}
                 onClick={() => {
                   onChange(updateLink(doc, to, { talk: value }));
                   onTalk?.(value);
@@ -831,6 +833,7 @@ export function Studio({
   };
   const [menu, setMenu] = useState<{ x: number; y: number; items: { label: string; keys?: string; run: () => void }[] } | undefined>(undefined);
   const section = useRef<HTMLElement>(null);
+  useReturnFocus(section, true, true);
   // The view follows the scroll, for the minimap.
   const [, setScrolled] = useState(0);
   const [note, setNote] = useState<{ text: string; error?: boolean } | undefined>(undefined);
@@ -1914,7 +1917,7 @@ export function Studio({
             {!maker && recent.length > 0 && (
               <div class="studio-chips">
                 {recent.map((path) => (
-                  <button key={path} type="button" class={`chip${path === doc.folder ? ' on' : ''}`} title={path} onClick={() => setDoc({ ...doc, folder: path })}>
+                  <button key={path} type="button" class={`chip${path === doc.folder ? ' on' : ''}`} title={path} aria-pressed={path === doc.folder} onClick={() => setDoc({ ...doc, folder: path })}>
                     {lastPart(path)}
                   </button>
                 ))}
@@ -1929,11 +1932,13 @@ export function Studio({
               onInput={(rules) => setDoc({ ...doc, rules })}
             />
             <p class="studio-hint">Every session of the team gets them with its role. Nothing is written in the folder of the project.</p>
+            <Text label="Budget, in dollars" value={doc.budget ?? ''} max={12} placeholder="none: for example 20" mono onInput={(budget) => setDoc({ ...doc, budget })} />
+            <p class="studio-hint">{doc.budget?.trim() && !cleanBudget(doc.budget) ? 'A number of dollars, like 20 or 12.50.' : 'When its sessions cost more, you are told once. Nothing stops: a warning, not a limit.'}</p>
             <label class="studio-field">
               <span>An arrow, by default</span>
               <span class="view-switch" role="group" aria-label="How an agent talks with the one above it, by default">
                 {(['twoway', 'oneway'] as const).map((value: Talk) => (
-                  <button key={value} type="button" class={doc.talk === value ? 'on' : undefined} onClick={() => setDoc({ ...doc, talk: value })}>
+                  <button key={value} type="button" class={doc.talk === value ? 'on' : undefined} aria-pressed={doc.talk === value} onClick={() => setDoc({ ...doc, talk: value })}>
                     {TALK_TEXT[value]}
                   </button>
                 ))}

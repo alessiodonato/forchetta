@@ -98,7 +98,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.9.13. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.10.0. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -118,6 +118,10 @@ The second session is stopped, says it will wait for `src/api.ts`, and goes on w
 - **New sessions and teams from the app**, with model, permission mode and worktree. [More](https://forchetta.dev/manual.html#new-session)
 - **Names, groups and roles**, with an org chart. [More](https://forchetta.dev/manual.html#window)
 - **Menu bar icon**, Dock badge and the shortcut ⌃⌥F. [More](https://forchetta.dev/manual.html#alerts)
+- **Teams in the repository**: `.forchetta/` holds team files, rules for every team and the guard settings of the repo, reviewed with the code; `forchetta team start review-squad --goal "…"` starts one from a terminal or a script, and a budget per team warns you when it costs more. [More](https://forchetta.dev/manual.html#repo-teams)
+- **Reports**: every turn, cost, file, step of the guard, request and review goes in a local ledger; `forchetta report --since 7d --by team` reads it as a table, CSV or JSON. [More](https://forchetta.dev/manual.html#report)
+- **Settings, ⌘K and shortcuts**: the settings in the app, a palette for every command and session, a light theme, boxes you open from the keyboard. [More](https://forchetta.dev/manual.html#settings)
+- **`forchetta doctor`** says what is not in place and how to fix it; `--bundle` writes a file for an issue, with your names taken out. [More](https://forchetta.dev/manual.html#cli)
 - **`forchetta ls --json`**, for scripts. [More](https://forchetta.dev/manual.html#cli)
 
 Everything is in the [manual](https://forchetta.dev/manual.html).
@@ -125,8 +129,9 @@ Everything is in the [manual](https://forchetta.dev/manual.html).
 ## What it touches on your Mac
 
 - **`~/.claude/settings.json`**, only with `forchetta setup` or `forchetta hooks install`, after showing you every change, and with a backup. The hooks of Forchetta go next to yours without changing them; `forchetta hooks uninstall` removes only them.
-- **The hooks are small `sh` + `curl` scripts.** They always exit with 0, and print only a decision: your answer to a permission, or the guard stopping an edit. With Forchetta off, a session behaves exactly as without it. Most run in the background; the guard makes Claude wait about 30 ms, only before edits and Bash commands. [How the hooks work](https://forchetta.dev/manual.html#hooks)
+- **The hooks are small `sh` + `curl` scripts.** They always exit with 0, and print only a decision: your answer to a permission, or the guard stopping an edit. With Forchetta off, a session behaves exactly as without it (its status line says Forchetta is off). Most run in the background; the guard makes Claude wait about 30 ms, only before edits and Bash commands. [How the hooks work](https://forchetta.dev/manual.html#hooks)
 - **Everything else** stays in `~/Library/Application Support/Forchetta`, readable only by you. The daemon listens on `127.0.0.1` only, with a token. No telemetry. The one outside call that carries anything of yours is optional and off by default: a one-line summary of a session by Haiku, through the Claude API. When a team whose agents have skills starts, Forchetta fetches those skills from GitHub at a pinned commit, into that folder.
+- **`~/Library/LaunchAgents/dev.forchetta.daemon.plist`**, only if you run `forchetta daemon keepalive on`, so that macOS keeps the daemon alive.
 - At rest, the app, the page and the daemon together stay under 1% of CPU.
 
 ## Works with arricurdAI

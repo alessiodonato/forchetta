@@ -3,6 +3,7 @@ import { type CrewSummary, type DeliveryStatus, MEMBER_NAME_MAX, PATH_MAX, PATHS
 import type { Agent } from '../shared/agent.ts';
 import { crewUsage, shortTokens, tokensDetail, tokensTotal, usdText } from '../shared/present.ts';
 import { MODELS } from './NewSession.tsx';
+import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
 
 // The panel of a team of agents, as a conversation: above, the thread of the team in the order things happened
@@ -221,6 +222,8 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
                 ? `It answers ${member.reportsTo ?? 'its lead'}. Click: from its next request it only executes.`
                 : 'It only executes. Click: from its next request it also answers.'
             }
+            aria-label={`${member.name} answers ${member.reportsTo ?? 'its lead'}`}
+            aria-pressed={member.talk === 'twoway'}
             onClick={() => store.editCrew(crew.id, { action: 'talk', name: member.name, talk: member.talk === 'twoway' ? 'oneway' : 'twoway' })}
           >
             {member.talk === 'twoway' ? '⇄ answers' : '→ executes'}
@@ -244,7 +247,14 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
               </button>
             </>
           ) : (
-            <button type="button" class="quiet" disabled={busy || members.length === 1} title={members.length === 1 ? 'A team needs at least one member' : 'Take it out of the team'} onClick={() => setRemoving(member.name)}>
+            <button
+              type="button"
+              class="quiet"
+              disabled={busy || members.length === 1}
+              title={members.length === 1 ? 'A team needs at least one member' : 'Take it out of the team'}
+              aria-label={`Remove ${member.name} from the team`}
+              onClick={() => setRemoving(member.name)}
+            >
               remove
             </button>
           )}
@@ -252,9 +262,26 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
       ))}
       <div class="broadcast-row">
         <span class="broadcast-label">Add</span>
-        <input class="command-input member-name" type="text" value={name} maxLength={MEMBER_NAME_MAX} placeholder="name" spellcheck={false} onInput={(event) => setName((event.target as HTMLInputElement).value)} />
-        <input class="command-input member-role" type="text" value={role} maxLength={ROLE_MAX} placeholder="What it does, in a sentence" onInput={(event) => setRole((event.target as HTMLInputElement).value)} />
-        <button type="button" class="talk-toggle chosen" onClick={() => setTalk(talk === 'twoway' ? 'oneway' : 'twoway')}>
+        <input
+          class="command-input member-name"
+          type="text"
+          value={name}
+          maxLength={MEMBER_NAME_MAX}
+          placeholder="name"
+          spellcheck={false}
+          aria-label="Name of the new member"
+          onInput={(event) => setName((event.target as HTMLInputElement).value)}
+        />
+        <input
+          class="command-input member-role"
+          type="text"
+          value={role}
+          maxLength={ROLE_MAX}
+          placeholder="What it does, in a sentence"
+          aria-label="Role of the new member"
+          onInput={(event) => setRole((event.target as HTMLInputElement).value)}
+        />
+        <button type="button" class="talk-toggle chosen" aria-label="The new member answers the one it reports to" aria-pressed={talk === 'twoway'} onClick={() => setTalk(talk === 'twoway' ? 'oneway' : 'twoway')}>
           {talk === 'twoway' ? '⇄ answers' : '→ executes'}
         </button>
         {leaders.length > 0 && (
@@ -364,6 +391,8 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
   const [editing, setEditing] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  useReturnFocus(panel);
   const list = useRef<HTMLOListElement>(null);
   /** Whether the thread shows its end: new steps scroll it only then, not while you read above. */
   const atEnd = useRef(true);
@@ -403,6 +432,7 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
 
   return (
     <section
+      ref={panel}
       class="broadcast team-panel"
       aria-label={`Team ${crew.name}`}
       onKeyDown={(event) => {
@@ -417,6 +447,7 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
             key={candidate.id}
             type="button"
             class={`chip${candidate.id === crew.id ? ' on' : ''}`}
+            aria-pressed={candidate.id === crew.id}
             onClick={() => {
               setCrewId(candidate.id);
               setTo([]);
@@ -429,10 +460,17 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
           + new team
         </button>
         <span class="team-hint thread-count">{thread ? `${thread.length} ${thread.length === 1 ? 'request' : 'requests'}` : ''}</span>
-        {used && (used.usd > 0 || usedTokens > 0) && (
-          <button type="button" class={`quiet${usageOpen ? ' on' : ''}`} title="What the team used, agent by agent" onClick={() => setUsageOpen(!usageOpen)}>
-            {used.usd > 0 ? `${used.usd >= 0.01 ? '≈ ' : ''}${usdText(used.usd)}` : ''}
-            {usedTokens > 0 ? `${used.usd > 0 ? ' · ' : ''}${shortTokens(usedTokens)} tok` : ''}
+        {((used && (used.usd > 0 || usedTokens > 0)) || crew.budgetUsd) && (
+          <button
+            type="button"
+            class={`quiet${usageOpen ? ' on' : ''}${crew.budgetUsd && (used?.usd ?? 0) >= crew.budgetUsd ? ' over-budget' : ''}`}
+            title={`What the team used, agent by agent${crew.budgetUsd ? `; its budget is ${usdText(crew.budgetUsd)} (a warning, not a limit)` : ''}`}
+            aria-expanded={usageOpen}
+            onClick={() => setUsageOpen(!usageOpen)}
+          >
+            {used && used.usd > 0 ? `${used.usd >= 0.01 ? '≈ ' : ''}${usdText(used.usd)}` : crew.budgetUsd ? '$0' : ''}
+            {crew.budgetUsd ? ` of ${usdText(crew.budgetUsd)}` : ''}
+            {used && usedTokens > 0 ? `${used.usd > 0 || crew.budgetUsd ? ' · ' : ''}${shortTokens(usedTokens)} tok` : ''}
           </button>
         )}
         {onStudio && (
@@ -440,7 +478,7 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
             studio
           </button>
         )}
-        <button type="button" class={`quiet${editing ? ' on' : ''}`} title="Members, → / ⇄, template" onClick={() => setEditing(!editing)}>
+        <button type="button" class={`quiet${editing ? ' on' : ''}`} title="Members, → / ⇄, template" aria-expanded={editing} onClick={() => setEditing(!editing)}>
           edit team
         </button>
       </div>
@@ -462,9 +500,11 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
           ))}
         </ol>
       )}
-      <div class="broadcast-row">
-        <span class="broadcast-label">To</span>
-        <button type="button" class={`chip${to.length === 0 ? ' on' : ''}`} title="Every member of the team (not the lead)" onClick={() => setTo([])}>
+      <div class="broadcast-row" role="group" aria-labelledby="team-request-to">
+        <span class="broadcast-label" id="team-request-to">
+          To
+        </span>
+        <button type="button" class={`chip${to.length === 0 ? ' on' : ''}`} title="Every member of the team (not the lead)" aria-pressed={to.length === 0} onClick={() => setTo([])}>
           all members
         </button>
         {recipients.map((recipient) => (
@@ -472,6 +512,7 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
             key={recipient.name}
             type="button"
             class={`chip${to.includes(recipient.name) ? ' on' : ''}`}
+            aria-pressed={to.includes(recipient.name)}
             disabled={!recipient.agentId}
             title={
               recipient.lead
@@ -485,9 +526,12 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
         ))}
       </div>
       <div class="broadcast-row top">
-        <span class="broadcast-label">Request</span>
+        <label class="broadcast-label" for="team-request-text">
+          Request
+        </label>
         <textarea
           ref={field}
+          id="team-request-text"
           class="command-input prompt-input"
           rows={2}
           value={text}

@@ -10,7 +10,7 @@ const text = (value: unknown): string | undefined => (typeof value === 'string' 
 
 export function parseAgents(stdout: string): AgentsEntry[] {
   const data: unknown = JSON.parse(stdout);
-  if (!Array.isArray(data)) throw new Error('claude agents --json: non è una lista');
+  if (!Array.isArray(data)) throw new Error('claude agents --json: not a list');
   return data
     .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object')
     .map((item) => ({

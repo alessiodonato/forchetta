@@ -30,7 +30,24 @@ printf '%s' "$input" | /usr/bin/curl --silent --max-time 1 --output /dev/null "$
   --header "X-Forchetta-Claude-Pid: ${CLAUDE_PID:-}" \
   --header "X-Forchetta-Agent: ${FORCHETTA_AGENT:-}" \
   --data-binary @- "$base/forchetta/status" >/dev/null 2>&1 &
+# With the daemon off (no live pid in daemon.json) the status line says so, under yours: the box of this session
+# does not follow it until the daemon is back. Only where Forchetta has run (data-version).
+off=
+if [ -e "$data/data-version" ]; then
+  pid=$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$data/daemon.json" 2>/dev/null)
+  if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then off=1; fi
+fi
 saved="$data/statusline-command"
-if [ -s "$saved" ]; then
-  printf '%s' "$input" | /bin/sh -c "$(cat "$saved")"
+if [ -z "$off" ]; then
+  # Your status line, as it prints it.
+  if [ -s "$saved" ]; then
+    printf '%s' "$input" | /bin/sh -c "$(cat "$saved")"
+  fi
+else
+  line=
+  if [ -s "$saved" ]; then
+    line=$(printf '%s' "$input" | /bin/sh -c "$(cat "$saved")")
+  fi
+  mark=$(printf '\033[2m◌ Forchetta is off · forchetta daemon start\033[22m')
+  if [ -n "$line" ]; then printf '%s\n%s\n' "$line" "$mark"; else printf '%s\n' "$mark"; fi
 fi

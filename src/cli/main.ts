@@ -10,6 +10,11 @@ import { type RunIO, runClaude } from './run.ts';
 import { defaultAppDir, setupCommand } from './setup.ts';
 import { parseDays, statsCommand } from './stats.ts';
 import { pairs, styleFor, tildify } from './style.ts';
+import { teamCommand } from './team.ts';
+import { reportCommand } from './report.ts';
+import { doctorCommand } from './doctor.ts';
+import { installLaunchAgent, launchAgentFile, removeLaunchAgent } from '../daemon/launch-agent.ts';
+import { existsSync } from 'node:fs';
 
 const io: RunIO = {
   stdout: (text) => process.stdout.write(text),
@@ -29,7 +34,7 @@ function checkOptions(command: string, args: readonly string[], known: readonly 
   }
 }
 
-async function daemonCommand(action: string | undefined): Promise<number> {
+async function daemonCommand(action: string | undefined, rest: readonly string[] = []): Promise<number> {
   const s = io.style;
   switch (action) {
     case 'start': {
@@ -64,6 +69,7 @@ async function daemonCommand(action: string | undefined): Promise<number> {
         ['uptime', ago(Date.now() - health.startedAt)],
         ['sessions', String(health.agents)],
       ];
+      rows.push(['keepalive', existsSync(launchAgentFile()) ? 'on: macOS starts it at login and again if it stops by mistake' : 'off']);
       io.stdout(`${s.mark('●', 'green', s.bold('Daemon running'))}\n${pairs(rows, s)}\n`);
       if (health.version !== VERSION) {
         io.stdout(
@@ -72,10 +78,33 @@ async function daemonCommand(action: string | undefined): Promise<number> {
       }
       return 0;
     }
+    case 'keepalive': {
+      const wanted = rest[0];
+      if (wanted !== 'on' && wanted !== 'off') throw new UserError('keepalive is on or off', 'for example `forchetta daemon keepalive on`');
+      if (wanted === 'off') {
+        const removed = removeLaunchAgent();
+        if (!removed.ok) throw new UserError(removed.error);
+        io.stdout(`${s.mark('✓', 'green', removed.was ? 'macOS no longer keeps the daemon alive.' : 'It was off.')} ${s.dim('The app and the CLI start it when they need it.')}\n`);
+        if (removed.was) await ensureDaemon(resolveTool('node', loadConfig()));
+        return 0;
+      }
+      // The daemon that runs now is stopped first: the one of macOS takes its place at once.
+      const info = await runningDaemon();
+      if (info) {
+        await api(info, 'POST', '/api/shutdown');
+        for (let attempt = 0; attempt < 30 && (await runningDaemon()); attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      const installed = installLaunchAgent(resolveTool('node', loadConfig()));
+      if (!installed.ok) throw new UserError(installed.error, `see ${tildify(launchAgentFile())}`);
+      let started: Awaited<ReturnType<typeof runningDaemon>>;
+      for (let attempt = 0; attempt < 50 && !(started = await runningDaemon()); attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
+      io.stdout(`${s.mark('✓', 'green', `macOS keeps the daemon alive: it starts it at login and again if it stops by mistake${started ? ` ${s.dim(`(pid ${started.pid})`)}` : ''}.`)}\n  ${code('`forchetta daemon stop` still stops it; `forchetta daemon keepalive off` undoes this.', s)}\n`);
+      return 0;
+    }
     case undefined:
-      throw new UserError('daemon needs an action: start, stop or status', 'see `forchetta daemon --help`');
+      throw new UserError('daemon needs an action: start, stop, status or keepalive', 'see `forchetta daemon --help`');
     default: {
-      const near = closest(action, ['start', 'stop', 'status']);
+      const near = closest(action, ['start', 'stop', 'status', 'keepalive']);
       throw new UserError(`unknown action "${action}" for daemon`, near ? `did you mean \`forchetta daemon ${near}\`?` : 'see `forchetta daemon --help`');
     }
   }
@@ -99,7 +128,9 @@ async function main(argv: string[]): Promise<number> {
       checkOptions('ls', rest, ['--json']);
       return listSessions(io, { json: rest.includes('--json') });
     case 'daemon':
-      return daemonCommand(rest[0]);
+      return daemonCommand(rest[0], rest.slice(1));
+    case 'doctor':
+      return doctorCommand(rest, io);
     case 'stats': {
       const args = rest.flatMap((arg) => (arg.startsWith('--days=') ? ['--days', arg.slice('--days='.length)] : [arg]));
       const at = args.indexOf('--days');
@@ -118,10 +149,14 @@ async function main(argv: string[]): Promise<number> {
       checkOptions(
         'setup',
         args.filter((_, index) => at < 0 || index !== at + 1),
-        ['--yes', '--force', '--diff', '--app-dir'],
+        ['--yes', '--force', '--diff', '--app-dir', '--no-restart'],
       );
-      return setupCommand({ yes: args.includes('--yes'), force: args.includes('--force'), diff: args.includes('--diff'), appDir }, io);
+      return setupCommand({ yes: args.includes('--yes'), force: args.includes('--force'), diff: args.includes('--diff'), appDir, restart: !args.includes('--no-restart') }, io);
     }
+    case 'team':
+      return teamCommand(rest, io);
+    case 'report':
+      return reportCommand(rest, io);
     case 'hooks': {
       const action = rest[0];
       if (action !== 'install' && action !== 'uninstall') {

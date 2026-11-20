@@ -63,7 +63,7 @@ export interface SpawnOptions {
   claude: string | undefined;
   env?: NodeJS.ProcessEnv;
   shell?: string;
-  log: (message: string) => void;
+  log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** The MCP server of Forchetta: the tools of a team for its sessions, the tools of templates for the others. */
   teamMcp?: TeamMcpServer;
 }
@@ -161,7 +161,7 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   const created = await tmux.run('new-session', ['-d', '-s', session, '-c', cwd, '-x', '200', '-y', '50', '--', '/bin/sh', paths.execScript, envFile, '--', ...command]);
   if (created.code !== 0) {
     rmSync(envFile, { force: true });
-    log(`nuova sessione in ${cwd} non avviata: ${created.stderr.trim()}`);
+    log(`new session in ${cwd} not started: ${created.stderr.trim()}`, 'warn');
     return { ok: false, error: `tmux did not create the session: ${created.stderr.trim() || `code ${created.code}`}` };
   }
   // claude can end at once, with code 0, and its pane with it: its message would be lost. Watch the pane until the
@@ -171,7 +171,7 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   for (let waited = 0; waited < watchMs; waited += 200) {
     if (registry.agents.get(id)?.sessionId) break;
     if ((await tmux.run('has-session', ['-t', session])).code !== 0) {
-      log(`nuova sessione in ${cwd}: claude è uscito subito`);
+      log(`new session in ${cwd}: claude exited at once`, 'warn');
       const agent = registry.agents.get(id);
       if (agent && agent.state !== 'ended') {
         markEnded(agent, 'exited at start', Date.now());
@@ -186,6 +186,6 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  log(`nuova sessione dall'app: ${basename(cwd)} (${session})${chosen.args.length ? ` ${chosen.args.join(' ')}` : ''}${prompt ? ', con un primo prompt' : ''}`);
+  log(`new session from the app: ${basename(cwd)} (${session})${chosen.args.length ? ` ${chosen.args.join(' ')}` : ''}${prompt ? ', with a first prompt' : ''}`);
   return { ok: true, agentId: id };
 }

@@ -67,9 +67,9 @@ export const DEFAULT_CONFIG: Config = {
 
 const positive = (value: unknown, fallback: number): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback);
 
-export function loadConfig(file = paths.config, log: (message: string) => void = () => {}): Config {
+export function loadConfig(file = paths.config, log: (message: string, level?: 'info' | 'warn' | 'error') => void = () => {}): Config {
   // A broken file is set aside (config.json.corrupt-<time>), never written over: the version before, or the defaults.
-  const read = readDataJson(file, 'configurazione', log);
+  const read = readDataJson(file, 'configuration', log);
   const raw: Record<string, unknown> = read && typeof read === 'object' && !Array.isArray(read) ? (read as Record<string, unknown>) : {};
   const toolPaths: Partial<Record<Tool, string>> = {};
   const given = raw.paths;

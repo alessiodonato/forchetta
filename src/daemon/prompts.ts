@@ -9,16 +9,16 @@ export class QuickPrompts {
 
   constructor(
     private readonly file: string,
-    private readonly log: (message: string) => void,
+    private readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void,
   ) {
     this.prompts = [...DEFAULT_PROMPTS];
-    const raw = readDataJson(file, 'domande pronte', log) as { prompts?: unknown } | undefined;
+    const raw = readDataJson(file, 'quick prompts', log) as { prompts?: unknown } | undefined;
     if (raw === undefined) return;
     const checked = cleanPrompts(raw?.prompts);
     if ('prompts' in checked) this.prompts = checked.prompts;
     else {
-      log(`domande pronte non valide (${checked.error}): uso quelle di partenza`);
-      keepRejected(file, [raw], 'domande pronte', log);
+      log(`quick prompts not valid (${checked.error}): the default ones are used`, 'warn');
+      keepRejected(file, [raw], 'quick prompts', log);
     }
   }
 
@@ -35,7 +35,7 @@ export class QuickPrompts {
       return { ok: false, error: `not saved: ${String(error)}` };
     }
     this.prompts = checked.prompts;
-    this.log(`domande pronte salvate: ${checked.prompts.length}`);
+    this.log(`quick prompts saved: ${checked.prompts.length}`);
     return { ok: true };
   }
 }

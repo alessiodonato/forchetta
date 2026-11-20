@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.9.13. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.10.0. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -165,6 +165,8 @@
           <li><a href="#alerts">Notifications and the menu bar</a></li>
           <li><a href="#cost">Context, cache and cost</a></li>
           <li><a href="#search">Search and summaries</a></li>
+          <li><a href="#settings">Settings and shortcuts</a></li>
+          <li><a href="#report">The ledger and reports</a></li>
           <li><a href="#cli">Command line</a></li>
           <li><a href="#hooks">The hooks</a></li>
           <li><a href="#config">Configuration</a></li>
@@ -437,6 +439,16 @@ forchetta setup</pre>
         </table></div>
         <p>Requests are delivered like the <a href="#commands">commands of the box</a>: with the same queue and the same checks. A long one shows in the terminal of the member as <code>[Pasted text #1 +N lines]</code>, as when you paste it yourself. When you are the lead, the answers and the questions come to you.</p>
 
+        <h3 id="repo-teams">A team in the repository</h3>
+        <p>A team can live with the code, reviewed and shared like it, in the folder <code>.forchetta/</code> at the root of the repository:</p>
+        <ul>
+          <li><code>.forchetta/teams/&lt;name&gt;.forchetta-team.json</code>: a team, in the format of <span class="ui">Export</span> in the studio. <code>forchetta team export "Feature squad"</code> writes one of your templates, or a team that runs, there.</li>
+          <li><code>.forchetta/rules.md</code>: rules every team started in the repository follows, before its own (from the app, the studio or the command line).</li>
+          <li><code>.forchetta/guard.json</code>: the parts of the <a href="#guard">guard</a> on or off in this repository, over your settings: <code>{"files": true, "git": true, "notes": true, "servers": false}</code>. Only the parts it names change.</li>
+        </ul>
+        <p><code>forchetta team start &lt;name&gt; --goal "…"</code> starts a team from a terminal or a script: a file of <code>.forchetta/teams</code> (by its name or the name of its team), a path to a team file, or one of your templates. The goal is the first request: to the lead, or to every member when you lead. <code>--cwd</code> sets the folder, <code>--name</code> another name, <code>--budget</code> a budget. A file with skills from GitHub lists them and asks before anything is fetched; <code>--skills fetch</code> or <code>--skills skip</code> answers in a script. <code>forchetta team ls</code> lists the teams that run, each session with its state and what they cost (<code>--json</code> for scripts, <code>--templates</code> for what <code>start</code> can start).</p>
+        <p><strong>A budget</strong>, in dollars at API prices, in the studio or with <code>--budget</code>: when the sessions of the team cost more, you are told once, and its cost in the team panel turns amber. Nothing stops: it is a warning, not a limit.</p>
+
         <h3 id="team-panel">The team panel</h3>
         <figure>
           <img src="img/team.png" width="2400" height="1418" loading="lazy" alt="The panel of the team checkout: the thread of requests, answers and a question, then the field to write a new request.">
@@ -611,18 +623,54 @@ Read them again before you write code that relies on them.</code></pre>
         <p>The summary of a box comes from the events of the session. It can come from Haiku instead, a line written only when the state changes. It is off: this is the one call Forchetta can make outside your Mac. To turn it on, set <code>"summaries": { "haiku": true }</code>, export your key as <code>FORCHETTA_ANTHROPIC_API_KEY</code>, and restart the daemon from that terminal.</p>
       </section>
 
+      <section id="settings">
+        <h2>Settings and shortcuts</h2>
+        <p><span class="ui">⚙</span> at the top, or <kbd>⌘,</kbd>, opens the settings. What is not in place yet comes first (the hooks, the status line, tmux, Claude Code), each with the command that fixes it and a <span class="ui">copy</span> button; the same list shows in the empty window at the first start. Then:</p>
+        <ul>
+          <li><strong>The guard</strong>: its four parts, as in the <a href="#config">configuration</a>. A repository can change them for itself in <code>.forchetta/guard.json</code>.</li>
+          <li><strong>Sessions</strong>: after how long a session at work seems stuck, how long a finished one stays, what a fifth pane does.</li>
+          <li><strong>The app</strong>: the shortcut that shows Forchetta from anywhere, the port, the summaries by Haiku. The port and Haiku wait for a restart of the daemon; the rest counts at once.</li>
+          <li><strong>This window</strong>: the theme (dark, light, as the system) and the size of the text of the terminals.</li>
+          <li><strong>Optional features</strong>: arricurdAI, the note before <code>/clear</code>, the summaries by Haiku, the daemon kept alive by macOS: on or off, and why, with how to turn them on.</li>
+        </ul>
+        <div class="table"><table>
+          <thead><tr><th>Keys</th><th>What they do</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>⌘K</kbd></td><td>Every command and every session, found by typing a few letters.</td></tr>
+            <tr><td><kbd>⌘N</kbd> <kbd>⇧⌘N</kbd> <kbd>⌥⌘N</kbd></td><td>New session, new team, new team in the studio.</td></tr>
+            <tr><td><kbd>⌘1</kbd> … <kbd>⌘9</kbd></td><td>Open the first nine sessions, in the order of the boxes.</td></tr>
+            <tr><td><kbd>⌘]</kbd></td><td>The next session that waits for you; so does a click on <span class="ui">waits for you</span> at the top.</td></tr>
+            <tr><td><kbd>⌘W</kbd></td><td>Close the palette, the panel or the pane in front; with none, hide the window.</td></tr>
+            <tr><td><kbd>⌘+</kbd> <kbd>⌘−</kbd> <kbd>⌘0</kbd></td><td>Zoom the page (in the studio, its canvas). The app keeps the zoom.</td></tr>
+            <tr><td><kbd>⌘/</kbd></td><td>All the shortcuts.</td></tr>
+          </tbody>
+        </table></div>
+        <p>The menus of the app have the same commands: File, View, Window and Help, with the manual and a link to report an issue. Every box can be reached with <kbd>Tab</kbd> and opened with <kbd>Enter</kbd>; with VoiceOver, a session that starts waiting for you is announced.</p>
+      </section>
+
+      <section id="report">
+        <h2>The ledger and reports</h2>
+        <p>The daemon writes what the sessions and the teams do in a ledger, on this Mac: a line for each turn (how long, the files it wrote), each cost (from the status line of Claude Code, at API prices; tokens for the sessions of teams), each time the guard stopped, asked or wrote a note, each request of a team and each verdict of a reviewer. It is in <code>ledger/</code>, in the <a href="#data">data folder</a>, a file a month; lines are only added.</p>
+        <p><code>forchetta report</code> reads it, also with the daemon off: by team (the default), <code>--by session</code>, <code>project</code>, <code>model</code> or <code>day</code>, from <code>--since 7d</code> (or <code>24h</code>, <code>4w</code>, a date like <code>2026-11-01</code>). <code>--team "&lt;name&gt;"</code> keeps one team; <code>--csv</code> writes the rows for a spreadsheet, <code>--json</code> for scripts.</p>
+        <p><code>forchetta team thread "&lt;name&gt;"</code> writes the whole thread of a team as Markdown: each request, question, answer and verdict, in order (<code>--json</code> for the data).</p>
+      </section>
+
       <section id="cli">
         <h2>Command line</h2>
         <p><code>forchetta --help</code> lists the commands, and <code>forchetta &lt;command&gt; --help</code> explains each one.</p>
         <div class="table"><table>
           <thead><tr><th>Command</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td><code>forchetta setup</code></td><td>Builds the app and installs the hooks. <code>--yes</code> without asking, <code>--diff</code> shows the whole diff, <code>--force</code> builds again, <code>--app-dir &lt;folder&gt;</code> puts the app elsewhere.</td></tr>
+            <tr><td><code>forchetta setup</code></td><td>Builds the app and installs the hooks; a daemon of an older version starts again on this one (<code>--no-restart</code> leaves it). <code>--yes</code> without asking, <code>--diff</code> shows the whole diff, <code>--force</code> builds again, <code>--app-dir &lt;folder&gt;</code> puts the app elsewhere.</td></tr>
             <tr><td><code>forchetta run claude [args]</code></td><td>Starts Claude Code in the tmux of Forchetta and attaches this terminal.</td></tr>
             <tr><td><code>forchetta ls</code></td><td>One line per session: state, what it does, context and cache, <code>tmux</code> or read only.</td></tr>
             <tr><td><code>forchetta ls --json</code></td><td>The same as JSON, for scripts: <code>forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'</code></td></tr>
             <tr><td><code>forchetta stats</code></td><td>What the guard did on this Mac in the last 7 days, by kind. <code>--days N</code> for another span (up to 120), <code>--json</code> for scripts.</td></tr>
+            <tr><td><code>forchetta team ls|start|export|thread</code></td><td>The teams from a terminal: list them, start one with its goal, write a template into <code>.forchetta/teams</code>, read the thread of a team (see <a href="#repo-teams">A team in the repository</a>).</td></tr>
+            <tr><td><code>forchetta report</code></td><td>What the sessions and the teams did and cost, from the ledger (see <a href="#report">The ledger and reports</a>).</td></tr>
+            <tr><td><code>forchetta doctor</code></td><td>Checks the installation and says what to fix; the warnings of the log of the last day. <code>--bundle</code> writes <code>forchetta-doctor-&lt;date&gt;.tar.gz</code> for an issue, with your home, user name, project and team names, e-mails and tokens replaced.</td></tr>
             <tr><td><code>forchetta daemon start|stop|status</code></td><td>Manages the local daemon. Stopping it stops no session; <code>status</code> exits with 1 when it is not running.</td></tr>
+            <tr><td><code>forchetta daemon keepalive on|off</code></td><td>A LaunchAgent: macOS starts the daemon at login, and again if it stops by mistake. <code>forchetta daemon stop</code> still stops it.</td></tr>
             <tr><td><code>forchetta hooks install|uninstall</code></td><td>Adds or removes the hooks in <code>~/.claude/settings.json</code>, asking first and keeping a copy. <code>--yes</code>, <code>--diff</code>.</td></tr>
           </tbody>
         </table></div>
@@ -636,7 +684,7 @@ Read them again before you write code that relies on them.</code></pre>
           <li>lists every change to <code>~/.claude/settings.json</code> and asks before it writes: answer <code>d</code>, or pass <code>--diff</code>, to see the whole diff first;</li>
           <li>keeps a copy of the file in <code>backups/</code>, in the <a href="#data">data folder</a>;</li>
           <li>adds its hooks <strong>next to</strong> the ones you have, those of arricurdAI for example, without changing them;</li>
-          <li>puts <code>bin/forchetta-statusline</code> in front of your status line, for the cost of each session. Your command is saved in <code>statusline-command</code> and runs with the same input, so the line at the bottom stays the same; with the daemon off it does not change, and <code>forchetta hooks uninstall</code> puts your command back.</li>
+          <li>puts <code>bin/forchetta-statusline</code> in front of your status line, for the cost of each session. Your command is saved in <code>statusline-command</code> and runs with the same input, so the line at the bottom stays the same. With the daemon off, a line under yours says so (<span class="ui">◌ Forchetta is off</span>); <code>forchetta hooks uninstall</code> puts your command back.</li>
         </ul>
         <p>Sessions already open pick the hooks up by themselves: Claude Code reads them again.</p>
         <div class="table"><table>
@@ -652,7 +700,7 @@ Read them again before you write code that relies on them.</code></pre>
 
       <section id="config">
         <h2>Configuration</h2>
-        <p>The settings are in <code>config.json</code>, in the <a href="#data">data folder</a>. <code>forchetta setup</code> writes the paths; the rest is optional. Restart the daemon after a change (<code>forchetta daemon stop &amp;&amp; forchetta daemon start</code>); the shortcut is read when the app starts.</p>
+        <p>The settings are in <code>config.json</code>, in the <a href="#data">data folder</a>. Most of them change from <a href="#settings">Settings</a> (<kbd>⌘,</kbd>), and count at once. <code>forchetta setup</code> writes the paths; the rest is optional. After a change by hand, restart the daemon (<code>forchetta daemon stop &amp;&amp; forchetta daemon start</code>).</p>
         <div class="table"><table>
           <thead><tr><th>Key</th><th>Default</th><th>What it sets</th></tr></thead>
           <tbody>
@@ -679,10 +727,10 @@ Read them again before you write code that relies on them.</code></pre>
           <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>hooks.sock</code>, where the hooks of Claude Code talk to the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
           <li><code>state.json</code>, the sessions; <code>teams.json</code>, names, groups and roles by folder;</li>
           <li><code>crews/</code>, the teams of agents, one file each; <code>crew-templates.json</code>, your templates; <code>crew-roles.json</code>, your presets of agents; <code>skills/</code>, the <a href="#skills">skills</a> downloaded, and the plugin of each session of a team that has some;</li>
-          <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>guard-stats.json</code>, how many times a day the guard did each thing; <code>daemon.log</code>.</li>
+          <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>guard-stats.json</code>, how many times a day the guard did each thing; <code>ledger/</code>, the <a href="#report">ledger</a>; <code>daemon.log</code>, in English with the level of each line (INFO, WARN, ERROR), started again past 5 MB (the last three kept as <code>daemon.log.1</code> … <code>.3</code>).</li>
         </ul>
         <p>Each file is written whole or not at all, and the version before stays next to it as <code>.bak</code>. A file that cannot be read is never written over: Forchetta sets it aside as <code>.corrupt-&lt;time&gt;</code> and goes on with the version before; entries that are not valid any more (a template, a skill) are kept in <code>&lt;file&gt;.rejected.json</code>. <code>data-version</code> says the format of the folder: a Forchetta older than its data does not start on it.</p>
-        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code> and, after asking, <code>~/.claude/settings.json</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token; the hooks talk to it on <code>hooks.sock</code>, in the data folder, which only you can open. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception. Forchetta also downloads: when a team whose agents have <a href="#skills">skills</a> starts, it fetches the ones it does not have yet from GitHub, with <code>git</code>, at the commit of its catalog. Nothing of yours is sent.</p>
+        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code>, after asking <code>~/.claude/settings.json</code>, and only when you ask: a LaunchAgent (<code>forchetta daemon keepalive on</code>), a team file in <code>.forchetta/teams</code> (<code>forchetta team export</code>), the file of <code>forchetta doctor --bundle</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token; the hooks talk to it on <code>hooks.sock</code>, in the data folder, which only you can open. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception. Forchetta also downloads: when a team whose agents have <a href="#skills">skills</a> starts, it fetches the ones it does not have yet from GitHub, with <code>git</code>, at the commit of its catalog. Nothing of yours is sent.</p>
       </section>
 
       <section id="trouble">
@@ -690,6 +738,9 @@ Read them again before you write code that relies on them.</code></pre>
         <div class="table"><table>
           <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
           <tbody>
+            <tr><td>Something does not work, and you do not know what</td><td><code>forchetta doctor</code>: it checks the installation, says what to fix and shows the warnings of the log. <code>forchetta doctor --bundle</code> writes a file to attach to an issue.</td></tr>
+            <tr><td><span class="ui">Claude Code … is newer than the one this Forchetta was tested with</span></td><td>It may work as before; if something looks off, say so in an issue, with the file of <code>forchetta doctor --bundle</code>.</td></tr>
+            <tr><td><span class="ui">◌ Forchetta is off</span> in the status line</td><td>The daemon is not running: open the app, or <code>forchetta daemon start</code>. <code>forchetta daemon keepalive on</code> lets macOS start it again by itself.</td></tr>
             <tr><td>A box says <span class="ui">read only</span></td><td>The session was started outside Forchetta. Start the next one with <code>forchetta run claude</code>, or from the app.</td></tr>
             <tr><td>You type in a pane and nothing happens</td><td>The pane is scrolled back in tmux (copy mode, after the wheel): click <span class="ui">back to the end</span> under its header, or press <kbd>q</kbd>.</td></tr>
             <tr><td>A command stays <span class="ui">blocked</span></td><td>The prompt of the session holds a draft: send or delete it. Or the terminal is scrolled back: scroll to the end, or press <kbd>q</kbd> in it.</td></tr>

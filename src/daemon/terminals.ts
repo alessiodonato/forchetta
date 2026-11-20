@@ -40,7 +40,7 @@ export interface TerminalsOptions {
   port: () => number;
   registry: Registry;
   tmux: Tmux;
-  log: (message: string) => void;
+  log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** Panes open at once, across windows: the app shows 4. */
   max?: number;
 }
@@ -122,13 +122,13 @@ export class Terminals {
         encoding: null,
       });
     } catch (error) {
-      this.options.log(`terminale per ${session} non aperto: ${String(error)}`);
+      this.options.log(`terminal for ${session} not opened: ${String(error)}`, 'warn');
       ws.close(1011, 'tmux non avviato');
       return;
     }
     this.open.set(ws, pty);
     this.sessionOf.set(ws, session);
-    this.options.log(`terminale aperto: ${session} (client tmux ${pty.pid})`);
+    this.options.log(`terminal opened: ${session} (tmux client ${pty.pid})`);
 
     // A burst of output (a long diff, a redraw) waits in the pty while the page catches up.
     let paused = false;
@@ -177,14 +177,14 @@ export class Terminals {
       this.open.delete(ws);
       this.detach(pty, session);
     });
-    ws.on('error', (error) => this.options.log(`terminale ${session}: ${String(error)}`));
+    ws.on('error', (error) => this.options.log(`terminal ${session}: ${String(error)}`, 'warn'));
   }
 
   /** SIGHUP to the tmux client started for this pane: it detaches; the session stays. */
   private detach(pty: Pty, session: string): void {
     try {
       pty.kill('SIGHUP');
-      this.options.log(`terminale chiuso: ${session} (client tmux ${pty.pid} scollegato, sessione intatta)`);
+      this.options.log(`terminal closed: ${session} (tmux client ${pty.pid} detached, the session goes on)`);
     } catch {
       // Already gone.
     }

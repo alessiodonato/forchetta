@@ -75,7 +75,8 @@ export interface ServersOptions {
   agents: () => Iterable<Agent>;
   /** The working tree of a folder (daemon/conflicts.ts). */
   repoOf: (dir: string) => string | undefined;
-  enabled: () => boolean;
+  /** On for this session: var/config.json, and .forchetta/guard.json of its repository. */
+  enabled: (agent: Agent) => boolean;
   /** Runs a program and gives its output, also when it exits with an error; undefined when it cannot run. */
   run: (file: string, args: string[]) => Promise<string | undefined>;
   /** The pid of the daemon: it listens too, and in a clone of Forchetta it works in the folder, but it is no dev server. */
@@ -92,7 +93,7 @@ export class Servers {
   }
 
   async decide(agent: Agent, payload: HookPayload): Promise<GuardDecision | undefined> {
-    if (payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || agent.state === 'ended' || !this.options.enabled()) return undefined;
+    if (payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || agent.state === 'ended' || !this.options.enabled(agent)) return undefined;
     const line = (payload.tool_input as { command?: unknown } | undefined)?.command;
     const cwd = agent.cwd ?? payload.cwd;
     if (typeof line !== 'string' || !cwd) return undefined;

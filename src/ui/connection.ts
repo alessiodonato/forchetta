@@ -22,7 +22,7 @@ declare global {
 }
 
 /** The app around the page, when there is one. */
-export const shell = (): { postMessage: (message: unknown) => void } | undefined => window.webkit?.messageHandlers?.forchetta;
+export const shell = (): { postMessage: (message: unknown) => void } | undefined => (typeof window === 'undefined' ? undefined : window.webkit?.messageHandlers?.forchetta);
 
 /** For development in a browser: http://127.0.0.1:47821/#token=… */
 const tokenFromHash = (): string | undefined => /(?:^#|&)token=([0-9a-f]{16,})/.exec(location.hash)?.[1];

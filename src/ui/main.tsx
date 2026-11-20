@@ -5,6 +5,10 @@ import { connectAttention } from './attention.ts';
 import { Connection, shell } from './connection.ts';
 import { setHidden } from './motion.ts';
 import { Store } from './store.ts';
+import { applyTheme, savedTheme } from './theme.ts';
+
+// The theme before the first render: no flash of the dark one on a light choice.
+applyTheme(savedTheme(), false);
 
 const store = new Store();
 const connection = new Connection(store);

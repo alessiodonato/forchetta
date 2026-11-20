@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type Agent, SESSION_COLOR_HEX, SESSION_COLORS, type SessionColor, TEAM_TEXT_MAX } from '../shared/agent.ts';
 import { crewUsage, shortTokens, tokensDetail, tokensTotal, usdText } from '../shared/present.ts';
 import { type CrewSummary, treeOrder } from '../shared/crew.ts';
+import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
 import { OrgLinks } from './OrgLinks.tsx';
 
@@ -65,6 +66,8 @@ export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; ag
   const [role, setRole] = useState(agent.team?.role ?? '');
   const [lead, setLead] = useState(agent.team?.lead === true);
   const first = useRef<HTMLInputElement>(null);
+  const editor = useRef<HTMLDivElement>(null);
+  useReturnFocus(editor);
   useEffect(() => first.current?.focus(), []);
   const groups = useMemo(() => [...new Set(agents.map((other) => other.team?.group).filter((name): name is string => !!name))].sort(), [agents]);
   const roles = useMemo(() => [...new Set(agents.map((other) => other.team?.role).filter((name): name is string => !!name))].sort(), [agents]);
@@ -98,7 +101,7 @@ export function TeamEditor({ agent, agents, store, onClose }: { agent: Agent; ag
   );
 
   return (
-    <div class="team-editor" onClick={stop} onMouseDown={stop}>
+    <div ref={editor} class="team-editor" role="group" aria-label={`Name, color, group and role of ${agent.project}`} onClick={stop} onMouseDown={stop}>
       {field('Name', label, setLabel, agent.project, undefined, first)}
       <div class="team-field" role="radiogroup" aria-label="Color">
         <span>Color</span>

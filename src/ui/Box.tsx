@@ -24,6 +24,7 @@ import {
   usdText,
   waitingText,
 } from '../shared/present.ts';
+import { boxLabel } from './announce.ts';
 import { Check, ToolIcon } from './icons.tsx';
 import { useMotionAnchor } from './anchor.ts';
 import { CommandBar, CommandStatus, currentCommand } from './Commands.tsx';
@@ -243,7 +244,15 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
       data-completed={completed ? '' : undefined}
       data-openable={openable ? '' : undefined}
       title={openable ? 'Open the terminal of the session' : agent.state === 'ended' ? undefined : 'Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.'}
+      // From the keyboard too: Tab reaches it, Enter or Space opens it as a click. Its own buttons keep their keys.
+      tabIndex={0}
+      aria-label={boxLabel(agent, line.text, openable)}
       onClick={() => onOpen(agent.id)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        onOpen(agent.id);
+      }}
     >
       <div class="aura" aria-hidden="true" />
       <span class="busy" aria-hidden="true">

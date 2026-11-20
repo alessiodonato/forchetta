@@ -484,7 +484,7 @@ describe('the prompt a hook refused', () => {
     hook(A, { hook_event_name: 'SessionEnd', reason: 'clear' });
     await settle();
     expect(tmux.pasted).toEqual([]);
-    expect(logs.at(-1)).toContain("prompt rifiutato non rimesso in");
+    expect(logs.at(-1)).toContain('refused prompt not put back in');
   });
 });
 

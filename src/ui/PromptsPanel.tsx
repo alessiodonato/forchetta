@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { DEFAULT_PROMPTS, MAX_PROMPT_NAME, MAX_PROMPT_TEXT, MAX_PROMPTS, type PromptMode, type QuickPrompt } from '../shared/prompts.ts';
+import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
 
 // The quick prompts of the menu of a selection: a name (its button), a text with variables, and where it goes. The
@@ -14,6 +15,8 @@ const MODES: { mode: PromptMode; label: string }[] = [
 export function PromptsPanel({ store, onClose }: { store: Store; onClose: () => void }) {
   const [rows, setRows] = useState<QuickPrompt[]>(() => store.state.prompts.map((prompt) => ({ ...prompt })));
   const first = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  useReturnFocus(panel);
   useEffect(() => first.current?.focus(), []);
   const saving = store.state.promptsSave;
   // Saved from this panel: it closes.
@@ -27,7 +30,7 @@ export function PromptsPanel({ store, onClose }: { store: Store; onClose: () => 
   const change = (index: number, patch: Partial<QuickPrompt>): void => setRows((current) => current.map((row, at) => (at === index ? { ...row, ...patch } : row)));
 
   return (
-    <section class="broadcast prompts-panel" aria-label="Quick prompts" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
+    <section ref={panel} class="broadcast prompts-panel" aria-label="Quick prompts" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
       <p class="broadcast-note">
         Quick prompts are in the menu that opens when you select text in a pane: one click sends them with the selection. In the text, <code>{'{selection}'}</code> is the selected
         text (quoted, when it is alone on its line; after the text, when it is missing), <code>{'{session}'}</code> the name of the session, <code>{'{folder}'}</code> its folder.
@@ -42,14 +45,15 @@ export function PromptsPanel({ store, onClose }: { store: Store; onClose: () => 
               value={row.name}
               maxLength={MAX_PROMPT_NAME}
               placeholder="Name"
+              aria-label={`Name of quick prompt ${index + 1}`}
               onInput={(event) => change(index, { name: (event.target as HTMLInputElement).value })}
             />
             {MODES.map(({ mode, label }) => (
-              <button key={mode} type="button" class={`chip${row.mode === mode ? ' on' : ''}`} onClick={() => change(index, { mode })}>
+              <button key={mode} type="button" class={`chip${row.mode === mode ? ' on' : ''}`} aria-pressed={row.mode === mode} onClick={() => change(index, { mode })}>
                 {label}
               </button>
             ))}
-            <button type="button" class="quiet" title="Remove this prompt" onClick={() => setRows((current) => current.filter((_, at) => at !== index))}>
+            <button type="button" class="quiet" title="Remove this prompt" aria-label={`Remove quick prompt ${row.name || index + 1}`} onClick={() => setRows((current) => current.filter((_, at) => at !== index))}>
               ✕
             </button>
           </div>
@@ -59,6 +63,7 @@ export function PromptsPanel({ store, onClose }: { store: Store; onClose: () => 
             value={row.text}
             maxLength={MAX_PROMPT_TEXT}
             placeholder={'Explain this:\n{selection}'}
+            aria-label={`Text of quick prompt ${row.name || index + 1}`}
             onInput={(event) => change(index, { text: (event.target as HTMLTextAreaElement).value })}
           />
         </div>

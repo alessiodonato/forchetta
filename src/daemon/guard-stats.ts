@@ -22,7 +22,7 @@ export class GuardStats {
 
   constructor(
     private readonly file: string | undefined,
-    private readonly options: { now?: () => number; onChange?: () => void; log?: (message: string) => void } = {},
+    private readonly options: { now?: () => number; onChange?: () => void; log?: (message: string, level?: 'info' | 'warn' | 'error') => void } = {},
   ) {
     this.now = options.now ?? Date.now;
     if (!file) return;
@@ -72,7 +72,7 @@ export class GuardStats {
       const saved: Saved = { version: 1, days: this.days };
       writeDataJson(this.file, saved, false);
     } catch (error) {
-      this.options.log?.(`conteggi del vigile non salvati: ${String(error)}`);
+      this.options.log?.(`guard counts not saved: ${String(error)}`, 'warn');
     }
   }
 }

@@ -15,6 +15,8 @@ import { crewApi, Crews, CrewTemplates, RolePresets } from '../daemon/crews.ts';
 import { changesOf } from '../daemon/diffs.ts';
 import { Guard } from '../daemon/guard.ts';
 import { Hub } from '../daemon/hub.ts';
+import { PROTOCOL, TESTED_CLAUDE } from '../shared/system.ts';
+import { VERSION } from '../shared/version.ts';
 import { editOf, Patches } from '../daemon/patches.ts';
 import { Permissions } from '../daemon/permissions.ts';
 import { Registry } from '../daemon/registry.ts';
@@ -155,6 +157,21 @@ export class DemoDaemon {
       port: () => 0,
       snapshot: () => this.registry.list(),
       settings: () => ({ replace: 'lru', arricurdaiNotes: false }),
+      // The installation of the demo: everything in place, as on a Mac where Forchetta was set up.
+      system: () => ({
+        version: VERSION,
+        protocol: PROTOCOL,
+        checks: [],
+        features: [
+          { id: 'arricurdai', on: false, label: 'arricurdAI', why: 'not in the demo: no prompt cache, cost of today and search through earlier sessions', link: 'https://github.com/alessiodonato/arricurdai' },
+          { id: 'haiku', on: false, label: 'One-line summaries by Haiku', why: 'off: the line of each box comes from its events' },
+        ],
+        claude: { tested: TESTED_CLAUDE, installed: TESTED_CLAUDE },
+        settings: { guard: { files: true, git: true, notes: true, servers: true }, stallMin: 10, endedRetentionMin: 10, replace: 'lru', hotkey: 'ctrl+alt+f', port: 47821, haiku: false },
+        varDir: '~/Library/Application Support/Forchetta',
+        logFile: '~/Library/Application Support/Forchetta/daemon.log',
+      }),
+      onSaveSettings: () => ({ ok: false, error: 'the demo does not keep settings: install Forchetta to change them' }),
       log: (message) => console.debug(`[demo] ${message}`),
       onCommand: (message) => {
         if (message.type === 'cancel') return this.commander.cancel(message.agentId, message.commandId);

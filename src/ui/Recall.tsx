@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import { recentFolders } from './NewSession.tsx';
+import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
 
 // Search in the earlier sessions of a project: what was asked, decided and changed. arricurdAI searches
@@ -19,6 +20,8 @@ export function RecallPanel({ agents, store, onClose }: { agents: readonly Agent
   const [project, setProject] = useState(store.state.recall?.project ?? folders[0] ?? '');
   const [query, setQuery] = useState(store.state.recall?.query ?? '');
   const field = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  useReturnFocus(panel);
   useEffect(() => field.current?.focus(), []);
   const state = store.state.recall;
   const search = (): void => {
@@ -27,19 +30,24 @@ export function RecallPanel({ agents, store, onClose }: { agents: readonly Agent
   };
 
   return (
-    <section class="broadcast recall" aria-label="Search earlier sessions" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
-      <div class="broadcast-row">
-        <span class="broadcast-label">Project</span>
+    <section ref={panel} class="broadcast recall" aria-label="Search earlier sessions" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
+      <div class="broadcast-row" role="group" aria-labelledby="recall-project">
+        <span class="broadcast-label" id="recall-project">
+          Project
+        </span>
         {folders.map((path) => (
-          <button key={path} type="button" class={`chip${path === project ? ' on' : ''}`} title={path} onClick={() => setProject(path)}>
+          <button key={path} type="button" class={`chip${path === project ? ' on' : ''}`} title={path} aria-pressed={path === project} onClick={() => setProject(path)}>
             {lastPart(path)}
           </button>
         ))}
       </div>
       <div class="broadcast-row">
-        <span class="broadcast-label">Search</span>
+        <label class="broadcast-label" for="recall-query">
+          Search
+        </label>
         <input
           ref={field}
+          id="recall-query"
           class="command-input"
           type="text"
           value={query}

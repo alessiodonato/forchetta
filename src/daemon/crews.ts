@@ -46,6 +46,7 @@ import {
 } from '../shared/crew.ts';
 import { ensurePrivateDir } from '../shared/paths.ts';
 import { customSkills } from '../shared/skills.ts';
+import type { LedgerEntry } from './ledger.ts';
 import type { EnqueueResult } from './commands.ts';
 import { gitCommands, type LaneCheck } from './guard.ts';
 import type { SpawnChoices, SpawnExtras, SpawnResult } from './spawn.ts';
@@ -215,6 +216,8 @@ export class Crews {
   agent: (agentId: string) => Agent | undefined = () => undefined;
   /** git in a folder: its output, or undefined when it fails. Set by the daemon, for the verdicts and the merges. */
   git: (dir: string, args: string[]) => Promise<string | undefined> = async () => undefined;
+  /** The ledger (daemon/ledger.ts): each request and each verdict of a reviewer, set by the daemon. */
+  record: (entry: Extract<LedgerEntry, { kind: 'request' | 'review' }>) => void = () => {};
   /** The root of the git repository of the folder of each team, read once: where its worktrees are. */
   private readonly roots = new Map<string, string | null>();
   /**
@@ -232,7 +235,7 @@ export class Crews {
     if (ids.length === 0) return undefined;
     const { failed } = await this.skills.ensure(ids);
     if (failed.length === 0) return undefined;
-    this.log(`skill non scaricate: ${failed.map((item) => `${item.id} (${item.error})`).join('; ')}`);
+    this.log(`skills not fetched: ${failed.map((item) => `${item.id} (${item.error})`).join('; ')}`, 'warn');
     return `skills not downloaded, the agents started without them: ${failed.map((item) => `${item.id} (${item.error})`).join('; ')}`;
   }
 
@@ -243,14 +246,14 @@ export class Crews {
 
   constructor(
     private readonly dir: string | undefined,
-    private readonly log: (message: string) => void = () => {},
+    private readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void = () => {},
   ) {
     if (!dir || !existsSync(dir)) return;
     for (const file of readdirSync(dir)) {
       if (!file.endsWith('.json')) continue;
       const crew = readDataJson(join(dir, file), `team ${file}`, this.log) as Crew | undefined;
       if (crew && typeof crew.id === 'string' && typeof crew.name === 'string' && Array.isArray(crew.members)) this.crews.set(crew.id, crew);
-      else if (crew !== undefined) this.log(`team ${file}: non è un team, ignorato (il file resta com'è)`);
+      else if (crew !== undefined) this.log(`team ${file}: not a team, ignored (the file stays as it is)`, 'warn');
     }
     for (const crew of this.crews.values()) this.restoreWaits(crew);
   }
@@ -270,12 +273,29 @@ export class Crews {
       };
       waiter.timer.unref?.();
       this.waiters.set(wait.id, waiter);
-      this.log(`team «${crew.name}»: ripresa l'attesa delle risposte di ${[...waiter.requests].map((n) => `#${n}`).join(', ')}`);
+      this.log(`team "${crew.name}": waiting again for the answers to ${[...waiter.requests].map((n) => `#${n}`).join(', ')}`);
     }
   }
 
   get(id: string): Crew | undefined {
     return this.crews.get(id);
+  }
+
+  /**
+   * The teams whose sessions now cost more than their budget, and were not said yet: each is marked, so that it is
+   * said once. `costOf` is what a session cost (its status line).
+   */
+  overBudget(costOf: (agentId: string) => number, now = Date.now()): { crew: Crew; usd: number }[] {
+    const over: { crew: Crew; usd: number }[] = [];
+    for (const crew of this.crews.values()) {
+      if (!crew.budgetUsd || crew.budgetSaidAt) continue;
+      const usd = Object.values(crew.agents).reduce((sum, agentId) => sum + costOf(agentId), 0);
+      if (usd < crew.budgetUsd) continue;
+      crew.budgetSaidAt = now;
+      this.changed(crew);
+      over.push({ crew, usd });
+    }
+    return over;
   }
 
   list(): Crew[] {
@@ -286,6 +306,7 @@ export class Crews {
     return this.list().map((crew) => ({
       id: crew.id,
       name: crew.name,
+      ...(crew.budgetUsd ? { budgetUsd: crew.budgetUsd } : {}),
       ...(crew.lead.kind === 'claude' ? { lead: crew.lead.name } : {}),
       recipients: [
         ...(crew.lead.kind === 'claude' ? [{ name: crew.lead.name, agentId: crew.agents.lead, lead: true }] : []),
@@ -482,7 +503,8 @@ export class Crews {
       request.deliveries.push(delivery);
     }
     crew.requests = [...(crew.requests ?? []), request].slice(-KEPT_REQUESTS);
-    this.log(`team «${crew.name}»: richiesta #${n} da ${from} a ${targets.join(', ')}${parent !== undefined ? ` (per la #${parent})` : ''}`);
+    this.record({ t: now, kind: 'request', team: crew.name, n, from, to: targets });
+    this.log(`team "${crew.name}": request #${n} from ${from} to ${targets.join(', ')}${parent !== undefined ? ` (for #${parent})` : ''}`);
     this.changed(crew);
     return { ok: true, n, to: targets };
   }
@@ -525,7 +547,7 @@ export class Crews {
       Object.assign(question, { status: 'queued', commandId: queued.command.id });
     }
     delivery.questions = [...(delivery.questions ?? []), question];
-    this.log(`team «${crew.name}»: domanda di ${me.name} sulla richiesta #${request.n}`);
+    this.log(`team "${crew.name}": question of ${me.name} about request #${request.n}`);
     this.changed(crew);
     return { ok: true, n: request.n, to };
   }
@@ -621,7 +643,7 @@ export class Crews {
     else delete member.paths;
     member.pathsNote = true;
     this.noteAbove(crew, member, checked.paths ? `${name} now works only on ${pathsText(checked.paths)}` : `${name} no longer has files of its own`);
-    this.log(`team «${crew.name}»: file di ${name} ${checked.paths ? `ora ${pathsText(checked.paths)}` : 'tolti'}`);
+    this.log(`team "${crew.name}": files of ${name} ${checked.paths ? `now ${pathsText(checked.paths)}` : 'taken away'}`);
     this.changed(crew);
     return { ok: true, ...(checked.paths ? { paths: checked.paths } : {}) };
   }
@@ -647,7 +669,8 @@ export class Crews {
     if (!sha || !short || !/^[0-9a-f]{7,64}$/.test(sha)) return { ok: false, error: `git does not know the commit "${wanted}" in ${dir}` };
     const record: ReviewRecord = { sha, short, ...(subject ? { subject: clip(subject, 120) } : {}), by: me.name, verdict: value, ...(text ? { note: clip(text, REVIEW_NOTE_MAX) } : {}), at: now };
     crew.reviews = [...(crew.reviews ?? []), record].slice(-KEPT_REVIEWS);
-    this.log(`team «${crew.name}»: ${me.name} ${value === 'approved' ? 'approva' : 'chiede modifiche a'} ${short}`);
+    this.record({ t: now, kind: 'review', team: crew.name, by: me.name, verdict: value, commit: short });
+    this.log(`team "${crew.name}": ${me.name} ${value === 'approved' ? 'approves' : 'asks for changes to'} ${short}`);
     this.changed(crew);
     return { ok: true, short, ...(record.subject ? { subject: record.subject } : {}), verdict: value };
   }
@@ -855,7 +878,7 @@ export class Crews {
           delivery.status = 'done';
           delivery.at = now;
           this.answerBack(crew, request, delivery);
-          this.log(`team «${crew.name}»: ${delivery.to} ha finito la #${request.n}, col lavoro passato ai suoi`);
+          this.log(`team "${crew.name}": ${delivery.to} is done with #${request.n}, with the work it passed on`);
           again = changed = true;
         }
       }
@@ -885,7 +908,7 @@ export class Crews {
     const queued = this.enqueue(asker, text.text, { crew: crew.id, n: request.n });
     if (queued.ok) text.done();
     delivery.reply = queued.ok ? { status: 'queued', commandId: queued.command.id } : { status: 'failed', reason: queued.error };
-    this.log(`team «${crew.name}»: risposta di ${delivery.to} alla #${request.n} ${queued.ok ? `in coda per ${request.from}` : `non consegnata: ${queued.error}`}`);
+    this.log(`team "${crew.name}": answer of ${delivery.to} to #${request.n} ${queued.ok ? `queued for ${request.from}` : `not delivered: ${queued.error}`}`);
   }
 
   /** Whether a wait is of this session. */
@@ -939,7 +962,7 @@ export class Crews {
     waiter.timer.unref?.();
     this.waiters.set(id, waiter);
     this.save(crew);
-    this.log(`team «${crew.name}»: ${me.name} aspetta le risposte di ${[...waiter.requests].map((n) => `#${n}`).join(', ') || 'nessuna richiesta'}`);
+    this.log(`team "${crew.name}": ${me.name} waits for the answers to ${[...waiter.requests].map((n) => `#${n}`).join(', ') || 'no request'}`);
     return { ok: true, id, requests: [...waiter.requests] };
   }
 
@@ -984,7 +1007,7 @@ export class Crews {
       });
     clearTimeout(waiter.timer);
     this.waiters.delete(id);
-    this.log(`team «${crew.name}»: attesa finita, ${answers.filter((answer) => answer.answer).length} risposte${open.length ? `, ${open.length} ancora aperte` : ''}`);
+    this.log(`team "${crew.name}": wait over, ${answers.filter((answer) => answer.answer).length} answers${open.length ? `, ${open.length} still open` : ''}`);
     this.changed(crew);
     return { ok: true, done: true, answers, open };
   }
@@ -1033,7 +1056,7 @@ export class Crews {
       talk === 'twoway' ? `${name} now answers you` : `${name} now executes only: it will not answer`,
       talk === 'twoway' ? `${name} now answers ${member.reportsTo}` : `${name} now executes only`,
     );
-    this.log(`team «${crew.name}»: ${name} ora ${talk === 'twoway' ? 'risponde' : 'esegue e basta'}, dalla prossima richiesta`);
+    this.log(`team "${crew.name}": ${name} now ${talk === 'twoway' ? 'answers' : 'only executes'}, from the next request`);
     this.changed(crew);
     const agentId = crew.agents[name];
     return { ok: true, changes: agentId ? [{ agentId, talk }] : [] };
@@ -1074,7 +1097,7 @@ export class Crews {
       `${name} is no longer in the team${moved.length > 0 ? `; ${names} now report${moved.length === 1 ? 's' : ''} to ${member.reportsTo}` : ''}`,
     );
     this.settle(crew, undefined);
-    this.log(`team «${crew.name}»: ${name} tolto dal team (la sessione resta)${moved.length > 0 ? `; ${names} ora sotto ${managerName(crew, member)}` : ''}`);
+    this.log(`team "${crew.name}": ${name} taken out of the team (the session stays)${moved.length > 0 ? `; ${names} now under ${managerName(crew, member)}` : ''}`);
     this.changed(crew);
     return { ok: true, ...(agentId ? { agentId } : {}) };
   }
@@ -1122,7 +1145,7 @@ export class Crews {
       `${member.name} joined the team${hasLevels(crew) ? ' and reports to you' : ''} (${how}): ${flat(member.role)}${member.relation ? ` — how you work together: ${flat(member.relation)}` : ''}`,
       `${member.name} joined the team under ${member.reportsTo}: ${flat(member.role)}`,
     );
-    this.log(`team «${crew.name}»: ${member.name} aggiunto`);
+    this.log(`team "${crew.name}": ${member.name} added`);
     this.changed(crew);
     return { ok: true, agentId: result.agentId, ...(skillsNote ? { error: skillsNote } : {}) };
   }
@@ -1188,7 +1211,7 @@ export class Crews {
       // It may have said hello already, while it was starting (no dialog after all): the others go now.
       const firstId = this.agentOf(crew, first);
       if (firstId && this.agent(firstId)?.sessionId) void this.afterTrust(crew);
-      this.log(`team «${crew.name}» creato: ${first} aspetta la tua risposta al dialogo di fiducia di Claude Code, poi partono gli altri`);
+      this.log(`team "${crew.name}" created: ${first} waits for your answer to the trust dialog of Claude Code, then the others start`);
       return {
         ok: true,
         crewId: crew.id,
@@ -1204,7 +1227,7 @@ export class Crews {
     this.crews.set(crew.id, crew);
     this.save(crew);
     const why = noGit ? 'the folder is not in a git repository: the members share it, with no worktree' : undefined;
-    this.log(`team «${crew.name}» creato: ${agentIds.length} sessioni${errors.length ? `, ${errors.length} non partite` : ''}${why ? ', senza worktree (non è un repo git)' : ''}`);
+    this.log(`team "${crew.name}" created: ${agentIds.length} sessions${errors.length ? `, ${errors.length} did not start` : ''}${why ? ', without worktrees (not a git repository)' : ''}`);
     const notes = [...(errors.length ? [`not started: ${errors.join('; ')}`] : []), ...(why ? [why] : []), ...(skillsNote ? [skillsNote] : [])];
     return { ok: true, crewId: crew.id, agentIds, ...(notes.length ? { error: notes.join('. ') } : {}) };
   }
@@ -1258,7 +1281,7 @@ export class Crews {
     delete crew.waitingTrust;
     this.save(crew);
     const started = await this.startMembers(crew, this.spawn, { startedBefore: 1 });
-    this.log(`team «${crew.name}»: fiducia data, partite ${started.agentIds.length} sessioni${started.errors.length ? `; non partite: ${started.errors.join('; ')}` : ''}`);
+    this.log(`team "${crew.name}": trusted, ${started.agentIds.length} sessions started${started.errors.length ? `; not started: ${started.errors.join('; ')}` : ''}`);
     this.changed(crew);
   }
 
@@ -1272,7 +1295,7 @@ export class Crews {
       ensurePrivateDir(this.dir);
       writeDataJson(join(this.dir, `${crew.id}.json`), crew);
     } catch (error) {
-      this.log(`team «${crew.name}» non salvato: ${String(error)}`);
+      this.log(`team "${crew.name}" not saved: ${String(error)}`, 'error');
     }
   }
 }
@@ -1354,17 +1377,17 @@ export class CrewTemplates {
 
   constructor(
     private readonly file: string | undefined,
-    private readonly log: (message: string) => void = () => {},
+    private readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void = () => {},
   ) {
     if (!file) return;
-    const raw = readDataJson(file, 'modelli dei team', log);
+    const raw = readDataJson(file, 'team templates', log);
     const rejected: unknown[] = [];
     for (const item of Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]) {
       const checked = cleanTemplate(item);
       if ('template' in checked) this.saved.push(checked.template);
       else rejected.push(item);
     }
-    keepRejected(file, rejected, 'modelli dei team', log);
+    keepRejected(file, rejected, 'team templates', log);
   }
 
   list(): CrewTemplate[] {
@@ -1416,7 +1439,7 @@ export class CrewTemplates {
     try {
       writeDataJson(this.file, this.saved);
     } catch (error) {
-      this.log(`modelli dei team non salvati: ${String(error)}`);
+      this.log(`team templates not saved: ${String(error)}`, 'error');
     }
   }
 }
@@ -1430,17 +1453,17 @@ export class RolePresets {
 
   constructor(
     private readonly file: string | undefined,
-    private readonly log: (message: string) => void = () => {},
+    private readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void = () => {},
   ) {
     if (!file) return;
-    const raw = readDataJson(file, 'preset dello studio', log);
+    const raw = readDataJson(file, 'presets of the studio', log);
     const rejected: unknown[] = [];
     for (const item of Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]) {
       const checked = cleanRolePreset(item);
       if ('preset' in checked) this.saved.push(checked.preset);
       else rejected.push(item);
     }
-    keepRejected(file, rejected, 'preset dello studio', log);
+    keepRejected(file, rejected, 'presets of the studio', log);
   }
 
   private static same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
@@ -1481,7 +1504,7 @@ export class RolePresets {
     try {
       writeDataJson(this.file, this.saved);
     } catch (error) {
-      this.log(`preset dello studio non salvati: ${String(error)}`);
+      this.log(`presets of the studio not saved: ${String(error)}`, 'error');
     }
   }
 }

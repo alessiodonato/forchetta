@@ -12,10 +12,10 @@ export class Teams {
 
   constructor(
     private readonly file: string | undefined,
-    private readonly log: (message: string) => void = () => {},
+    private readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void = () => {},
   ) {
     if (!file) return;
-    const saved = readDataJson(file, 'team delle cartelle', log);
+    const saved = readDataJson(file, 'teams of the folders', log);
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
     const rejected: unknown[] = [];
     for (const [folder, team] of Object.entries(saved)) {
@@ -23,7 +23,7 @@ export class Teams {
       if (clean && folder.startsWith('/')) this.byFolder[folder] = clean;
       else rejected.push({ [folder]: team });
     }
-    keepRejected(file, rejected, 'team delle cartelle', log);
+    keepRejected(file, rejected, 'teams of the folders', log);
   }
 
   /** Gives a new session the team remembered for its folder. Returns whether it changed the agent. */
@@ -72,7 +72,7 @@ export class Teams {
     try {
       writeDataJson(this.file, this.byFolder);
     } catch (error) {
-      this.log(`team non salvati: ${String(error)}`);
+      this.log(`teams of the folders not saved: ${String(error)}`, 'warn');
     }
   }
 }

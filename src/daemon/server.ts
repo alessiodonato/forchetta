@@ -59,7 +59,9 @@ export interface ServerOptions {
   guard?: (agent: Agent, payload: HookPayload) => object | undefined | Promise<object | undefined>;
   /** The routes of the MCP server of a team: /api/crew/<route>, POST with JSON. */
   crew?: (route: string, input: Record<string, unknown>) => Promise<{ status: number; body: unknown }>;
-  log: (message: string) => void;
+  /** The other routes of /api/ (the commands of the CLI: teams, templates, diagnostics); undefined: not one. */
+  api?: (method: string, path: string, query: URLSearchParams, input: Record<string, unknown>) => Promise<{ status: number; body: unknown } | undefined>;
+  log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   info: () => Record<string, unknown>;
 }
 
@@ -228,19 +230,19 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
   /** A hook input: recorded if asked, applied to its agent, passed on. Undefined when it is not one. */
   function takeHook(body: Buffer | undefined, headers: IncomingHttpHeaders): { agent: Agent; payload: HookPayload } | undefined {
     if (!body) {
-      log('hook: corpo troppo grande, ignorato');
+      log('hook: body too large, ignored', 'warn');
       return undefined;
     }
     let raw: unknown;
     try {
       raw = JSON.parse(body.toString('utf8'));
     } catch {
-      log('hook: JSON non valido');
+      log('hook: invalid JSON', 'warn');
       return undefined;
     }
     const payload = slimPayload(raw);
     if (!payload) {
-      log('hook: input senza hook_event_name o session_id');
+      log('hook: input without hook_event_name or session_id', 'warn');
       return undefined;
     }
     const meta = hookMeta(headers);
@@ -249,7 +251,7 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
         const pids = { ppid: header(headers, 'x-forchetta-pid'), claudePid: header(headers, 'x-forchetta-claude-pid') };
         appendFileSync(options.recordFile, `${JSON.stringify({ at: Date.now(), meta, pids, payload: forRecord(raw as Record<string, unknown>) })}\n`, { mode: 0o600 });
       } catch (error) {
-        log(`registrazione: ${String(error)}`);
+        log(`recording: ${String(error)}`, 'warn');
       }
     }
     const agent = registry.hook(payload, meta);
@@ -300,7 +302,7 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
         if (payload && agent) decision = await options.guard?.(agent, payload);
       } catch (error) {
         // A broken input, or a fault of the guard: the tool goes on as usual.
-        log(`guardia: ${String(error)}`);
+        log(`guard: ${String(error)}`, 'error');
       }
       return decision ? send(res, 200, decision) : send(res, 200);
     }
@@ -344,11 +346,11 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
         try {
           input = JSON.parse(body?.toString('utf8') ?? '') as Record<string, unknown>;
         } catch {
-          return send(res, 400, { error: 'JSON non valido' });
+          return send(res, 400, { error: 'invalid JSON' });
         }
         const { id, cwd, tmuxSession } = input;
         if (typeof id !== 'string' || !UUID.test(id) || typeof cwd !== 'string' || !cwd.startsWith('/') || typeof tmuxSession !== 'string' || !/^fk-[0-9a-f]{8}$/.test(tmuxSession)) {
-          return send(res, 400, { error: 'campi non validi' });
+          return send(res, 400, { error: 'invalid fields' });
         }
         return send(res, 200, { agent: registry.register({ id: id.toLowerCase(), cwd, tmuxSession }) });
       }
@@ -368,6 +370,21 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
         setImmediate(options.onShutdown);
         return;
       }
+      if (options.api && (req.method === 'GET' || req.method === 'POST')) {
+        let input: Record<string, unknown> = {};
+        if (req.method === 'POST') {
+          const body = await readBody(req);
+          if (!body) return send(res, 413);
+          try {
+            const parsed = JSON.parse(body.toString('utf8') || '{}') as unknown;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) input = parsed as Record<string, unknown>;
+          } catch {
+            return send(res, 400, { ok: false, error: 'invalid JSON' });
+          }
+        }
+        const answer = await options.api(req.method, url.pathname, url.searchParams, input);
+        if (answer) return send(res, answer.status, answer.body);
+      }
       return send(res, 404);
     }
 
@@ -379,7 +396,7 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
     (viaSocket: boolean) =>
     (req: IncomingMessage, res: ServerResponse): void => {
       handle(req, res, viaSocket).catch((error: unknown) => {
-        log(`richiesta ${req.method} ${req.url}: ${String(error)}`);
+        log(`request ${req.method} ${req.url}: ${String(error)}`, 'error');
         if (!res.headersSent) send(res, 500);
       });
     };

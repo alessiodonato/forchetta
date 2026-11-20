@@ -25,7 +25,7 @@ struct DaemonAuth: Equatable {
     let token: String
 }
 
-final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate, NSMenuDelegate {
+final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate, NSMenuDelegate {
     private let root: URL
     private let varDir: URL
     private let options: [String: String]
@@ -45,6 +45,9 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     private var hotKeyRef: EventHotKeyRef?
     /** The shortcut as the menu shows it, when it could be registered. */
     private var hotKeyText: String?
+    private var hotKeyHandlerInstalled = false
+    /** The zoom of the page (View → Zoom In / Out), kept for the next start. */
+    private let zoomSteps: [CGFloat] = [0.67, 0.75, 0.85, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
 
     init(root: URL, varDir: URL, options: [String: String]) {
         self.root = root
@@ -67,6 +70,9 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         configuration.userContentController.add(self, name: "forchetta")
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
+        webView.uiDelegate = self
+        let savedZoom = UserDefaults.standard.double(forKey: "pageZoom")
+        if savedZoom > 0 { webView.pageZoom = CGFloat(savedZoom) }
         // Opaque, with the color of the page behind it: a transparent web view makes the window server blend the
         // whole page at every frame of an animation (measured: much more CPU on an Intel Mac).
         webView.underPageBackgroundColor = NSColor(srgbRed: 0.122, green: 0.118, blue: 0.110, alpha: 1)
@@ -80,6 +86,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         )
         window.title = "Forchetta"
         window.appearance = NSAppearance(named: .darkAqua)
+        applyTheme(UserDefaults.standard.string(forKey: "theme") ?? "dark", dark: UserDefaults.standard.object(forKey: "themeDark") as? Bool ?? true)
         window.backgroundColor = NSColor(srgbRed: 0.122, green: 0.118, blue: 0.110, alpha: 1)
         window.isRestorable = false
         window.minSize = NSSize(width: 420, height: 320)
@@ -180,8 +187,22 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     // MARK: - Messages from the page
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        // Only the page of the daemon, in the main frame, may ask the app for anything.
+        guard message.frameInfo.isMainFrame, isDaemonPage(message.frameInfo.request.url) else { return }
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
         switch type {
+        case "theme":
+            let theme = (body["theme"] as? String) ?? "dark"
+            let dark = (body["dark"] as? Bool) ?? true
+            applyTheme(theme, dark: dark)
+            UserDefaults.standard.set(theme, forKey: "theme")
+            UserDefaults.standard.set(dark, forKey: "themeDark")
+        case "settingsSaved":
+            // The shortcut may have changed: read again from var/config.json, off the main thread.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let setting = self.readHotKeySetting()
+                DispatchQueue.main.async { self.registerHotKey(setting) }
+            }
         case "needAuth":
             refreshAuth()
         case "attention":
@@ -200,6 +221,43 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         default:
             break
         }
+    }
+
+    /// The page of the daemon: http://127.0.0.1 (or localhost) on its port, as loadPage opened it.
+    private func isDaemonPage(_ url: URL?) -> Bool {
+        guard let url = url, let auth = auth else { return false }
+        let host = url.host ?? ""
+        return url.scheme == "http" && (host == "127.0.0.1" || host == "localhost") && url.port == auth.port
+    }
+
+    /// The window shows only the page of the daemon: a link that leads elsewhere opens in the default browser, and
+    /// nothing else may take the window (the token is in the page).
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        let url = navigationAction.request.url
+        if isDaemonPage(url) || url?.scheme == "about" {
+            decisionHandler(.allow)
+            return
+        }
+        if navigationAction.navigationType == .linkActivated, let text = url?.absoluteString { openInBrowser(text) }
+        decisionHandler(.cancel)
+    }
+
+    /// A link with target="_blank": in the default browser, never in a window of the app.
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let text = navigationAction.request.url?.absoluteString { openInBrowser(text) }
+        return nil
+    }
+
+    /// The window follows the theme of the page: dark, light, or the appearance of the system.
+    private func applyTheme(_ theme: String, dark: Bool) {
+        switch theme {
+        case "light": window.appearance = NSAppearance(named: .aqua)
+        case "system": window.appearance = nil
+        default: window.appearance = NSAppearance(named: .darkAqua)
+        }
+        let color = dark ? NSColor(srgbRed: 0.122, green: 0.118, blue: 0.110, alpha: 1) : NSColor(srgbRed: 0.961, green: 0.957, blue: 0.937, alpha: 1)
+        window.backgroundColor = color
+        webView.underPageBackgroundColor = color
     }
 
     /// A link from the page (an artifact of claude.ai, a link in a terminal) in the default browser: https anywhere,
@@ -311,25 +369,34 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
 
     /// Carbon's hot keys need no Accessibility permission. The shortcut comes from var/config.json ("hotkey").
     private func registerHotKey(_ wanted: String) {
+        // Again after Settings: the shortcut before goes first.
+        if let ref = hotKeyRef {
+            UnregisterEventHotKey(ref)
+            hotKeyRef = nil
+            hotKeyText = nil
+        }
         guard !wanted.isEmpty, let parsed = Shell.parseHotKey(wanted) else {
-            if !wanted.isEmpty { print("scorciatoia non valida: \(wanted)") }
+            if !wanted.isEmpty { print("shortcut not valid: \(wanted)") }
             return
         }
-        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let handler: EventHandlerUPP = { _, _, userData in
-            guard let userData = userData else { return noErr }
-            let shell = Unmanaged<Shell>.fromOpaque(userData).takeUnretainedValue()
-            DispatchQueue.main.async { shell.toggleWindow() }
-            return noErr
+        if !hotKeyHandlerInstalled {
+            var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+            let handler: EventHandlerUPP = { _, _, userData in
+                guard let userData = userData else { return noErr }
+                let shell = Unmanaged<Shell>.fromOpaque(userData).takeUnretainedValue()
+                DispatchQueue.main.async { shell.toggleWindow() }
+                return noErr
+            }
+            InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), nil)
+            hotKeyHandlerInstalled = true
         }
-        InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), nil)
         let id = EventHotKeyID(signature: OSType(0x464B_5452), id: 1)
         let status = RegisterEventHotKey(parsed.keyCode, parsed.modifiers, id, GetApplicationEventTarget(), 0, &hotKeyRef)
         if status == noErr {
             hotKeyText = parsed.text
-            print("scorciatoia: \(parsed.text)")
+            print("shortcut: \(parsed.text)")
         } else {
-            print("scorciatoia \(parsed.text) non disponibile (\(status)): forse la usa un'altra app")
+            print("shortcut \(parsed.text) not available (\(status)): another app may use it")
         }
     }
 
@@ -687,6 +754,8 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Forchetta", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
+        pageItem(appMenu, "Settings…", "settings", ",")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide Forchetta", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let others = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         others.keyEquivalentModifierMask = [.command, .option]
@@ -695,6 +764,16 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         appMenu.addItem(withTitle: "Quit Forchetta", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
+
+        let fileItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        pageItem(fileMenu, "New Session", "newSession", "n")
+        pageItem(fileMenu, "New Team", "newTeam", "n", [.command, .shift])
+        pageItem(fileMenu, "New Team in the Studio", "studio", "n", [.command, .option])
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Close", action: #selector(closeFront), keyEquivalent: "w").target = self
+        fileItem.submenu = fileMenu
+        main.addItem(fileItem)
 
         let editItem = NSMenuItem()
         let editMenu = NSMenu(title: "Edit")
@@ -711,6 +790,17 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
 
         let viewItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
+        pageItem(viewMenu, "Commands…", "palette", "k")
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(withTitle: "Actual Size", action: #selector(zoomReset), keyEquivalent: "0").target = self
+        viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn), keyEquivalent: "+").target = self
+        // ⌘= as well: on a US keyboard + needs shift.
+        let zoomInAlternate = viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn), keyEquivalent: "=")
+        zoomInAlternate.target = self
+        zoomInAlternate.isHidden = true
+        zoomInAlternate.allowsKeyEquivalentWhenHidden = true
+        viewMenu.addItem(withTitle: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-").target = self
+        viewMenu.addItem(.separator())
         viewMenu.addItem(withTitle: "Reload", action: #selector(reloadPage), keyEquivalent: "r").target = self
         viewItem.submenu = viewMenu
         main.addItem(viewItem)
@@ -719,15 +809,66 @@ final class Shell: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        pageItem(windowMenu, "Next Session That Waits for You", "nextWaiting", "]")
         windowItem.submenu = windowMenu
         main.addItem(windowItem)
         NSApp.windowsMenu = windowMenu
+
+        let helpItem = NSMenuItem()
+        let helpMenu = NSMenu(title: "Help")
+        pageItem(helpMenu, "Keyboard Shortcuts", "shortcuts", "/")
+        pageItem(helpMenu, "Forchetta Manual", "manual", "")
+        pageItem(helpMenu, "Report an Issue…", "issue", "")
+        helpItem.submenu = helpMenu
+        main.addItem(helpItem)
+        NSApp.helpMenu = helpMenu
 
         return main
     }
 
     @objc private func reloadPage() {
         if auth == nil { loadPage() } else { webView.reload() }
+    }
+
+    /// A menu item that the page does (window.forchettaCommand): the name of its command is in representedObject.
+    @discardableResult
+    private func pageItem(_ menu: NSMenu, _ title: String, _ command: String, _ key: String, _ modifiers: NSEvent.ModifierFlags = [.command]) -> NSMenuItem {
+        let item = menu.addItem(withTitle: title, action: #selector(pageCommand(_:)), keyEquivalent: key)
+        item.keyEquivalentModifierMask = modifiers
+        item.target = self
+        item.representedObject = command
+        return item
+    }
+
+    @objc private func pageCommand(_ sender: NSMenuItem) {
+        guard let command = sender.representedObject as? String else { return }
+        showWindow()
+        webView.evaluateJavaScript("window.forchettaCommand ? window.forchettaCommand('\(command)') : false")
+    }
+
+    /// ⌘W: the page closes the pane or the panel in front; with nothing to close, the window goes away.
+    @objc private func closeFront() {
+        webView.evaluateJavaScript("window.forchettaCommand ? window.forchettaCommand('close') : false") { result, _ in
+            if (result as? Bool) != true { self.window.performClose(nil) }
+        }
+    }
+
+    private func setZoom(_ zoom: CGFloat) {
+        webView.pageZoom = zoom
+        UserDefaults.standard.set(Double(zoom), forKey: "pageZoom")
+    }
+
+    @objc private func zoomIn() {
+        if let next = zoomSteps.first(where: { $0 > webView.pageZoom + 0.001 }) { setZoom(next) }
+    }
+
+    @objc private func zoomOut() {
+        if let next = zoomSteps.last(where: { $0 < webView.pageZoom - 0.001 }) { setZoom(next) }
+    }
+
+    @objc private func zoomReset() {
+        setZoom(1)
     }
 }
 

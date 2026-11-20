@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import { shell } from './connection.ts';
+import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
 
 // A new session from the app: a folder and, if you want, a first prompt, a model, a permission mode and a new git
@@ -55,6 +56,8 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
   const [worktree, setWorktree] = useState(false);
   const [worktreeName, setWorktreeName] = useState('');
   const field = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  useReturnFocus(panel);
   const state = store.state.spawn;
   const busy = state?.busy === true;
 
@@ -72,11 +75,14 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
   };
 
   return (
-    <section class="broadcast new-session" aria-label="New session" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
+    <section ref={panel} class="broadcast new-session" aria-label="New session" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
       <div class="broadcast-row">
-        <span class="broadcast-label">Folder</span>
+        <label class="broadcast-label" for="new-session-folder">
+          Folder
+        </label>
         <input
           ref={field}
+          id="new-session-folder"
           class="command-input mono"
           type="text"
           value={folder}
@@ -93,7 +99,7 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
         <div class="broadcast-row">
           <span class="broadcast-label" />
           {recent.map((path) => (
-            <button key={path} type="button" class={`chip${path === folder ? ' on' : ''}`} title={path} onClick={() => setFolder(path)}>
+            <button key={path} type="button" class={`chip${path === folder ? ' on' : ''}`} title={path} aria-pressed={path === folder} onClick={() => setFolder(path)}>
               {lastPart(path)}
             </button>
           ))}
@@ -129,6 +135,7 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
           <input
             class="command-input mono worktree-name"
             type="text"
+            aria-label="Name of the worktree (optional)"
             value={worktreeName}
             maxLength={40}
             placeholder="name (optional)"
@@ -138,8 +145,11 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
         )}
       </div>
       <div class="broadcast-row top">
-        <span class="broadcast-label">Prompt</span>
+        <label class="broadcast-label" for="new-session-prompt">
+          Prompt
+        </label>
         <textarea
+          id="new-session-prompt"
           class="command-input prompt-input"
           rows={4}
           value={prompt}

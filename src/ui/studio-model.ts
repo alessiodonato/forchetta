@@ -1,4 +1,4 @@
-import { cleanCrewSpec, type CrewMemberSpec, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, pathsText, type RolePreset, type Talk } from '../shared/crew.ts';
+import { cleanBudget, cleanCrewSpec, type CrewMemberSpec, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, pathsText, type RolePreset, type Talk } from '../shared/crew.ts';
 import { skillById, SKILLS_PER_AGENT_MAX } from '../shared/skills.ts';
 
 // The studio of teams (Studio.tsx draws it): a canvas with "You" on top and a box for each agent, linked by arrows.
@@ -55,6 +55,8 @@ export interface StudioDoc {
   links: StudioLink[];
   /** The rules of the whole team: every session gets them (CrewSpec.rules). */
   rules: string;
+  /** What the team may cost before you are told, in dollars, as written (CrewSpec.budgetUsd); empty for none. */
+  budget?: string;
   /** Notes on the canvas, for whoever opens the team after you. */
   notes: StudioNote[];
 }
@@ -262,6 +264,7 @@ export function specOfDoc(doc: StudioDoc): { spec: CrewSpec } | { error: string 
     talk: doc.talk,
     ...(doc.worktrees ? { worktrees: true } : {}),
     ...(doc.rules.trim() ? { rules: doc.rules } : {}),
+    ...(cleanBudget(doc.budget) ? { budgetUsd: cleanBudget(doc.budget) } : {}),
     lead: leadNode
       ? {
           kind: 'claude',
@@ -340,6 +343,7 @@ export function docOfTemplate(template: CrewTemplate, folder = ''): StudioDoc {
     talk: template.talk,
     worktrees: template.worktrees === true,
     rules: template.rules ?? '',
+    ...(template.budgetUsd ? { budget: String(template.budgetUsd) } : {}),
     notes: (template.notes ?? []).map((note) => ({ ...note, key: newKey() })),
   };
   const you = template.layout?.you;

@@ -16,6 +16,8 @@ declare global {
     forchettaFocus?: (agentId: string) => void;
     /** From the menu of the icon: the panel of a new session. */
     forchettaNewSession?: () => void;
+    /** A menu of the app (Settings, File, View, Help): the page does it; false when there was nothing to do. */
+    forchettaCommand?: (name: string) => boolean;
   }
 }
 

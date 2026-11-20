@@ -36,6 +36,7 @@ const COMMANDS: Record<string, CommandHelp> = {
       { name: '--force', text: 'Build the app again, even when it is up to date' },
       { name: '--diff', text: 'Show the whole diff of ~/.claude/settings.json before asking' },
       { name: '--app-dir', args: '<folder>', text: 'Where the app goes (default: ~/Applications)' },
+      { name: '--no-restart', text: 'Leave a daemon of another version running (by default it starts again on this one)' },
     ],
     examples: ['forchetta setup', 'forchetta setup --yes --app-dir /Applications'],
   },
@@ -72,14 +73,68 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
     examples: ['forchetta stats', 'forchetta stats --days 30'],
   },
+  report: {
+    summary: 'What the sessions and the teams did and cost, from the ledger of this Mac',
+    usage: 'forchetta report [--since 7d] [--by team|session|project|model|day] [--csv|--json]',
+    about: [
+      'The daemon writes a line for each turn, cost, file written, step of the guard, request and review in',
+      'the ledger (one file a month in the private folder of Forchetta); this command reads it, also with the daemon off.',
+    ],
+    options: [
+      { name: '--since', args: '<24h|7d|4w|date>', text: 'From when (default: 7d, today and the 6 days before)' },
+      { name: '--by', args: '<what>', text: 'One row per team (default), session, project, model or day' },
+      { name: '--team', args: '"<name>"', text: 'Only this team' },
+      { name: '--csv', text: 'The rows as CSV, for a spreadsheet' },
+      { name: '--json', text: 'The rows as JSON, for scripts' },
+    ],
+    examples: ['forchetta report', 'forchetta report --since 30d --by model', 'forchetta report --since 2026-11-01 --by day --csv > november.csv'],
+  },
+  doctor: {
+    summary: 'Check the installation, say what to fix; --bundle writes a file for an issue',
+    usage: 'forchetta doctor [--bundle] [--json]',
+    about: [
+      'Node.js, the daemon and its version, the hooks and the status line, tmux, Claude Code and the version it was',
+      'tested with, the optional features, files set aside, and the warnings of the log of the last day.',
+    ],
+    options: [
+      { name: '--bundle', text: 'Also write forchetta-doctor-<date>.tar.gz here, with names, paths, e-mails and tokens replaced' },
+      { name: '--out', args: '<folder>', text: 'Where the bundle goes (default: this folder)' },
+      { name: '--json', text: 'The findings as JSON' },
+    ],
+    examples: ['forchetta doctor', 'forchetta doctor --bundle'],
+  },
   daemon: {
     summary: 'Manage the local daemon (sessions never stop with it)',
-    usage: 'forchetta daemon <start|stop|status>',
+    usage: 'forchetta daemon <start|stop|status|keepalive on|off>',
     actions: [
       { name: 'start', text: 'Start the daemon, unless it is running' },
       { name: 'stop', text: 'Stop it: the Claude and tmux sessions go on' },
       { name: 'status', text: 'Whether it runs, for how long and with how many sessions (exit code 1 when not)' },
+      { name: 'keepalive', args: 'on|off', text: 'Let macOS start it at login and again if it stops by mistake (a LaunchAgent)' },
     ],
+  },
+  team: {
+    summary: 'Start a team of agents, list the teams, write a team into the repository',
+    usage: 'forchetta team <ls|start|export|thread> [options]',
+    about: [
+      'A team file in .forchetta/teams of the repository (from Export in the studio, or `forchetta team export`) is',
+      'reviewed and shared with the code. .forchetta/rules.md adds rules to every team started there; .forchetta/guard.json',
+      'turns parts of the guard on or off there: {"files": true, "git": true, "notes": true, "servers": false}.',
+    ],
+    actions: [
+      { name: 'ls', args: '[--json] [--templates]', text: 'The teams that run, each session with its state; --templates: what start can start' },
+      { name: 'start', args: '<name|file>', text: 'Start a team: a file of .forchetta/teams, a path, or one of your templates' },
+      { name: 'export', args: '<template|team>', text: 'Write it to .forchetta/teams/<name>.forchetta-team.json (--out elsewhere, --stdout)' },
+      { name: 'thread', args: '<team> [--json]', text: 'Every request, question, answer and review of a team, as Markdown' },
+    ],
+    options: [
+      { name: '--goal', args: '"<text>"', text: 'start: the first request, to the lead (to every member when you lead)' },
+      { name: '--cwd', args: '<folder>', text: 'start: the folder of the team (default: this one)' },
+      { name: '--name', args: '"<name>"', text: 'start: another name for the team' },
+      { name: '--budget', args: '<dollars>', text: 'start: what it may cost before you are told (a warning, not a limit)' },
+      { name: '--skills', args: 'fetch|skip', text: 'start: for a file with skills from GitHub, without asking' },
+    ],
+    examples: ['forchetta team start review-squad --goal "Add a CSV export to the orders page"', 'forchetta team export "Feature squad"', 'forchetta team ls --json | jq \'.[] | {name, usd}\''],
   },
   hooks: {
     summary: 'Add or remove the hooks in ~/.claude/settings.json',
@@ -101,7 +156,10 @@ const LIST: Entry[] = [
   { name: 'run', args: 'claude [arguments]', text: COMMANDS.run!.summary },
   { name: 'ls', text: COMMANDS.ls!.summary },
   { name: 'stats', text: COMMANDS.stats!.summary },
-  { name: 'daemon', args: 'start|stop|status', text: COMMANDS.daemon!.summary },
+  { name: 'team', args: 'ls|start|export|thread', text: COMMANDS.team!.summary },
+  { name: 'report', text: COMMANDS.report!.summary },
+  { name: 'doctor', text: COMMANDS.doctor!.summary },
+  { name: 'daemon', args: 'start|stop|status|keepalive', text: COMMANDS.daemon!.summary },
   { name: 'hooks', args: 'install|uninstall', text: COMMANDS.hooks!.summary },
 ];
 
