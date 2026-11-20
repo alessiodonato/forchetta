@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Forchetta: Claude Code sessions that don't step on each other</title>
-<meta name="description" content="Run several Claude Code sessions in the same repo: when two reach for the same file, Forchetta makes one wait and lets it go on when the file is free. Every session on your Mac in one window, permissions and notifications from one place, and teams of agents. Free, open source, local.">
+<meta name="description" content="Every Claude Code session on your Mac in one window. When two reach for the same file, Forchetta makes one wait and lets it go on when the file is free. And a studio to draw teams of agents. Free and open source, for macOS.">
 <meta property="og:title" content="Forchetta">
 <meta property="og:description" content="Run several Claude Code sessions in the same repo. They won't step on each other.">
 <meta property="og:image" content="https://forchetta.dev/img/social.png">
@@ -423,19 +423,14 @@
   .list li { position: relative; padding: 0 0 14px 22px; color: var(--text-2); }
   .list li::before { position: absolute; left: 0; top: 0.72em; width: 8px; height: 1px; background: var(--text-3); content: ''; }
   .list b { color: var(--text); font-weight: 600; }
+  .more { color: var(--text-3); font-size: 15px; }
 
   /* The guard, in words: next to each other on a wide screen. */
-  .guard-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 56px; margin-top: 8px; }
-  .guard-grid > div > p:first-child { margin-top: 0; }
 
   .shot { margin: 36px 0 0; }
   .shot img, .shot video { display: block; width: 100%; height: auto; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
   .shot figcaption { margin-top: 12px; font-size: 14px; color: var(--text-3); }
 
-  .shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 36px 0 0; }
-  .shots figure { margin: 0; }
-  .shots img { display: block; width: 100%; height: auto; border: 1px solid var(--line-strong); border-radius: 12px; }
-  .shots figcaption { margin-top: 10px; font-size: 14px; color: var(--text-3); }
 
   /* The studio, in four clips: a step for each, the one playing lit, with how far it got. */
   .clips { margin: 36px 0 0; }
@@ -566,7 +561,6 @@
   :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--surface); font-size: 0.86em; color: var(--text); }
   .copy code, .copy .cmd { padding: 0; background: none; font-size: inherit; }
 
-  .manual-links { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 18px; font-size: 15px; }
 
   footer.end {
     margin-top: 120px;
@@ -591,7 +585,6 @@
   }
 
   @media (max-width: 720px) {
-    .guard-grid, .shots { grid-template-columns: minmax(0, 1fr); }
   }
 
   @media (max-width: 640px) {
@@ -643,7 +636,7 @@
 <main>
   <div class="wrap hero">
     <h1>Run several Claude Code sessions in the same repo. They won't step on each other.</h1>
-    <p class="lead">When two sessions reach for the same file, Forchetta makes one wait, tells Claude why, and lets it go on by itself when the file is free. Every session on your Mac, in one window.</p>
+    <p class="lead">Every Claude Code session on your Mac, in one window. When two of them reach for the same file, Forchetta makes one wait, tells Claude why, and lets it go on by itself when the file is free. And when one session is not enough, draw a team of agents.</p>
     <div class="actions">
       <button class="copy" type="button" data-copy="brew install alessiodonato/tap/forchetta" aria-label="Copy the install command: brew install alessiodonato/tap/forchetta">
         <span class="cmd"><span class="prompt">$ </span>brew install alessiodonato/tap/forchetta</span>
@@ -708,31 +701,22 @@
   </section>
 
   <div class="wrap">
-    <section class="part" aria-labelledby="guard-title">
+    <section class="part text" aria-labelledby="guard-title">
       <h2 id="guard-title">One folder, no worktrees needed</h2>
-      <div class="guard-grid">
-        <div>
-          <p>The usual way to run agents in parallel is a git worktree for each one. Then each worktree needs its own dependencies, its own <code>.env</code> and its own dev server, and you merge at the end.</p>
-          <p>Forchetta lets sessions work side by side in one folder. It sees every edit before it happens, for every session, also those started with plain <code>claude</code>.</p>
-        </div>
-        <ul class="list">
-          <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another session that tries to edit it is stopped, and Claude is told why.</li>
-          <li><b>It goes on by itself:</b> when the turn that held the file ends, the session that waited is told the file is free, and picks up where it stopped.</li>
-          <li><b>git that asks first:</b> a <code>git checkout</code>, <code>reset --hard</code> or <code>stash</code> that would change the files under another session asks you before it runs.</li>
-          <li><b>Who else is here:</b> at its first step, a session learns who is halfway through which files in its folder, and plans around them from the start.</li>
-          <li><b>What the others changed:</b> a session that read a file another one changed since is told who changed it, with the lines. It adapts at once, instead of at the merge.</li>
-          <li><b>Not its bug:</b> before tests or a build, a session learns which files the others are halfway through, and leaves their errors alone.</li>
-          <li><b>Nothing undone without knowing:</b> taking away lines another session just added, or a <code>git add -A</code> that would sweep in its changes, is stopped once, with the reason.</li>
-          <li><b>One dev server:</b> a session about to start a second one gets the address of the one already running in the folder.</li>
-          <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With the daemon off, nothing is stopped. The top line says what the guard did this week.</li>
-        </ul>
-      </div>
+      <p>Forchetta sees every edit before it happens, for every session, also those started with plain <code>claude</code>. So sessions work side by side in one folder: one set of dependencies, one <code>.env</code>, one dev server, nothing to merge at the end.</p>
+      <ul class="list">
+        <li><b>One file, one session at a time:</b> a session holds a file it wrote in its turn. Another one that tries to edit it is stopped, and Claude is told why.</li>
+        <li><b>It goes on by itself:</b> when that turn ends, the session that waited is told the file is free, and picks up where it stopped.</li>
+        <li><b>You decide:</b> “let it through” in a box lets a session write the file anyway. With Forchetta off, nothing is stopped.</li>
+      </ul>
+      <p class="more"><a href="manual.html#guard">Everything the guard does</a>: git commands that ask first, notes on what the others changed, one dev server for the folder.</p>
     </section>
 
     <section class="part" aria-labelledby="glance-title">
       <div class="text">
         <h2 id="glance-title">Every session at a glance</h2>
-        <p>Forchetta listens to the hooks of Claude Code, so it knows what each session does the moment it does it. Sessions you start anywhere show up by themselves: in the Terminal, in iTerm, in an editor. Each box tells you what it is doing, what it was about, how full its context is, what it costs, and what its subagents are up to.</p>
+        <p>Forchetta listens to the hooks of Claude Code, so it knows what each session does the moment it does it. Sessions you start anywhere show up by themselves: in the Terminal, in iTerm, in an editor. Each box says what it is doing, how full its context is and what it costs.</p>
+        <p>Click a box and its terminal opens next to the others, a real one you can type in. Answer a permission from the box. A notification tells you when a session waits for you, seems stuck or goes in circles.</p>
       </div>
 
       <div class="demo-bar"><strong>Forchetta</strong><span id="counts">6 sessions</span></div>
@@ -801,71 +785,11 @@
       <p class="demo-note">A replay of the app's grid, with made-up sessions. Answer blog's permission when it asks, or hover a box for <code>compact</code> and <code>clear</code>. infra was started with plain <code>claude</code>: Forchetta shows it, but can't type into it.</p>
     </section>
 
-    <section class="part" aria-labelledby="terms-title">
-      <div class="text">
-        <h2 id="terms-title">Four terminals, side by side</h2>
-        <p>Click a box and its terminal opens next to the others, a real one you can type in. Sessions started with <code>forchetta run claude</code>, or from the app, live in Forchetta's own tmux: closing a pane, or the whole app, never ends them.</p>
-      </div>
-      <figure class="shot">
-        <img src="img/workspace.png" width="1400" height="786" loading="lazy" alt="The Forchetta window: a column of sessions on the left, three terminals open side by side, one session waiting for a permission.">
-        <figcaption>Three sessions open, the others in the column on the left. The one waiting for a permission can be answered from its box.</figcaption>
-      </figure>
-    </section>
-
-    <section class="part" aria-labelledby="act-title">
-      <div class="text">
-        <h2 id="act-title">Act without switching windows</h2>
-        <ul class="list">
-          <li><b>Answer permission prompts</b> from the box: allow once, deny, or pick one of the lasting rules Claude Code offers. The terminal shows the same prompt, and whichever answers first wins.</li>
-          <li><b>Send <code>/btw</code>, <code>/compact</code> and <code>/clear</code></b> to one session, or to several at once. Forchetta types a command only when it is safe: the session is idle, nobody is typing, the prompt is empty.</li>
-          <li><b>Ask about what you select</b> in a terminal: that session explains it, or it goes to another session.</li>
-          <li><b>Start a new session</b> in any folder, with a first prompt, a model, a permission mode, or a git worktree of its own.</li>
-          <li><b>Name your sessions,</b> group them, give them roles, and see them as an org chart. Search earlier sessions of a project for what was asked, decided or changed.</li>
-        </ul>
-      </div>
-      <div class="shots">
-        <figure>
-          <img src="img/permission.png" width="1600" height="2000" loading="lazy" alt="A box waiting for a permission: the command in full, Allow, Deny, and a lasting rule to choose.">
-          <figcaption>A permission, answered from its box.</figcaption>
-        </figure>
-        <figure>
-          <img src="img/several-sessions.png" width="1600" height="2000" loading="lazy" alt="The panel that sends /compact to three sessions at once, with their context.">
-          <figcaption>One command to several sessions.</figcaption>
-        </figure>
-        <figure>
-          <img src="img/new-session.png" width="1600" height="2000" loading="lazy" alt="The panel of a new session: folder, model, permission mode and first prompt.">
-          <figcaption>A new session, with its model and its mode.</figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <section class="part" id="teams" aria-labelledby="teams-title">
-      <div class="text">
-        <h2 id="teams-title">Teams of agents that work together</h2>
-        <p>Start a team from one panel, or draw it in the studio: a lead, which is a Claude session or you, and as many members as you need, each a Claude Code session with its own role. The lead splits the goal into numbered requests, and each member gets its own as a new prompt as soon as it is free.</p>
-        <ul class="list">
-          <li><b>Real tools, not copy and paste:</b> the lead sends requests and waits for the answers through a small MCP server of Forchetta; a member that is stuck asks the lead a question.</li>
-          <li><b>⇄ answers or → executes:</b> for each member, choose whether its final message goes back to the lead or it just does the work.</li>
-          <li><b>As many levels as you need:</b> a junior can report to a senior that reports to a manager, and each relation has a prompt of its own. The senior's answer goes up only when its junior's work is done.</li>
-          <li><b>A studio to draw it:</b> drag agents and whole teams onto a canvas, pull an arrow from one box to another, and choose the relation on release.</li>
-          <li><b>Skills:</b> give each agent skills of Claude Code from an open-source catalog pinned to a commit, or your own, from GitHub or a folder. Nothing is downloaded until a team uses one, and never into your project.</li>
-          <li><b>A worktree each, if you like:</b> every member can work on a branch of its own, and the lead merges the work when it is good.</li>
-          <li><b>Files of its own:</b> give a member its folders, and the guard keeps it in them and the other members out of them.</li>
-          <li><b>What it costs:</b> the tokens and the cost of each agent, and of the team together, as they work.</li>
-          <li><b>A review that counts:</b> a reviewer approves commits with a tool of the team; before a merge of anything it did not approve, the guard asks you.</li>
-          <li><b>Templates:</b> developer + reviewer, a feature squad, manager › senior › junior, research + writing, or a team you saved.</li>
-        </ul>
-      </div>
-      <figure class="shot">
-        <video src="img/demo.mp4" poster="img/demo-poster.jpg" width="1600" height="950" muted loop playsinline preload="none" aria-label="A team of agents in Forchetta: a team is created from a template, its four terminals open, the lead gets a goal, gives work to developer, then to reviewer and tester, collects their answers and reports back."></video>
-        <figcaption>A team at work, from the template to the answer for you. Recorded in the repository's simulation: the app, the daemon and the queue are real, the sessions are scripted stand-ins for Claude Code.</figcaption>
-      </figure>
-    </section>
-
     <section class="part" id="studio" aria-labelledby="studio-title">
       <div class="text">
         <h2 id="studio-title">Draw a team in the studio</h2>
-        <p>Drag agents onto a canvas, pull an arrow from each one to the agents it leads, give them their skills, and start the team. A junior can report to a senior that reports to a manager, on as many levels as you need.</p>
+        <p>A team of agents: a lead, which is a Claude session or you, and as many members as you need, each a Claude Code session with its own role, model and skills. The lead splits the goal into requests, the members answer or ask when they are stuck, on as many levels as you need.</p>
+        <p>Drag agents onto a canvas, pull an arrow from each one to the agents it leads, give them their skills, and start the team.</p>
         <p class="studio-cta"><a class="button primary" href="studio/">Open the Studio Maker</a> <span>The same studio in your browser: make a team, export it as a file, open it in Forchetta. What you draw stays in this browser.</span></p>
       </div>
       <div class="clips">
@@ -877,40 +801,12 @@
         </ol>
         <figure class="shot">
           <video id="clip" src="img/studio-agents.mp4" poster="img/studio-agents-poster.jpg" width="1440" height="960" muted playsinline preload="none" data-clips aria-label="The studio of Forchetta: agents dragged onto a canvas, arrows pulled between them with the relation chosen on release, a skill dropped on the junior, and the team started, its four sessions open."></video>
-          <figcaption>Recorded in the <a href="demo/">demo</a>, where you can try it: the app and the daemon are real, the sessions are scripted stand-ins for Claude Code. <a href="manual.html#studio">The studio in the manual</a>.</figcaption>
+          <figcaption>Recorded in the <a href="demo/">demo</a>, where you can try it: the app and the daemon are real, the sessions are scripted stand-ins for Claude Code. <a href="manual.html#teams">Teams in the manual</a>.</figcaption>
         </figure>
       </div>
     </section>
 
-    <section class="part text" aria-labelledby="needed-title">
-      <h2 id="needed-title">It tells you when you're needed</h2>
-      <ul class="list">
-        <li>A notification and a badge on the Dock when a session waits for you, seems stuck, goes in circles on the same error, or stops on an error.</li>
-        <li>A warning when two sessions write to the same file, or to the same repository.</li>
-        <li>For each session, the files it changed: its own edits one by one, and the diff since the last commit.</li>
-        <li>An icon in the menu bar, and a shortcut from anywhere: <code>⌃⌥F</code>.</li>
-      </ul>
-    </section>
 
-    <section class="part text" id="compare" aria-labelledby="compare-title">
-      <h2 id="compare-title">How it compares</h2>
-      <p>Claude Code has its own ways to run several sessions, and there are good tools built around it. Forchetta is made for one way of working: several Claude Code sessions in your terminals, on one Mac, that you want to watch and coordinate.</p>
-      <ul class="list">
-        <li><b>Agent View</b> (<code>claude agents</code>) is Anthropic's full-screen list of your background sessions, in the terminal. Forchetta is a window that stays open next to your work, with a live box for each session and up to four terminals side by side.</li>
-        <li><b>Claude Desktop</b> is Anthropic's app, with parallel sessions in its sidebar. Forchetta works with the <code>claude</code> CLI you already run in your terminal, with your hooks and settings.</li>
-        <li><b>Agent teams</b>, experimental in Claude Code, are a lead session that spawns teammates and shares a task list with them. In Forchetta, teams are set up in a panel or drawn in a studio, on as many levels as you need, and saved as templates, with a role, model, permissions, worktree and skills for each member, and the lead can be you.</li>
-        <li><b>Conductor</b> and similar Mac apps run several coding agents, each in an isolated workspace. Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely.</li>
-        <li><b>Orca</b> and <b>Paseo</b> are open-source desktop and phone apps that run many kinds of coding agents, each in its own git worktree. With Forchetta there is no worktree to set up: sessions share one folder, and the guard keeps them off each other's files.</li>
-        <li><b>cmux</b> and <b>Claude Squad</b> are terminals and session managers for many kinds of coding agents. Forchetta is built for Claude Code only, through its hooks: a guard that keeps two sessions off the same file, permissions answered from the box, context and cost per session, subagents, teams that talk through an MCP server.</li>
-      </ul>
-      <p>They don't rule each other out. Sessions started in any terminal show up in Forchetta, read only unless you started them with <code>forchetta run claude</code>.</p>
-    </section>
-
-    <section class="part text" aria-labelledby="mac-title">
-      <h2 id="mac-title">It stays on your Mac</h2>
-      <p>The hooks talk to a small daemon that listens on <code>127.0.0.1</code> only. Your sessions are not sent anywhere. The one network call that carries anything of yours is an optional one-line summary from the Claude API, off unless you turn it on. The only download is the open-source skills a team of agents uses, fetched from GitHub when that team starts, at a pinned commit.</p>
-      <p>Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change, asks, and keeps a backup. Your other hooks stay exactly as they are, and <code>forchetta hooks uninstall</code> takes its own away.</p>
-    </section>
 
     <section class="part text" id="install" aria-labelledby="install-title">
       <h2 id="install-title">Install</h2>
@@ -931,15 +827,8 @@
           <small>To open a session's terminal from the app, start it with <code>forchetta run claude</code>, or with New session in the app.</small>
         </li>
       </ol>
-      <p>Forchetta works with <a href="https://alessiodonato.github.io/arricurdai/">arricurdAI</a> too: with it, every box shows when its prompt cache expires, the top shows the cost of the day, you can search earlier sessions, and a <code>/clear</code> from the box leaves a note for the new session.</p>
-      <p>The <a href="manual.html">manual</a> explains everything step by step. The <a href="https://github.com/alessiodonato/forchetta#readme">README</a> is in English and in Italian, and <a href="https://github.com/alessiodonato/forchetta/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> explains how to build Forchetta from source.</p>
-      <div class="manual-links">
-        <a href="manual.html#guard">The guard</a>
-        <a href="manual.html#teams">Teams of agents</a>
-        <a href="manual.html#cli">Command line</a>
-        <a href="manual.html#config">Configuration</a>
-        <a href="manual.html#trouble">Troubleshooting</a>
-      </div>
+      <p><b>It stays on your Mac.</b> The daemon listens on <code>127.0.0.1</code> only, and your sessions are not sent anywhere: the one exception is an optional one-line summary by the Claude API, off unless you turn it on. The open-source skills a team uses are fetched from GitHub when it starts, at a pinned commit. Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change and asks.</p>
+      <p>Everything else is in the <a href="manual.html">manual</a>: commands to a session, the command line, settings and shortcuts, reports. The <a href="https://github.com/alessiodonato/forchetta#readme">README</a> is in English and in Italian.</p>
     </section>
   </div>
 </main>

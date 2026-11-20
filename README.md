@@ -141,7 +141,7 @@ Everything is in the [manual](https://forchetta.dev/manual.html).
 ## Uninstall
 
 1. `forchetta hooks uninstall`: removes only the hooks of Forchetta, after asking, and gives you back your status line.
-2. `forchetta daemon stop`. Sessions started with `forchetta run` go on until you `/exit` them.
+2. `forchetta daemon keepalive off`, if you turned it on, then `forchetta daemon stop`. Sessions started with `forchetta run` go on until you `/exit` them.
 3. `brew uninstall forchetta` and `brew untap alessiodonato/tap`.
 4. Delete `~/Applications/Forchetta.app` and `~/Library/Application Support/Forchetta`.
 

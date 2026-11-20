@@ -758,7 +758,7 @@ Read them again before you write code that relies on them.</code></pre>
         <h2>Uninstall</h2>
         <ol class="steps">
           <li><code>forchetta hooks uninstall</code>: removes only the hooks of Forchetta, after asking, and gives you back your status line.</li>
-          <li><code>forchetta daemon stop</code>. The sessions started with <code>forchetta run</code> go on until you <code>/exit</code> them.</li>
+          <li><code>forchetta daemon keepalive off</code>, if you turned it on, then <code>forchetta daemon stop</code>. The sessions started with <code>forchetta run</code> go on until you <code>/exit</code> them.</li>
           <li><code>brew uninstall forchetta</code> and <code>brew untap alessiodonato/tap</code>.</li>
           <li>Delete <code>~/Applications/Forchetta.app</code> and <code>~/Library/Application Support/Forchetta</code>.</li>
         </ol>
