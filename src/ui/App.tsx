@@ -19,6 +19,8 @@ import { NewTeamPanel } from './NewTeam.tsx';
 import { type NewKind, NewMenu, newKindOf } from './NewMenu.tsx';
 import { Studio } from './Studio.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
+import { AutoPanel } from './Automations.tsx';
+import type { AutomationView } from '../shared/automation.ts';
 import { crewLineOf } from '../shared/crew.ts';
 import { guardTotal, type GuardStatsInfo, statsTitle } from '../shared/guard-stats.ts';
 import { PromptsPanel } from './PromptsPanel.tsx';
@@ -146,6 +148,14 @@ function counts(agents: readonly Agent[], today: TodayInfo | undefined, limits: 
   );
 }
 
+
+/** The automations in a line, for the title of their button: at work, waiting, paused. */
+function autoSummary(automations: readonly AutomationView[]): string {
+  const running = automations.filter((auto) => auto.items.some((item) => item.status === 'running')).length;
+  const paused = automations.filter((auto) => auto.paused).length;
+  const parts = [`${automations.length} in all`, running ? `${running} at work` : '', paused ? `${paused} paused` : ''].filter(Boolean);
+  return parts.join(', ');
+}
 export function App({ store }: { store: Store }) {
   const state = useStore(store);
   const agents = useMemo(() => [...state.agents.values()].sort((a, b) => a.createdAt - b.createdAt), [state.agents]);
@@ -163,7 +173,13 @@ export function App({ store }: { store: Store }) {
   const open = useCallback((id: string) => store.open(id), [store]);
   const entered = useCallback((id: string) => store.entering.delete(id), [store]);
   const working = state.panes.open.length > 0;
-  const [panel, setPanel] = useState<'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | 'settings' | undefined>(undefined);
+  const [panel, setPanel] = useState<'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | 'settings' | 'auto' | undefined>(undefined);
+  /** The panel "auto" opened on its form for a new automation (from "+ new"). */
+  const [autoNew, setAutoNew] = useState(false);
+  /** The team the panel of the teams opens on: a run of an automation, from its panel, even once it ended. */
+  const [crewFocus, setCrewFocus] = useState<string | undefined>(undefined);
+  /** The teams at work: the runs of automations whose sessions ended are left out (their threads stay). */
+  const activeCrews = state.crews.filter((crew) => !crew.endedAt);
   /** Over everything: the palette of commands (⌘K) or the sheet of the shortcuts (⌘/). */
   const [overlay, setOverlay] = useState<'palette' | 'shortcuts' | undefined>(undefined);
   const [view, setView] = useState<'grid' | 'org'>(savedView);
@@ -181,9 +197,11 @@ export function App({ store }: { store: Store }) {
   };
   const grouped = hasGroups(agents);
   const showOrg = view === 'org' && grouped;
-  const toggle = (which: 'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | 'settings'): void => {
+  const toggle = (which: 'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | 'settings' | 'auto'): void => {
     store.endSpawn();
     store.endCrewSpawn();
+    setAutoNew(false);
+    setCrewFocus(undefined);
     setPanel(panel === which ? undefined : which);
   };
   // "+ new": a session, a team from its panel, or a team in the studio; also from ⌘N, ⇧⌘N and ⌥⌘N anywhere.
@@ -197,6 +215,11 @@ export function App({ store }: { store: Store }) {
       return;
     }
     setStudio(false);
+    if (kind === 'auto') {
+      setAutoNew(true);
+      setPanel('auto');
+      return;
+    }
     setPanel(kind === 'session' ? 'new' : 'team');
   };
   /** The next session that waits for you opens (⌘], the counter in the top line). */
@@ -314,7 +337,9 @@ export function App({ store }: { store: Store }) {
       { id: 'new-session', group: 'Actions', label: 'New session', keys: '⌘N', run: () => startNew('session') },
       { id: 'new-team', group: 'Actions', label: 'New team', keys: '⇧⌘N', run: () => startNew('team') },
       { id: 'studio', group: 'Actions', label: 'New team in the studio', keys: '⌥⌘N', words: 'draw canvas', run: () => startNew('studio') },
-      ...(state.crews.length > 0 ? [{ id: 'teams', group: 'Actions' as const, label: 'Teams: requests, threads, cost', run: () => setPanel('crew') }] : []),
+      { id: 'new-auto', group: 'Actions', label: 'New automatic team', words: 'automation queue schedule github cron', run: () => startNew('auto') },
+      ...(activeCrews.length > 0 ? [{ id: 'teams', group: 'Actions' as const, label: 'Teams: requests, threads, cost', run: () => setPanel('crew') }] : []),
+      ...(state.automations.length > 0 ? [{ id: 'auto', group: 'Actions' as const, label: 'Automatic teams: queues, runs', words: 'automation schedule github', run: () => setPanel('auto') }] : []),
       { id: 'next-waiting', group: 'Actions', label: 'Next session that waits for you', keys: '⌘]', run: nextWaiting },
       { id: 'search', group: 'Actions', label: 'Search earlier sessions', words: 'recall arricurdai', run: () => setPanel('recall') },
       { id: 'broadcast', group: 'Actions', label: 'Send to several sessions', words: 'broadcast', run: () => setPanel('broadcast') },
@@ -410,7 +435,7 @@ export function App({ store }: { store: Store }) {
               search
             </button>
           )}
-          {state.ready && state.crews.length > 0 && (
+          {state.ready && activeCrews.length > 0 && (
             <button
               type="button"
               class={`broadcast-toggle${panel === 'crew' ? ' active' : ''}`}
@@ -419,6 +444,17 @@ export function App({ store }: { store: Store }) {
               onClick={() => toggle('crew')}
             >
               teams
+            </button>
+          )}
+          {state.ready && state.automations.length > 0 && (
+            <button
+              type="button"
+              class={`broadcast-toggle${panel === 'auto' ? ' active' : ''}${state.automations.some((auto) => auto.paused?.by === 'forchetta') ? ' auto-attention' : ''}`}
+              title={`The teams that start by themselves: ${autoSummary(state.automations)}`}
+              aria-pressed={panel === 'auto'}
+              onClick={() => toggle('auto')}
+            >
+              auto
             </button>
           )}
           {state.ready && <NewMenu active={panel === 'new' || panel === 'team' || studio} onPick={startNew} />}
@@ -456,8 +492,22 @@ export function App({ store }: { store: Store }) {
           }}
         />
       )}
+      {state.ready && panel === 'auto' && (
+        <AutoPanel
+          agents={agents}
+          store={store}
+          startNew={autoNew}
+          onClose={() => toggle('auto')}
+          onTeam={(crewId) => {
+            setAutoNew(false);
+            setCrewFocus(crewId);
+            setPanel('crew');
+          }}
+        />
+      )}
       {state.ready && panel === 'crew' && <TeamPanel
-          crews={state.crews}
+          crews={state.crews.filter((crew) => !crew.endedAt || crew.id === crewFocus)}
+          focus={crewFocus}
           store={store}
           onClose={() => toggle('crew')}
           onNew={() => setPanel('team')}

@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import { type Crew, type CrewSpec, type CrewTemplate, type ReviewRecord, cleanBudget, cleanCrewSpec, fillParams, leadName, templateOf, threadOf } from '../shared/crew.ts';
 import type { Agent, AgentState, TokenUsage } from '../shared/agent.ts';
 import { activity, sumTokens, tokensTotal } from '../shared/present.ts';
+import { type Automation, type AutomationView, triggerText } from '../shared/automation.ts';
 import { teamChecks } from '../shared/team-checks.ts';
 import { teamFileName, teamFileOf } from '../shared/team-file.ts';
 import type { CreateResult, Result } from './crews.ts';
@@ -55,11 +56,65 @@ export interface CliApiDeps {
   log: (message: string) => void;
   /** The installation, for `forchetta doctor`. */
   system?: () => unknown;
+  /** The teams that start by themselves, for `forchetta auto`. */
+  automations?: {
+    views(): AutomationView[];
+    find(key: string): Automation | undefined;
+    act(id: string, action: 'add' | 'pause' | 'resume', arg?: { text?: string }): { ok: true; added?: number } | { ok: false; error: string };
+  };
+}
+
+/** The line of `forchetta auto ls` for an automation. */
+export interface AutoLine {
+  id: string;
+  name: string;
+  template: string;
+  cwd: string;
+  starts: string;
+  kind: 'queue' | 'schedule' | 'github';
+  paused?: string;
+  wait?: string;
+  nextAt?: number;
+  running?: { label: string; team?: string; startedAt?: number; usd?: number };
+  waiting: number;
+  last?: { label: string; status: string; note?: string; usd?: number; endedAt?: number; where?: string };
+  github?: { repo?: string; error?: string; at: number };
+}
+
+export function autoLine(view: AutomationView): AutoLine {
+  const running = view.items.find((item) => item.status === 'running');
+  const last = view.items.filter((item) => item.status !== 'waiting' && item.status !== 'running').at(-1);
+  return {
+    id: view.id,
+    name: view.name,
+    template: view.template,
+    cwd: view.cwd,
+    starts: triggerText(view.trigger),
+    kind: view.trigger.kind,
+    ...(view.paused ? { paused: view.paused.reason } : {}),
+    ...(view.wait ? { wait: view.wait } : {}),
+    ...(view.nextAt ? { nextAt: view.nextAt } : {}),
+    ...(running ? { running: { label: running.label, ...(running.crewName ? { team: running.crewName } : {}), ...(running.startedAt ? { startedAt: running.startedAt } : {}), ...(view.usd !== undefined ? { usd: view.usd } : {}) } } : {}),
+    waiting: view.items.filter((item) => item.status === 'waiting').length,
+    ...(last
+      ? {
+          last: {
+            label: last.label,
+            status: last.status,
+            ...(last.note ? { note: last.note } : {}),
+            ...(last.usd !== undefined ? { usd: last.usd } : {}),
+            ...(last.endedAt ? { endedAt: last.endedAt } : {}),
+            ...(last.delivered?.where ? { where: last.delivered.where } : {}),
+          },
+        }
+      : {}),
+    ...(view.poll ? { github: view.poll } : {}),
+  };
 }
 
 type Answer = { status: number; body: unknown };
 
-const isFolder = (path: string): boolean => {
+export const isFolder = (path: string): boolean => {
   try {
     return statSync(path).isDirectory();
   } catch {
@@ -148,7 +203,22 @@ export function threadMarkdown(crew: Crew, reviews: readonly ReviewRecord[]): st
 export function cliApi(deps: CliApiDeps): (method: string, path: string, query: URLSearchParams, input: Record<string, unknown>) => Promise<Answer | undefined> {
   return async (method, path, query, input) => {
     if (method === 'GET' && path === '/api/system' && deps.system) return ok({ system: deps.system() });
-    if (method === 'GET' && path === '/api/teams') return ok({ teams: deps.crews.list().map((crew) => teamLine(crew, deps.agent)) });
+    // The runs of automations that ended are not teams at work any more: their threads stay (team thread).
+    if (method === 'GET' && path === '/api/teams') return ok({ teams: deps.crews.list().filter((crew) => !crew.endedAt).map((crew) => teamLine(crew, deps.agent)) });
+
+    if (path === '/api/auto' || path.startsWith('/api/auto/')) {
+      const automations = deps.automations;
+      if (!automations) return fail('this daemon has no automations', 404);
+      if (method === 'GET' && path === '/api/auto') return ok({ automations: automations.views().map(autoLine) });
+      const action = path.slice('/api/auto/'.length);
+      if (method !== 'POST' || (action !== 'add' && action !== 'pause' && action !== 'resume')) return undefined;
+      const auto = automations.find(typeof input.name === 'string' ? input.name : '');
+      if (!auto) return fail('no automation is called so: see `forchetta auto ls`', 404);
+      const items = Array.isArray(input.items) ? input.items.filter((item): item is string => typeof item === 'string') : [];
+      const result = automations.act(auto.id, action, action === 'add' ? { text: items.join('\n') } : undefined);
+      if (!result.ok) return fail(result.error);
+      return ok({ name: auto.name, kind: auto.trigger.kind, ...(result.added !== undefined ? { added: result.added } : {}) });
+    }
 
     if (method === 'GET' && path === '/api/teams/thread') {
       const crew = findCrew(deps.crews.list(), query.get('team') ?? '');

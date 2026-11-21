@@ -3,7 +3,7 @@
 // are the real ones; tmux and Claude Code are the fakes of this folder, and the files live in memory.
 
 import { demoDescribe } from './describe.ts';
-import type { Agent, GuardHold, SubagentStep } from '../shared/agent.ts';
+import type { Agent, GuardHold, SubagentStep, UsageLimits } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
 import { addArtifact, artifactOf } from '../shared/artifacts.ts';
 import { cleanCrewSpec, reportsOf, templateOf } from '../shared/crew.ts';
@@ -12,6 +12,7 @@ import { tmuxSessionName } from '../shared/tmux.ts';
 import { Attention } from '../daemon/attention.ts';
 import { Commander } from '../daemon/commands.ts';
 import { Conflicts, writtenFile } from '../daemon/conflicts.ts';
+import { AUTO_ACTIONS, type AutoAction, Automations } from '../daemon/automations.ts';
 import { crewApi, Crews, CrewTemplates, RolePresets } from '../daemon/crews.ts';
 import { changesOf } from '../daemon/diffs.ts';
 import { Guard } from '../daemon/guard.ts';
@@ -88,6 +89,10 @@ export class DemoDaemon {
   readonly permissions: Permissions;
   readonly attention: Attention;
   readonly hub: Hub;
+  /** The teams that start by themselves, as in the app: a queue and a schedule; GitHub is not checked here. */
+  readonly automations: Automations;
+  /** The limits of the plan the top line shows, the same the automations look at. */
+  private readonly limits: UsageLimits;
   /** Turn the guard off, to see what happens without it. */
   guardOn = true;
   /** Permission dialogs answered, in the box or in the terminal: for the tour. */
@@ -141,6 +146,11 @@ export class DemoDaemon {
     this.crews.agent = (agentId) => this.registry.agents.get(agentId);
     this.crews.enqueue = (agentId, text, link) => this.commander.enqueueRequest(agentId, text, link);
     this.crews.onChange = () => this.hub.crewsChanged();
+    // The sessions of a run of an automation start as those of the panel do.
+    this.crews.spawn = (start, extras) => this.spawn(start, extras);
+    this.crews.onDelivered = (crew) => {
+      if (crew.auto) setTimeout(() => void this.automations.tick(), 600);
+    };
     this.permissions = new Permissions({
       registry: this.registry,
       interactive: async () => true,
@@ -193,6 +203,14 @@ export class DemoDaemon {
         return thread ? { steps: thread.steps, model: thread.model } : { steps: [], note: 'Its transcript is not there yet: it shows with its first step.' };
       },
       crews: () => this.crews.summaries(),
+      automations: () => this.automations.views(),
+      onSaveAutomation: (input, id) => {
+        const raw = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+        const cwd = typeof raw.cwd === 'string' && raw.cwd.trim() ? (folderOf(raw.cwd.trim()) ?? raw.cwd) : raw.cwd;
+        return this.automations.save({ ...raw, cwd }, id);
+      },
+      onDeleteAutomation: (id) => this.automations.remove(id),
+      onAutoAction: (id, action, arg) => (AUTO_ACTIONS.includes(action as AutoAction) ? this.automations.act(id, action as AutoAction, arg) : { ok: false, error: `unknown action: ${action}` }),
       crewThread: (crewId) => this.crews.thread(crewId),
       crewReviews: (crewId) => this.crews.reviewsOf(crewId),
       crewDelivered: (crewId) => this.crews.deliveredOf(crewId),
@@ -275,7 +293,25 @@ export class DemoDaemon {
     });
     // The limits of the Claude plan in the top line, as a status line with a subscription would give them.
     const now = Date.now();
-    this.hub.setLimits({ at: now, fiveHour: { percent: 23, resetsAt: now + 3 * 3_600_000 + 40 * 60_000 }, sevenDay: { percent: 41, resetsAt: now + 4 * 86_400_000 } });
+    this.limits = { at: now, fiveHour: { percent: 23, resetsAt: now + 3 * 3_600_000 + 40 * 60_000 }, sevenDay: { percent: 41, resetsAt: now + 4 * 86_400_000 } };
+    this.hub.setLimits(this.limits);
+    this.automations = new Automations({
+      log: (message) => console.debug(`[demo] ${message}`),
+      crews: this.crews,
+      templates: () => this.templates.list(),
+      agent: (agentId) => this.registry.agents.get(agentId),
+      costOf: (agentId) => this.registry.agents.get(agentId)?.usage?.usd ?? 0,
+      limits: () => this.limits,
+      exit: (agentId) => this.commander.enqueueExit(agentId).ok,
+      cancel: (agentId, commandId) => void this.commander.cancel(agentId, commandId),
+      isFolder: (dir) => isDir(dir),
+      notify: (notice) => {
+        const agentId = notice.agentId ?? '';
+        this.hub.notify({ agentId, kind: 'auto', title: notice.title, body: notice.body });
+      },
+      onChange: () => this.hub.automationsChanged(),
+    });
+    setInterval(() => void this.automations.tick(), 3000);
 
     routeSockets((url, socket) => this.connect(url, socket));
   }
@@ -511,6 +547,11 @@ export class DemoDaemon {
       },
       ask: (text) => {
         const result = this.crews.question(claude.id, text);
+        return result.ok ? { ok: true } : { ok: false, error: result.error };
+      },
+      deliverable: () => (me.role === 'lead' ? this.crews.get(me.crew.id)?.deliverable : undefined),
+      deliver: (summary, where) => {
+        const result = this.crews.deliver(claude.id, summary, where);
         return result.ok ? { ok: true } : { ok: false, error: result.error };
       },
     };

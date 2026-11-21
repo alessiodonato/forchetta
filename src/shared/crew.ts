@@ -208,6 +208,16 @@ export interface Crew extends CrewSpec {
   reviews?: ReviewRecord[];
   /** What its lead delivered (the tool deliver), oldest first. */
   delivered?: Delivered[];
+  /** The automation that started it, for one of its runs (shared/automation.ts). */
+  auto?: { id: string; name: string };
+  /**
+   * Stopped: it takes no new request, and nothing more goes into the queues of its sessions; why. A run of an
+   * automation is stopped when it is over (delivered, or failed).
+   */
+  stoppedAt?: number;
+  stopReason?: string;
+  /** All its sessions ended after it was stopped: it leaves the list of the teams. */
+  endedAt?: number;
 }
 
 /** The work of a team handed over: what it is and where, said by its lead. */
@@ -238,6 +248,13 @@ export interface CrewSummary {
   delivered?: Delivered;
   /** The values of its parameters. */
   values?: Record<string, string>;
+  /** The automation it is a run of, by name. */
+  auto?: string;
+  /** Stopped (a run that is over): it takes no new request. */
+  stoppedAt?: number;
+  stopReason?: string;
+  /** Stopped, and all its sessions ended. */
+  endedAt?: number;
 }
 
 export const REQUEST_HEADER = (n: number, from: string): string => `Request #${n} from ${from}:`;

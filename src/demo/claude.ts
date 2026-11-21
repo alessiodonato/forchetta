@@ -27,6 +27,9 @@ export interface TeamTools {
   send(to: string[], text: string): { ok: true; n: number; to: string[] } | { ok: false; error: string };
   wait(requests: number[]): Promise<string>;
   ask(text: string): { ok: boolean; error?: string };
+  /** What the team hands over when its work is done, for its lead; undefined when nothing. */
+  deliverable(): string | undefined;
+  deliver(summary: string, where?: string): { ok: boolean; error?: string };
 }
 
 export interface SubagentScript {
@@ -683,7 +686,8 @@ export class FakeClaude {
     await wait(1000);
     const team = this.host.team(this);
     const request = /^Request #(\d+) from (.+?):\s*([\s\S]*)$/.exec(prompt);
-    if (team && request && team.members().length > 0) return this.lead(team, request[3]!.trim());
+    // The lead passes on the goal, not what an automation tells it (the user does not watch).
+    if (team && request && team.members().length > 0) return this.lead(team, request[3]!.split('\n\n(This team was started by the automation')[0]!.trim());
     if (request) return this.member(request[3]!.trim());
     if (/^(Answer|Question) from /.test(prompt)) return 'Noted.';
 
@@ -826,7 +830,16 @@ describe('orderTotal', () => {
       if (checked) await this.waitFor(team, [checked]);
     }
     await wait(900);
-    return `Done: ${goal.split('\n')[0]}. ${builder.name} built it${checkers.length ? `, ${checkers.join(' and ')} checked it` : ''}, and the tests pass.`;
+    const done = `Done: ${goal.split('\n')[0]}. ${builder.name} built it${checkers.length ? `, ${checkers.join(' and ')} checked it` : ''}, and the tests pass.`;
+    // A team with a deliverable: its lead says it is delivered, and the user is told.
+    if (team.deliverable()) {
+      await this.tool('mcp__forchetta__deliver', { summary: done, where: 'src/api.ts, on main' }, 'summary, where', async () => {
+        await wait(400);
+        const result = team.deliver(done, 'src/api.ts, on main');
+        return result.ok ? { result: 'Delivered: the user is told.' } : { result: result.error ?? 'not delivered', error: true };
+      });
+    }
+    return done;
   }
 
   private async sendRequest(team: TeamTools, to: string[], text: string): Promise<number | undefined> {

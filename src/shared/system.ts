@@ -7,7 +7,7 @@
  * The version of the messages between the daemon and the page. A page of another protocol (an app or a window left
  * open across an upgrade) is told to reload, instead of misreading what the daemon sends.
  */
-export const PROTOCOL = 3;
+export const PROTOCOL = 4;
 
 /** The Claude Code this Forchetta was tested with; a newer minor version is said in the top line. */
 export const TESTED_CLAUDE = '2.1.322';

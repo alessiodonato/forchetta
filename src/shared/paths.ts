@@ -67,6 +67,8 @@ export interface Paths {
   crewTemplates: string;
   /** The presets of agents of the studio you saved or changed. */
   crewRoles: string;
+  /** The teams that start by themselves, with their queues and last runs (daemon/automations.ts). */
+  automations: string;
   /** What the guard did, counted by day (daemon/guard-stats.ts). */
   guardStats: string;
   /** The MCP server of the tools of a team (mcp/team.ts). */
@@ -106,6 +108,7 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     crewMcp: join(varDir, 'crews', 'mcp'),
     crewTemplates: join(varDir, 'crew-templates.json'),
     crewRoles: join(varDir, 'crew-roles.json'),
+    automations: join(varDir, 'automations.json'),
     guardStats: join(varDir, 'guard-stats.json'),
     patches: join(varDir, 'patches'),
     claudeUpdate: join(varDir, 'claude-update.json'),

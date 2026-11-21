@@ -5,7 +5,7 @@ import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import type { Agent, CommandKind, CommandStatus, QueuedCommand } from '../shared/agent.ts';
 import type { TmuxCommand, TmuxResult } from '../shared/tmux.ts';
 import type { Registry } from './registry.ts';
-import { readPromptBox, screenShows } from './screen.ts';
+import { keepsWorktree, readPromptBox, screenShows } from './screen.ts';
 import type { HookPayload } from './state.ts';
 
 // The commands of the box: /btw <question>, /compact, /clear; and the requests of a team of agents, which go in
@@ -66,7 +66,9 @@ export interface CommanderOptions {
 
 export type EnqueueResult = { ok: true; command: QueuedCommand } | { ok: false; error: string };
 
-const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000, ask: 15_000, free: 15_000 };
+const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000, ask: 15_000, free: 15_000, exit: 20_000 };
+/** After /exit, when to look for the question of Claude Code about the worktree of the session. */
+const EXIT_LOOKS_MS = [1200, 2000, 3000];
 /** The longest request, as the first prompt of a new session. */
 export const MAX_REQUEST = 20_000;
 /** A compaction that started may take minutes on a large context. */
@@ -196,6 +198,25 @@ export class Commander {
     const command: QueuedCommand = { id: randomUUID(), kind, arg: question, status: 'in-coda', createdAt: this.now(), ...(fromSelection ? { afterSelection: this.now() } : {}) };
     agent.commands = [...(agent.commands ?? []), command];
     this.options.log(`command queued for ${agent.project}: ${commandText(command)}`);
+    this.prune(agent);
+    this.options.registry.touch(agent);
+    this.kick(agent.id);
+    return { ok: true, command };
+  }
+
+  /**
+   * /exit, for a session of a run of an automation that is over: typed when the session is free, like any command,
+   * never into a dialog. Not a command of the page. One at a time: one already waiting or sent is that one.
+   */
+  enqueueExit(agentId: string): EnqueueResult {
+    const agent = this.options.registry.agents.get(agentId);
+    if (!agent) return { ok: false, error: 'unknown session' };
+    if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'the session is read only or ended' };
+    const pending = agent.commands?.find((command) => command.kind === 'exit' && (WAITING.includes(command.status) || command.status === 'inviato'));
+    if (pending) return { ok: true, command: pending };
+    const command: QueuedCommand = { id: randomUUID(), kind: 'exit', status: 'in-coda', createdAt: this.now() };
+    agent.commands = [...(agent.commands ?? []), command];
+    this.options.log(`/exit queued for ${agent.team?.label ?? agent.project}`);
     this.prune(agent);
     this.options.registry.touch(agent);
     this.kick(agent.id);
@@ -355,6 +376,8 @@ export class Commander {
       this.finish(agent, flight.command, 'confermato', 'compaction done');
     } else if (flight.command.kind === 'clear' && ((event === 'SessionEnd' && payload.reason === 'clear') || (event === 'SessionStart' && payload.source === 'clear'))) {
       this.finish(agent, flight.command, 'confermato', 'session cleared');
+    } else if (flight.command.kind === 'exit' && event === 'SessionEnd') {
+      this.finish(agent, flight.command, 'confermato', 'session ended');
     } else if (isText(flight.command) && event === 'UserPromptSubmit' && (payload.prompt ?? '').trim().startsWith(requestParts(flight.command.arg ?? '').head)) {
       this.finish(agent, flight.command, 'confermato', 'delivered');
     }
@@ -478,12 +501,18 @@ export class Commander {
     agent.commands = commands.filter((command) => !old.has(command));
   }
 
-  /** The session ended: what was still waiting will never be sent. */
+  /** The session ended: what was still waiting will never be sent. A /exit sent is what ended it. */
   private abandon(agent: Agent): void {
     let changed = false;
     for (const command of agent.commands ?? []) {
       this.putBacks.delete(command.id);
-      if (WAITING.includes(command.status) || command.status === 'inviato') {
+      if (command.kind === 'exit' && command.status === 'inviato') {
+        command.status = 'confermato';
+        command.reason = 'session ended';
+        command.doneAt = this.now();
+        changed = true;
+        this.changed(agent, command);
+      } else if (WAITING.includes(command.status) || command.status === 'inviato') {
         command.status = command.status === 'inviato' ? 'non-confermato' : 'annullato';
         command.reason = 'session ended';
         command.doneAt = this.now();
@@ -609,6 +638,18 @@ export class Commander {
       this.options.registry.touch(agent);
       this.changed(agent, command);
 
+      if (command.kind === 'exit') {
+        // In a worktree with commits or changes, Claude Code asks whether to keep it: Enter only on "Keep worktree".
+        for (const wait of EXIT_LOOKS_MS) {
+          await this.sleep(wait);
+          if (this.inflight.get(agentId)?.command !== command) break;
+          if (keepsWorktree(await this.capture(pane))) {
+            await tmux.run('send-keys', ['-t', pane, 'Enter']);
+            this.options.log(`${agent.team?.label ?? agent.project}: /exit keeps its worktree`);
+            break;
+          }
+        }
+      }
       if (command.kind === 'btw') {
         await this.sleep(1500);
         const screen = await this.capture(pane);

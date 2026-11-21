@@ -2,6 +2,7 @@ import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SessionColor, Su
 import { resultAt } from '../shared/present.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
+import type { AutomationView } from '../shared/automation.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset, Talk } from '../shared/crew.ts';
 import type { ReplayData } from '../shared/replay.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
@@ -55,6 +56,10 @@ export interface UiState {
   spawn?: { busy: boolean; error?: string; startedId?: string };
   /** The teams of agents. */
   crews: readonly CrewSummary[];
+  /** The teams that start by themselves (shared/automation.ts): their queues, runs, why the next one waits. */
+  automations: readonly AutomationView[];
+  /** The last change of an automation asked from its panel, and how it went. */
+  autoEdit?: { action: string; busy: boolean; ok?: boolean; error?: string; id?: string; added?: number; at: number };
   /** A team being started from its panel; when it started, its id; what did not start, if anything. */
   crewSpawn?: { busy: boolean; error?: string; createdId?: string };
   /** The templates of teams: the ones of Forchetta, then yours. */
@@ -152,13 +157,13 @@ function loadSeen(): Record<string, number> | undefined {
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
 /** The actions of the page that wait for an answer of the daemon, each with its busy flag. */
-const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest', 'settingsSave', 'describe'] as const satisfies readonly (keyof UiState)[];
+const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest', 'settingsSave', 'describe', 'autoEdit'] as const satisfies readonly (keyof UiState)[];
 
 /** What an action says when the daemon was not there to take it. */
 export const NOT_SENT = 'not sent: the daemon of Forchetta is not connected (the page reconnects by itself; try again in a moment)';
 
 export class Store {
-  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], templates: [], roles: [], customSkills: [], prompts: [] };
+  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], automations: [], templates: [], roles: [], customSkills: [], prompts: [] };
   /** Sends a message to the daemon (set by the connection). */
   /** Sends a message to the daemon (connection.ts); false when it could not go. */
   send: (message: ClientMessage) => boolean = () => false;
@@ -253,6 +258,14 @@ export class Store {
         this.set({ spawn: { busy: false, startedId: message.agentId } });
         this.openWhenThere(message.agentId);
       } else this.set({ spawn: { busy: false, error: message.error ?? 'the session did not start' } });
+      return;
+    }
+    if (message.type === 'automations') {
+      this.set({ automations: message.automations });
+      return;
+    }
+    if (message.type === 'autoEdited') {
+      this.set({ autoEdit: { action: message.action, busy: false, ok: message.ok, ...(message.error ? { error: message.error } : {}), ...(message.id ? { id: message.id } : {}), ...(message.added !== undefined ? { added: message.added } : {}), at: Date.now() } });
       return;
     }
     if (message.type === 'crews') {
@@ -373,6 +386,7 @@ export class Store {
         extra.system = message.system;
         extra.prompts = message.prompts ?? [];
         extra.crews = message.crews ?? [];
+        extra.automations = message.automations ?? [];
         extra.templates = message.templates ?? [];
         extra.roles = message.roles ?? [];
         setCustomSkills(message.skills ?? []);
@@ -591,6 +605,23 @@ export class Store {
   ): void {
     this.set({ crewEdit: { action: change.action, busy: true, at: Date.now() } });
     this.send({ type: 'editCrew', crewId, ...change });
+  }
+
+  /** A team that starts by itself, new or changed (id): the daemon checks it and answers with autoEdited. */
+  saveAutomation(automation: Record<string, unknown>, id?: string): void {
+    this.set({ autoEdit: { action: 'save', busy: true, at: Date.now() } });
+    this.send({ type: 'saveAutomation', automation, ...(id ? { id } : {}) });
+  }
+
+  deleteAutomation(id: string): void {
+    this.set({ autoEdit: { action: 'delete', busy: true, id, at: Date.now() } });
+    this.send({ type: 'deleteAutomation', id });
+  }
+
+  /** pause, resume, add (items, a run now, GitHub now), cancel an item, stop the run, retry a run. */
+  autoAction(id: string, action: 'pause' | 'resume' | 'add' | 'cancel' | 'stop' | 'retry' | 'close', arg: { text?: string; itemId?: string } = {}): void {
+    this.set({ autoEdit: { action, busy: true, id, at: Date.now() } });
+    this.send({ type: 'autoAction', id, action, ...arg });
   }
 
   /** Saves a template: what the panel of a new team holds, or an existing team. */

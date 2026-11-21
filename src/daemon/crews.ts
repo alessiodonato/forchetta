@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, renameSync } from 'node:fs';
 import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { isAbsolute, join, relative } from 'node:path';
 import { type Agent, type QueuedCommand, TEAM_TEXT_MAX, type TeamInfo } from '../shared/agent.ts';
@@ -110,6 +110,10 @@ const QUESTION_MAX = 4000;
 const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
 const flat = (text: string): string => text.replace(/\s+/g, ' ').trim();
 const OPEN: DeliveryStatus[] = ['approval', 'queued', 'blocked', 'sent', 'working', 'delegated'];
+
+/** What a session of a stopped team is told when it tries to go on. */
+const stoppedText = (crew: Pick<Crew, 'stopReason'>): string =>
+  `the team was stopped${crew.stopReason ? ` (${crew.stopReason})` : ''}: nothing more goes to its sessions. Do not send anything else: end your turn.`;
 /** The longest request, as a request of the panel. */
 const REQUEST_MAX = 20_000;
 /** What a team keeps of what its lead delivered. */
@@ -328,6 +332,9 @@ export class Crews {
       ...(crew.deliverable ? { deliverable: fillParams(crew.deliverable, crew.values) } : {}),
       ...(crew.delivered?.length ? { delivered: crew.delivered.at(-1) } : {}),
       ...(crew.values ? { values: { ...crew.values } } : {}),
+      ...(crew.auto ? { auto: crew.auto.name } : {}),
+      ...(crew.stoppedAt ? { stoppedAt: crew.stoppedAt, ...(crew.stopReason ? { stopReason: crew.stopReason } : {}) } : {}),
+      ...(crew.endedAt ? { endedAt: crew.endedAt } : {}),
       recipients: [
         ...(crew.lead.kind === 'claude' ? [{ name: crew.lead.name, agentId: crew.agents.lead, lead: true }] : []),
         ...crew.members.map((member) => ({
@@ -498,6 +505,7 @@ export class Crews {
   request(crewId: string, to: readonly string[], text: string, from = 'the user', now = Date.now(), parent?: number): Result<{ n: number; to: string[] }> {
     const crew = this.crews.get(crewId);
     if (!crew) return { ok: false, error: 'unknown team' };
+    if (crew.stoppedAt) return { ok: false, error: stoppedText(crew) };
     const user = from === 'the user';
     // Yours with the values of the team in place of its parameters: "Fix {ticket}" as the team started.
     const written = text.replace(/\r\n?/g, '\n').trim();
@@ -548,6 +556,10 @@ export class Crews {
    * it talks, its files, who it reports to) and, for a session that leads others, what changed among them.
    */
   private dispatch(crew: Crew, request: CrewRequest, delivery: Delivery): void {
+    if (crew.stoppedAt) {
+      Object.assign(delivery, { status: 'cancelled', reason: stoppedText(crew) });
+      return;
+    }
     const member = crew.members.find((candidate) => candidate.name === delivery.to);
     const notes = [
       member?.talkNote && delivery.talk ? talkNote(delivery.talk) : '',
@@ -576,6 +588,7 @@ export class Crews {
     const delivery = request?.deliveries.find((candidate) => candidate.to.toLowerCase() === to.trim().toLowerCase());
     if (!request || !delivery) return { ok: false, error: `no request #${n} to ${to}` };
     if (delivery.status !== 'approval') return { ok: false, error: `request #${n} to ${delivery.to} does not wait for your approval` };
+    if (crew.stoppedAt) return { ok: false, error: stoppedText(crew) };
     const note = (options.note ?? '').replace(/\r\n?/g, '\n').trim().slice(0, QUESTION_MAX);
     if (approve) {
       const text = (options.text ?? '').replace(/\r\n?/g, '\n').trim();
@@ -600,7 +613,7 @@ export class Crews {
   /** A request you sent back: the session that sent it learns why, unless it waits for its answers (the wait says it). */
   private sendBack(crew: Crew, request: CrewRequest, delivery: Delivery, note: string): void {
     const asker = this.agentOf(crew, request.from);
-    if (!asker || this.waiterFor(crew.id, request.n)) return;
+    if (!asker || crew.stoppedAt || this.waiterFor(crew.id, request.n)) return;
     const text = this.forManager(crew, request.from, `${SENT_BACK_HEADER(request.n, delivery.to)}\n${note || '(no reason given)'}\n\nChange the request and send it again with send_request, or go on without it.`);
     const queued = this.enqueue(asker, text.text, { crew: crew.id, n: request.n });
     if (queued.ok) text.done();
@@ -645,6 +658,7 @@ export class Crews {
   question(agentId: string, text: string, now = Date.now()): Result<{ n?: number; to: string }> {
     const me = this.whoami(agentId);
     if (!me || me.role !== 'member' || me.talk !== 'twoway') return { ok: false, error: 'only a member that answers its lead can ask it' };
+    if (me.crew.stoppedAt) return { ok: false, error: stoppedText(me.crew) };
     const body = text.replace(/\r\n?/g, '\n').trim();
     if (!body) return { ok: false, error: 'write the question first' };
     const crew = me.crew;
@@ -1015,7 +1029,7 @@ export class Crews {
 
   /** The answer of a member ⇄ to a request of a session of the team goes into the queue of that session. */
   private answerBack(crew: Crew, request: CrewRequest, delivery: Delivery): void {
-    if (request.from === 'the user') return;
+    if (request.from === 'the user' || crew.stoppedAt) return;
     const member = crew.members.find((candidate) => candidate.name === delivery.to);
     // The → / ⇄ of when the request left: a change counts from the next request.
     if (!member || (delivery.talk ?? effectiveTalk(crew, member)) !== 'twoway') return;
@@ -1031,6 +1045,7 @@ export class Crews {
 
   /** The answer of a member into the queue of the session that asked, as a new prompt. */
   private sendAnswer(crew: Crew, request: CrewRequest, delivery: Delivery, asker: string): void {
+    if (crew.stoppedAt) return;
     const text = this.forManager(crew, request.from, `${ANSWER_HEADER(request.n, delivery.to)}\n${delivery.answer?.trim() || '(it ended its turn with no message)'}`);
     const queued = this.enqueue(asker, text.text, { crew: crew.id, n: request.n });
     if (queued.ok) text.done();
@@ -1101,7 +1116,7 @@ export class Crews {
   async pollWait(id: string, maxMs: number, now: () => number = Date.now): Promise<Result<{ done: boolean; answers: WaitAnswer[]; open: string[] }>> {
     const first = this.waiters.get(id);
     if (!first) return { ok: false, error: 'this wait is over: the answers that came after it reach you as prompts' };
-    if (!this.waitOver(first, now())) {
+    if (!this.waitOver(first, now()) && !this.crews.get(first.crewId)?.stoppedAt) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, Math.max(0, Math.min(maxMs, first.until - now())));
         first.listeners.push(() => {
@@ -1116,7 +1131,7 @@ export class Crews {
     if (!crew) return { ok: false, error: 'unknown team' };
     const deliveries = (crew.requests ?? []).filter((request) => waiter.requests.has(request.n)).flatMap((request) => request.deliveries.map((delivery) => ({ request, delivery })));
     const open = deliveries.filter(({ delivery }) => OPEN.includes(delivery.status)).map(({ request, delivery }) => `#${request.n} ${delivery.to}`);
-    if (open.length > 0 && now() < waiter.until) return { ok: true, done: false, answers: [], open };
+    if (open.length > 0 && now() < waiter.until && !crew.stoppedAt) return { ok: true, done: false, answers: [], open };
     // Over: what is held goes to the lead here; what is still open will reach it as prompts.
     const answers: WaitAnswer[] = deliveries
       .filter(({ delivery }) => !OPEN.includes(delivery.status))
@@ -1164,6 +1179,79 @@ export class Crews {
     this.onChange();
     // A wait of the lead looks again: a delivery may be over (done, failed, cancelled).
     this.wake(crew.id);
+  }
+
+  /** What the sessions of a team cost so far, at API prices: `costOf` is what a session cost (its status line). */
+  costOf(crewId: string, costOf: (agentId: string) => number): number {
+    const crew = this.crews.get(crewId);
+    return crew ? Object.values(crew.agents).reduce((sum, agentId) => sum + costOf(agentId), 0) : 0;
+  }
+
+  /** The automation a team is a run of (shared/automation.ts). */
+  markAuto(crewId: string, auto: { id: string; name: string }): void {
+    const crew = this.crews.get(crewId);
+    if (!crew) return;
+    crew.auto = auto;
+    this.changed(crew);
+  }
+
+  /**
+   * Stops a team: it takes no new request, and nothing more goes into the queues of its sessions. What was not taken
+   * yet is cancelled (taken back from the queues: requests, answers, questions, and those waiting for your approval);
+   * what a session is working on it finishes, and its answer stays in the thread. The waits of its sessions end now.
+   * Its sessions go on: the caller ends them (/exit) if it wants.
+   */
+  stop(crewId: string, reason: string, cancel: (agentId: string, commandId: string) => void, now = Date.now()): Result {
+    const crew = this.crews.get(crewId);
+    if (!crew) return { ok: false, error: 'unknown team' };
+    if (crew.stoppedAt) return { ok: true };
+    crew.stoppedAt = now;
+    crew.stopReason = reason;
+    const why = stoppedText(crew);
+    for (const request of crew.requests ?? []) {
+      const asker = request.from === 'the user' ? undefined : this.agentOf(crew, request.from);
+      for (const delivery of request.deliveries) {
+        if (delivery.status === 'approval' || delivery.status === 'queued' || delivery.status === 'blocked') {
+          if (delivery.agentId && delivery.commandId) cancel(delivery.agentId, delivery.commandId);
+          Object.assign(delivery, { status: 'cancelled', reason: why, at: now });
+        }
+        if (asker && delivery.reply?.status === 'queued' && delivery.reply.commandId) cancel(asker, delivery.reply.commandId);
+        for (const question of delivery.questions ?? []) if (asker && question.status === 'queued' && question.commandId) cancel(asker, question.commandId);
+      }
+    }
+    this.log(`team "${crew.name}" stopped: ${reason}`);
+    this.changed(crew);
+    return { ok: true };
+  }
+
+  /** A stopped team whose sessions all ended: it leaves the list of the teams (its file stays, for its thread). */
+  setEnded(crewId: string, now = Date.now()): void {
+    const crew = this.crews.get(crewId);
+    if (!crew || crew.endedAt) return;
+    crew.endedAt = now;
+    this.changed(crew);
+  }
+
+  /** A team taken out of the daemon: its file goes into archive/, where nothing reads it. */
+  archive(crewId: string): void {
+    const crew = this.crews.get(crewId);
+    if (!crew) return;
+    for (const [id, waiter] of this.waiters) {
+      if (waiter.crewId !== crewId) continue;
+      clearTimeout(waiter.timer);
+      this.waiters.delete(id);
+    }
+    this.crews.delete(crewId);
+    if (this.dir) {
+      const file = join(this.dir, `${crewId}.json`);
+      try {
+        ensurePrivateDir(join(this.dir, 'archive'));
+        if (existsSync(file)) renameSync(file, join(this.dir, 'archive', `${crewId}.json`));
+      } catch (error) {
+        this.log(`team "${crew.name}": not archived (${String(error)})`, 'warn');
+      }
+    }
+    this.onChange();
   }
 
   /**

@@ -137,6 +137,21 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
     examples: ['forchetta team start review-squad --goal "Add a CSV export to the orders page"', 'forchetta team start bugfix --set ticket=APP-123 --goal "Fix {ticket}"', 'forchetta team export "Feature squad"', 'forchetta team ls --json | jq \'.[] | {name, usd}\''],
   },
+  auto: {
+    summary: 'The teams that start by themselves: a queue, a time, GitHub',
+    usage: 'forchetta auto <ls|add|pause|resume> [options]',
+    about: [
+      'Made in the app ("+ new" → "automatic team"): a template, a folder, how it starts, the goal of each run, what a run',
+      'may cost and how long it may take. The runs go one at a time, each a new team; a run is over when its lead delivers.',
+    ],
+    actions: [
+      { name: 'ls', args: '[--json]', text: 'Each automation: the run at work, what waits and why, the last run' },
+      { name: 'add', args: '<name> [item…]', text: 'Items into a queue, one per argument; a run of a schedule now; GitHub looked at now' },
+      { name: 'pause', args: '<name>', text: 'Nothing new starts; the run at work goes on' },
+      { name: 'resume', args: '<name>', text: 'It goes on, also after a run that failed paused it' },
+    ],
+    examples: ['forchetta auto ls', 'forchetta auto add fixes APP-42 APP-43', 'forchetta auto resume nightly'],
+  },
   hooks: {
     summary: 'Add or remove the hooks in ~/.claude/settings.json',
     usage: 'forchetta hooks <install|uninstall> [--yes] [--diff]',
@@ -158,6 +173,7 @@ const LIST: Entry[] = [
   { name: 'ls', text: COMMANDS.ls!.summary },
   { name: 'stats', text: COMMANDS.stats!.summary },
   { name: 'team', args: 'ls|start|export|thread', text: COMMANDS.team!.summary },
+  { name: 'auto', args: 'ls|add|pause|resume', text: COMMANDS.auto!.summary },
   { name: 'report', text: COMMANDS.report!.summary },
   { name: 'doctor', text: COMMANDS.doctor!.summary },
   { name: 'daemon', args: 'start|stop|status|keepalive', text: COMMANDS.daemon!.summary },

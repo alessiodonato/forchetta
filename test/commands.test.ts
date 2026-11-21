@@ -558,3 +558,52 @@ describe('the menu of a selection', () => {
     expect(tmux.pasted).toEqual([]);
   });
 });
+
+describe('/exit of a run of an automation that is over', () => {
+  const dialog = (chosen: 1 | 2): string =>
+    [
+      '❯ /exit',
+      RULE,
+      '  Exiting worktree session',
+      '  You have 1 commit on worktree-developer. The branch will be deleted if you remove the worktree.',
+      `  ${chosen === 1 ? '❯' : ' '} 1. Keep worktree    Stays at /Users/you/shop/.claude/worktrees/developer`,
+      `  ${chosen === 2 ? '❯' : ' '} 2. Remove worktree  All changes and commits will be lost.`,
+      '  Enter to confirm · Esc to cancel',
+    ].join('\n');
+
+  it('types /exit when the session is free, keeps the worktree when Claude Code asks, and SessionEnd confirms it', async () => {
+    setup();
+    tmux.panes.get('%1')!.afterEnter = (typed) => (typed === '/exit' ? dialog(1) : box(''));
+    const first = commander.enqueueExit(A);
+    expect(first.ok).toBe(true);
+    // Asked twice: the same one.
+    const again = commander.enqueueExit(A);
+    expect(again.ok && first.ok && again.command.id === first.command.id).toBe(true);
+    await settle();
+    expect(tmux.typed).toEqual([{ pane: '%1', text: '/exit' }]);
+    // Enter for /exit, then Enter on "Keep worktree".
+    expect(tmux.enters).toEqual(['%1', '%1']);
+    expect(status(A)).toBe('inviato');
+    hook(A, { hook_event_name: 'SessionEnd', reason: 'prompt_input_exit' });
+    expect(registry.agents.get(A)!.commands!.at(-1)).toMatchObject({ kind: 'exit', status: 'confermato', reason: 'session ended' });
+  });
+
+  it('never presses Enter on "Remove worktree", and waits for a session at work', async () => {
+    setup();
+    tmux.panes.get('%1')!.afterEnter = (typed) => (typed === '/exit' ? dialog(2) : box(''));
+    commander.enqueueExit(A);
+    await settle();
+    expect(tmux.enters).toEqual(['%1']);
+    // A session at work gets it only when it is free.
+    registry.agents.get(B)!.state = 'working';
+    commander.enqueueExit(B);
+    await settle();
+    expect(tmux.typed.filter((one) => one.pane === '%2')).toEqual([]);
+    expect(registry.agents.get(B)!.commands!.at(-1)).toMatchObject({ kind: 'exit', status: 'in-coda' });
+  });
+
+  it('is not a command of the page', () => {
+    setup();
+    expect(commander.enqueue(A, 'exit')).toEqual({ ok: false, error: 'unknown command: exit' });
+  });
+});

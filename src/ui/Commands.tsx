@@ -60,7 +60,9 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
               ? `✓ told ${freeWhat(command)}`
             : command.kind === 'compact'
               ? '✓ /compact done'
-              : '✓ /clear done';
+              : command.kind === 'exit'
+                ? '✓ ended: its run is over'
+                : '✓ /clear done';
       break;
     case 'non-confermato':
       text = `${name}: ${command.reason ?? 'no confirmation'}`;
@@ -77,7 +79,7 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
           open
         </button>
       )}
-      {waiting && (
+      {waiting && command.kind !== 'exit' && (
         <button type="button" class="link" title="Cancel the command" onClick={() => store.cancelCommand(agent.id, command.id)}>
           cancel
         </button>

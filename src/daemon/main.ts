@@ -4,7 +4,7 @@ import { chmodSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:f
 import { migrateData, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { contextWindowOf, detectArricurdai, loadConfig, resolveTool, saveConfig } from '../shared/config.ts';
+import { contextWindowOf, detectArricurdai, loadConfig, resolveTool, saveConfig, which } from '../shared/config.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
 import { listPanes, Tmux } from '../shared/tmux.ts';
 import { VERSION } from '../shared/version.ts';
@@ -40,7 +40,9 @@ import { Permissions } from './permissions.ts';
 import { isInteractiveCommand, readCommandLine } from './process.ts';
 import { Registry } from './registry.ts';
 import { createDaemonServer } from './server.ts';
-import { cliApi } from './cli-api.ts';
+import { cliApi, isFolder } from './cli-api.ts';
+import { AUTO_ACTIONS, AUTO_TICK_MS, type AutoAction, Automations } from './automations.ts';
+import { ghRunner, githubItems } from './github.ts';
 import { Ledger, readLedger, whoOf } from './ledger.ts';
 import { describeTeam } from './describe.ts';
 import { createLog } from './log.ts';
@@ -165,6 +167,8 @@ function main(): void {
   let poller: ArricurdaiPoller | undefined;
   let summarizer: Summarizer | undefined;
   let commander: Commander | undefined;
+  /** The teams that start by themselves: made once the queue of the commands and the limits are there. */
+  let automations: Automations | undefined;
   let permissions: Permissions | undefined;
   const attention = new Attention({ notify: (notice) => hub?.notify(notice), stallMs: config.stallMin * 60_000 });
   // What the guard did, by day (var/guard-stats.json): the top line of the app and `forchetta stats`.
@@ -567,6 +571,20 @@ function main(): void {
     },
     onSpawn: (input) => spawnSession({ tmux, registry, claude, log, teamMcp }, input),
     crews: () => crews.summaries(),
+    automations: () => automations?.views() ?? [],
+    onSaveAutomation: (input, id) => {
+      if (!automations) return { ok: false, error: 'the daemon is starting' };
+      // The folder as a session started from the panel keeps it: ~ and the rest resolved.
+      const raw = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+      const cwd = typeof raw.cwd === 'string' && raw.cwd.trim() ? (folderOf(raw.cwd.trim()) ?? raw.cwd) : raw.cwd;
+      return automations.save({ ...raw, cwd }, id);
+    },
+    onDeleteAutomation: (id) => automations?.remove(id) ?? { ok: false, error: 'the daemon is starting' },
+    onAutoAction: (id, action, arg) => {
+      if (!automations) return { ok: false, error: 'the daemon is starting' };
+      if (!AUTO_ACTIONS.includes(action as AutoAction)) return { ok: false, error: `unknown action: ${action}` };
+      return automations.act(id, action as AutoAction, arg);
+    },
     onCrewRequest: (crewId, to, text) => crews.request(crewId, to, text),
     crewThread: (crewId) => crews.thread(crewId),
     crewReviews: (crewId) => crews.reviewsOf(crewId),
@@ -752,6 +770,8 @@ function main(): void {
   crews.onDelivered = (crew, item) => {
     const agentId = crew.agents.lead ?? Object.values(crew.agents)[0];
     if (agentId) hub?.notify({ agentId, kind: 'delivered', title: `${crew.name} delivered`, body: `${item.where ? `${item.where}: ` : ''}${item.summary.split('\n')[0]!.slice(0, 160)}` });
+    // A run of an automation is over: the next one need not wait for the next tick.
+    if (crew.auto) setTimeout(() => void automations?.tick(), 1000);
   };
   const terminals = new Terminals({ token, port: () => config.port, registry, tmux, log });
   commander = new Commander({ registry, tmux, log, notes, onRequest: (_agent, command) => crews.commandChanged(command) });
@@ -782,6 +802,29 @@ function main(): void {
   });
 
   const limits = new Limits();
+  const ghPath = which('gh');
+  automations = new Automations({
+    file: paths.automations,
+    log,
+    crews,
+    templates: () => templates.list(),
+    withRepoRules: withRulesOfRepo,
+    agent: (agentId) => registry.agents.get(agentId),
+    costOf: (agentId) => registry.agents.get(agentId)?.usage?.usd ?? 0,
+    limits: () => limits.info,
+    exit: (agentId) => commander?.enqueueExit(agentId).ok ?? false,
+    cancel: (agentId, commandId) => void commander?.cancel(agentId, commandId),
+    isFolder,
+    github: (cwd, trigger) => {
+      const gh = ghPath ?? which('gh');
+      return gh ? githubItems(ghRunner(gh), cwd, trigger) : Promise.resolve({ ok: false as const, error: 'gh not found: install the GitHub CLI (brew install gh), then run gh auth login' });
+    },
+    notify: (notice) => {
+      log(`${notice.title}: ${notice.body}`);
+      hub?.notify({ agentId: notice.agentId ?? '', kind: 'auto', title: notice.title, body: notice.body });
+    },
+    onChange: () => hub?.automationsChanged(),
+  });
   const server = createDaemonServer({
     registry,
     token,
@@ -905,6 +948,7 @@ function main(): void {
       withRepoRules: withRulesOfRepo,
       log,
       system: () => hub?.system(),
+      ...(automations ? { automations } : {}),
     }),
     info: () => ({ pid: process.pid, port: config.port, startedAt, version: VERSION, agents: registry.agents.size, windows: hub?.size ?? 0, terminals: terminals.size }),
     onShutdown: () => shutdown('asked to stop'),
@@ -1068,6 +1112,8 @@ function main(): void {
         });
       }, QUIET_CHECK_MS),
       setInterval(() => void reconcile('periodic'), config.reconcileIntervalMin * 60_000),
+      // The teams that start by themselves: their runs, their schedules, GitHub.
+      setInterval(() => void automations?.tick(), AUTO_TICK_MS),
       setInterval(() => {
         void countTokens();
         // A team that passed its budget: you are told, once; nothing stops.
@@ -1097,6 +1143,8 @@ function main(): void {
       }, SWEEP_MS),
     );
     void reconcile('start');
+    // The first look of the automations once the sessions are known again (a run at work, its sessions).
+    setTimeout(() => void automations?.tick(), 15_000).unref?.();
   });
 }
 

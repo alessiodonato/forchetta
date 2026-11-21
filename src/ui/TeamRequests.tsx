@@ -462,8 +462,23 @@ function UsageTable({ rows }: { rows: { name: string; lead?: boolean; agent?: Ag
   );
 }
 
-export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: readonly CrewSummary[]; store: Store; onClose: () => void; onNew: () => void; onStudio?: (crewId: string) => void }) {
-  const [crewId, setCrewId] = useState(crews.at(-1)?.id);
+export function TeamPanel({
+  crews,
+  store,
+  onClose,
+  onNew,
+  onStudio,
+  focus,
+}: {
+  crews: readonly CrewSummary[];
+  store: Store;
+  onClose: () => void;
+  onNew: () => void;
+  onStudio?: (crewId: string) => void;
+  /** The team to open on, rather than the last one (a run of an automation, from its panel). */
+  focus?: string;
+}) {
+  const [crewId, setCrewId] = useState(focus ?? crews.at(-1)?.id);
   const crew = crews.find((candidate) => candidate.id === crewId) ?? crews.at(-1);
   const [to, setTo] = useState<string[]>([]);
   const [text, setText] = useState('');
@@ -506,7 +521,7 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
   const usedTokens = used ? tokensTotal(used.tokens) : 0;
   const members = recipients.filter((recipient) => !recipient.lead).map((recipient) => recipient.name);
   const send = (): void => {
-    if (busy || !text.trim()) return;
+    if (busy || !text.trim() || crew.stoppedAt) return;
     atEnd.current = true;
     store.sendCrewRequest(crew.id, to, text);
   };
@@ -535,6 +550,7 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
             }}
           >
             {candidate.name}
+            {candidate.endedAt ? ' (ended)' : candidate.stoppedAt ? ' (stopped)' : ''}
           </button>
         ))}
         <button type="button" class="chip" title="Start a team of Claude Code sessions that work together: a lead and its members" onClick={onNew}>
@@ -566,6 +582,15 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
           edit team
         </button>
       </div>
+      {crew.stoppedAt && (
+        <div class="broadcast-row crew-goal-row">
+          <span class="team-hint crew-stopped">
+            {crew.auto ? `A run of the automation "${crew.auto}", ` : 'This team, '}
+            {crew.endedAt ? 'over and with its sessions ended' : 'over'}
+            {crew.stopReason ? ` (${crew.stopReason})` : ''}: nothing more goes to its sessions. Its thread stays here.
+          </span>
+        </div>
+      )}
       {(crew.deliverable || crew.values) && (
         <div class="broadcast-row crew-goal-row">
           {crew.deliverable && (
@@ -649,7 +674,7 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
         <span class={`broadcast-note${state?.error && state.crewId === crew.id ? ' error' : ''}`}>
           {state?.error && state.crewId === crew.id ? state.error : 'It waits in the queue of each one and is pasted when the session is ready.'}
         </span>
-        <button type="button" class="primary" disabled={busy || !text.trim()} onClick={send}>
+        <button type="button" class="primary" disabled={busy || !text.trim() || !!crew.stoppedAt} title={crew.stoppedAt ? 'The team was stopped: it takes no new request' : undefined} onClick={send}>
           {busy ? 'Sending…' : 'Send'}
         </button>
         <button type="button" class="quiet" onClick={onClose}>

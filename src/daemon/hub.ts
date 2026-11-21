@@ -3,6 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
+import type { AutomationView } from '../shared/automation.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset } from '../shared/crew.ts';
 import type { ReplayData } from '../shared/replay.ts';
@@ -17,7 +18,7 @@ import type { SystemInfo } from '../shared/system.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[] }
   /** The installation (checks, optional features, settings), when it changed. */
   | { type: 'system'; now: number; system: SystemInfo }
   /** How saving the settings went, for the window that asked; what takes effect only after a restart. */
@@ -50,6 +51,10 @@ export type ServerMessage =
   | { type: 'crewEdited'; now: number; ok: boolean; crewId?: string; action: string; error?: string }
   /** The teams of agents, after one was created. */
   | { type: 'crews'; now: number; crews: CrewSummary[] }
+  /** The teams that start by themselves, after any change: their queues, runs, why the next one waits. */
+  | { type: 'automations'; now: number; automations: AutomationView[] }
+  /** How a change of an automation went, for the window that asked. */
+  | { type: 'autoEdited'; now: number; action: string; ok: boolean; id?: string; error?: string; added?: number }
   /** How the start of a team went, for the window that asked. */
   | { type: 'crewCreated'; now: number; ok: boolean; crewId?: string; agentIds?: string[]; error?: string }
   /** The whole thread of a team, for the window that shows it. */
@@ -77,7 +82,7 @@ export type ServerMessage =
   /** The transcript of a subagent, for the window that asked: its steps, or why there are none. */
   | { type: 'subagent'; now: number; agentId: string; key: string; steps: SubagentStep[]; model?: string; skipped?: number; note?: string }
   /** A session waits for you, seems stuck or ended with an error: the app shows a notification of macOS. */
-  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget' | 'approval' | 'delivered'; title: string; body: string };
+  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget' | 'approval' | 'delivered' | 'auto'; title: string; body: string };
 
 /** What the page needs to know of the configuration. */
 export interface UiSettings {
@@ -113,6 +118,11 @@ export type ClientMessage =
   | { type: 'team'; agentId: string; team: unknown }
   /** A new team of agents, as the panel writes it (shared/crew.ts checks it). */
   | { type: 'createCrew'; spec: unknown }
+  /** A team that starts by itself, new or changed (id), as the panel writes it (shared/automation.ts checks it). */
+  | { type: 'saveAutomation'; id?: string; automation: unknown }
+  | { type: 'deleteAutomation'; id: string }
+  /** pause, resume, add (items; a run now; a look at GitHub now), cancel an item, stop the run, retry a run. */
+  | { type: 'autoAction'; id: string; action: string; text?: string; itemId?: string }
   /** A request from you to some recipients of a team; none means all its members. */
   | { type: 'crewRequest'; crewId: string; to: string[]; text: string }
   /** The whole thread of a team. */
@@ -175,6 +185,11 @@ export interface HubOptions {
   onCreateCrew?: (spec: unknown) => Promise<{ ok: boolean; crewId?: string; agentIds?: string[]; error?: string }>;
   /** The teams of agents, for the page. */
   crews?: () => CrewSummary[];
+  /** The teams that start by themselves (daemon/automations.ts), and their changes. */
+  automations?: () => AutomationView[];
+  onSaveAutomation?: (automation: unknown, id?: string) => { ok: boolean; id?: string; error?: string };
+  onDeleteAutomation?: (id: string) => { ok: boolean; error?: string };
+  onAutoAction?: (id: string, action: string, arg: { text?: string; itemId?: string }) => { ok: boolean; error?: string; added?: number };
   /** The whole thread of a team. */
   crewThread?: (crewId: string) => CrewRequest[] | undefined;
   /** The verdicts of the reviewers of a team, with its thread. */
@@ -279,6 +294,7 @@ export class Hub {
       limits: this.limits,
       guardStats: this.guardStats,
       system: this.options.system?.(),
+      automations: this.options.automations?.(),
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -339,6 +355,18 @@ export class Hub {
             },
             (error: unknown) => this.send(ws, { type: 'crewCreated', now: Date.now(), ok: false, error: String(error) }),
           );
+        } else if (message.type === 'saveAutomation' && this.options.onSaveAutomation) {
+          const result = this.options.onSaveAutomation(message.automation, typeof message.id === 'string' ? message.id : undefined);
+          this.send(ws, { type: 'autoEdited', now: Date.now(), action: 'save', ...result });
+        } else if (message.type === 'deleteAutomation' && typeof message.id === 'string' && this.options.onDeleteAutomation) {
+          const result = this.options.onDeleteAutomation(message.id);
+          this.send(ws, { type: 'autoEdited', now: Date.now(), action: 'delete', id: message.id, ...result });
+        } else if (message.type === 'autoAction' && typeof message.id === 'string' && typeof message.action === 'string' && this.options.onAutoAction) {
+          const result = this.options.onAutoAction(message.id, message.action, {
+            ...(typeof message.text === 'string' ? { text: message.text.slice(0, 200_000) } : {}),
+            ...(typeof message.itemId === 'string' ? { itemId: message.itemId } : {}),
+          });
+          this.send(ws, { type: 'autoEdited', now: Date.now(), action: message.action, id: message.id, ...result });
         } else if (message.type === 'crewRequest' && typeof message.crewId === 'string' && typeof message.text === 'string' && this.options.onCrewRequest) {
           const to = Array.isArray(message.to) ? message.to.filter((name): name is string => typeof name === 'string') : [];
           const result = this.options.onCrewRequest(message.crewId, to, message.text);
@@ -552,6 +580,17 @@ export class Hub {
   }
 
   private crewsPending = false;
+  private automationsPending = false;
+
+  /** The automations changed: the page gets them again, once for changes close together. */
+  automationsChanged(): void {
+    if (this.automationsPending) return;
+    this.automationsPending = true;
+    setImmediate(() => {
+      this.automationsPending = false;
+      this.broadcast({ type: 'automations', now: Date.now(), automations: this.options.automations?.() ?? [] });
+    });
+  }
 
   /** A team or one of its requests changed: every window gets the teams again, once per tick. */
   crewsChanged(): void {
@@ -595,7 +634,7 @@ export class Hub {
     this.broadcast({ type: 'claudeUpdate', now: Date.now(), update });
   }
 
-  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget' | 'approval' | 'delivered'; title: string; body: string }): void {
+  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget' | 'approval' | 'delivered' | 'auto'; title: string; body: string }): void {
     this.broadcast({ type: 'notify', now: Date.now(), ...notice });
   }
 

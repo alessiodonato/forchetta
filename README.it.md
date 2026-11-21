@@ -38,7 +38,7 @@ L'app e i comandi da terminale sono in inglese: in questo README pulsanti e mess
 
 Un team è un gruppo di sessioni di Claude Code che lavorano insieme. Nello studio trascini gli agenti su una tela, ognuno con un ruolo, un modello, le sue skill e i suoi strumenti (un browser per il tester, sola lettura per il revisore), e tiri una freccia da ognuno agli agenti che guida. Oppure descrivi il team in una frase, e Claude lo disegna. Prima di avviarlo, lo studio ti segnala cosa nel team lavora contro sé stesso, come un revisore che potrebbe correggere il codice da solo.
 
-Poi lo avvii con un obiettivo. Il capo, una sessione Claude oppure tu, lo divide in richieste; gli altri fanno il lavoro, e chiedono a chi sta sopra quando sono bloccati. Dove vuoi guardare prima tu, segna la freccia: le sue richieste aspettano il tuo sì. Vedi quanto costa ogni agente mentre lavora, e dopo puoi rivedere la run sulla tela. Salva il team come modello, con `{ticket}` per ciò che cambia ogni volta, e riavvialo in un altro progetto.
+Poi lo avvii con un obiettivo. Il capo, una sessione Claude oppure tu, lo divide in richieste; gli altri fanno il lavoro, e chiedono a chi sta sopra quando sono bloccati. Dove vuoi guardare prima tu, segna la freccia: le sue richieste aspettano il tuo sì. Vedi quanto costa ogni agente mentre lavora, e dopo puoi rivedere la run sulla tela. Salva il team come modello, con `{ticket}` per ciò che cambia ogni volta, e riavvialo in un altro progetto. Oppure lascia che parta da solo: le voci di una coda una alla volta, a un'ora fissa, o per ogni issue di GitHub con un'etichetta.
 
 Lo studio c'è anche nel browser, come [Studio Maker](https://forchetta.dev/studio/): disegna un team, esportalo come file, aprilo in Forchetta. [I team nel manuale](https://forchetta.dev/manual.html#teams).
 
@@ -71,7 +71,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.11.1. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.12.0. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
@@ -104,7 +104,7 @@ Comandi a una sessione o a più insieme, testo passato da un terminale all'altro
 
 - **`~/.claude/settings.json`**, solo con `forchetta setup` o `forchetta hooks install`, dopo averti mostrato ogni modifica, e con un backup. Gli hook di Forchetta si aggiungono accanto ai tuoi senza cambiarli; `forchetta hooks uninstall` toglie solo quelli.
 - **Gli hook sono piccoli script `sh` + `curl`.** Terminano sempre con 0 e stampano solo una decisione: la tua risposta a un permesso, o il vigile che ferma una modifica. Con Forchetta spenta, una sessione si comporta esattamente come senza (la sua status line dice che Forchetta è spenta). Quasi tutti girano in background; il vigile fa aspettare Claude circa 30 ms, solo prima delle modifiche ai file e dei comandi Bash. [Come funzionano gli hook](https://forchetta.dev/manual.html#hooks)
-- **Tutto il resto** sta in `~/Library/Application Support/Forchetta`, leggibile solo da te. Il daemon ascolta solo su `127.0.0.1`, con un token. Nessuna telemetria. L'unica chiamata esterna che porta fuori qualcosa di tuo è facoltativa e spenta di default: un riassunto di una riga scritto da Haiku, attraverso la Claude API. Quando parte un team i cui agenti hanno delle skill, Forchetta le scarica da GitHub a un commit fissato, in quella cartella. Un agente a cui dai un server MCP dello studio lo avvia con `npx`, a una versione fissata, scaricata da npm la prima volta. **Describe**, nello studio, manda quello che scrivi a Claude attraverso il tuo Claude Code, come ogni sessione, senza i tuoi file né le tue impostazioni.
+- **Tutto il resto** sta in `~/Library/Application Support/Forchetta`, leggibile solo da te. Il daemon ascolta solo su `127.0.0.1`, con un token. Nessuna telemetria. L'unica chiamata esterna che porta fuori qualcosa di tuo è facoltativa e spenta di default: un riassunto di una riga scritto da Haiku, attraverso la Claude API. Quando parte un team i cui agenti hanno delle skill, Forchetta le scarica da GitHub a un commit fissato, in quella cartella. Un agente a cui dai un server MCP dello studio lo avvia con `npx`, a una versione fissata, scaricata da npm la prima volta. **Describe**, nello studio, manda quello che scrivi a Claude attraverso il tuo Claude Code, come ogni sessione, senza i tuoi file né le tue impostazioni. Un team che parte da GitHub legge le issue o le pull request con il tuo `gh`, e lì non scrive mai.
 - **`~/Library/LaunchAgents/dev.forchetta.daemon.plist`**, solo se lanci `forchetta daemon keepalive on`, perché macOS tenga acceso il daemon.
 - A riposo, app, pagina e daemon insieme restano sotto l'1% della CPU.
 

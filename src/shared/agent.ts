@@ -367,9 +367,10 @@ export const displayName = (agent: Pick<Agent, 'project' | 'team'>): string => a
 /** The commands of the box, and the requests of a team of agents (pasted as a prompt). */
 /**
  * request: of a team of agents; ask: a question about a selection, from the menu of a pane; free: the guard tells a
- * session that a file it was stopped on is free (daemon/guard.ts).
+ * session that a file it was stopped on is free (daemon/guard.ts); exit: /exit of a run of an automation that is
+ * over (daemon/automations.ts), never sent from the page.
  */
-export type CommandKind = 'btw' | 'compact' | 'clear' | 'request' | 'ask' | 'free';
+export type CommandKind = 'btw' | 'compact' | 'clear' | 'request' | 'ask' | 'free' | 'exit';
 
 export type CommandStatus =
   /** Waits for the session to be ready for input. */

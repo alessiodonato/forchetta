@@ -4810,3 +4810,152 @@ header.top .view-switch button:not(.on):hover {
 .palette:focus {
   outline: none;
 }
+
+/* The panel "auto": the teams that start by themselves. Its runs in a list like the thread of a team, a line on the
+   left in the color of what happened: Claude orange at work, gray waiting, green delivered, red failed. */
+.auto-panel .auto-chip-mark {
+  color: var(--claude);
+}
+
+.auto-panel .chip.paused .auto-chip-mark,
+.auto-status.paused {
+  color: var(--accent);
+}
+
+/* An automation paused by Forchetta, after a run that failed: its button in the top line says so. */
+.broadcast-toggle.auto-attention {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.auto-form,
+.auto-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auto-form select {
+  max-width: 280px;
+}
+
+.auto-days {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.auto-time {
+  width: 96px;
+}
+
+.auto-number {
+  width: 56px;
+}
+
+.auto-summary {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.auto-summary strong {
+  color: var(--text);
+}
+
+.auto-status {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.auto-error {
+  margin: 0 0 0 78px;
+}
+
+.auto-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 40vh;
+  margin: 0;
+  padding: 8px 4px 8px 78px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.auto-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--line-strong);
+  font-size: 12.5px;
+}
+
+.auto-item[data-status='running'] {
+  border-left-color: var(--claude);
+}
+
+.auto-item[data-status='done'] {
+  border-left-color: var(--green);
+}
+
+.auto-item[data-status='failed'] {
+  border-left-color: var(--red);
+}
+
+.auto-mark {
+  width: 12px;
+  color: var(--text-3);
+}
+
+.auto-item[data-status='running'] .auto-mark {
+  color: var(--claude);
+}
+
+.auto-item[data-status='done'] .auto-mark {
+  color: var(--green);
+}
+
+.auto-item[data-status='failed'] .auto-mark {
+  color: var(--red);
+}
+
+.auto-limit {
+  white-space: nowrap;
+}
+
+.auto-item-text {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.auto-item-label {
+  overflow: hidden;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.auto-item-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.auto-item-note.error {
+  color: var(--red);
+}
+
+.crew-stopped {
+  color: var(--accent);
+}
+
+.auto-summary .mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}

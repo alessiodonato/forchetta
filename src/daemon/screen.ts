@@ -57,6 +57,25 @@ export function readPromptBox(capture: string): PromptBox {
   return { found: true, typed };
 }
 
+/**
+ * Whether the screen shows the question Claude Code asks at /exit of a session in a worktree with commits or
+ * changes, with "Keep worktree" chosen (verified with 2.1.328):
+ *
+ *   Exiting worktree session
+ *   You have 1 commit on worktree-developer. The branch will be deleted if you remove the worktree.
+ *   ❯ 1. Keep worktree    Stays at …/.claude/worktrees/developer
+ *     2. Remove worktree  All changes and commits will be lost.
+ *
+ * Only then Enter keeps it: the worktree and its branch stay, with the work in them.
+ */
+export function keepsWorktree(capture: string): boolean {
+  const lines = capture.split('\n').map(plain);
+  if (!lines.some((line) => line.trim() === 'Exiting worktree session')) return false;
+  const keep = lines.some((line) => /^\s*❯\s*1\.\s*Keep worktree\b/.test(line));
+  const remove = lines.some((line) => /^\s*❯\s*\d+\.\s*Remove worktree\b/.test(line));
+  return keep && !remove;
+}
+
 /** Whether the screen shows a line with this text (the question of /btw in its answer box, for example). */
 export function screenShows(capture: string, text: string): boolean {
   const flat = capture
