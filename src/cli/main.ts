@@ -12,15 +12,18 @@ import { parseDays, statsCommand } from './stats.ts';
 import { pairs, styleFor, tildify } from './style.ts';
 import { autoCommand } from './auto.ts';
 import { reopenCommand } from './reopen.ts';
+import { flushingOutput } from './output.ts';
 import { teamCommand } from './team.ts';
 import { reportCommand } from './report.ts';
 import { doctorCommand } from './doctor.ts';
 import { installLaunchAgent, launchAgentFile, removeLaunchAgent } from '../daemon/launch-agent.ts';
 import { existsSync } from 'node:fs';
 
+// Everything written goes out before the exit: into a pipe, process.exit() would cut it at 64 KB.
+const output = flushingOutput();
 const io: RunIO = {
-  stdout: (text) => process.stdout.write(text),
-  stderr: (text) => process.stderr.write(text),
+  stdout: output.stdout,
+  stderr: output.stderr,
   style: styleFor(process.stdout),
   errorStyle: styleFor(process.stderr),
 };
@@ -211,9 +214,9 @@ function printError(error: unknown): void {
 }
 
 main(process.argv.slice(2)).then(
-  (status) => process.exit(status),
+  (status) => output.exit(status),
   (error: unknown) => {
     printError(error);
-    process.exit(1);
+    output.exit(1);
   },
 );
