@@ -1,6 +1,7 @@
 import { type AgentTools, hasTools, mcpServerById } from '../shared/agent-tools.ts';
 import { cleanBudget, cleanCrewSpec, type CrewMemberSpec, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, missingParams, paramsText, paramsUsed, pathsText, type RolePreset, type Talk, type TeamParam } from '../shared/crew.ts';
 import { skillById, SKILLS_PER_AGENT_MAX } from '../shared/skills.ts';
+import { teamChecks } from '../shared/team-checks.ts';
 
 // The studio of teams (Studio.tsx draws it): a canvas with "You" on top and a box for each agent, linked by arrows.
 // An arrow goes from the one who leads to the one who reports to it, and carries the relation of the two: → / ⇄ and
@@ -264,6 +265,20 @@ export function problems(doc: StudioDoc, start = false): string[] {
   if ('error' in checked) return [checked.error];
   const missing = start ? missingParams(checked.spec) : [];
   return missing.length > 0 ? [`Give a value to ${paramsText(missing)}: the team needs ${missing.length === 1 ? 'it' : 'them'} to start.`] : [];
+}
+
+/**
+ * What does not hold together in the team of the canvas (shared/team-checks.ts), with the boxes it is about: worth a
+ * look before it starts, but it does not stop it. Empty while the canvas is not a team yet.
+ */
+export function checksOfDoc(doc: StudioDoc): { text: string; keys: number[] }[] {
+  // The folder does not change what holds together: a canvas without one yet is checked too.
+  const whole = doc.folder.trim() ? doc : { ...doc, folder: '/' };
+  if (problems(whole).length > 0) return [];
+  const checked = specOfDoc(whole);
+  if ('error' in checked) return [];
+  const keyOf = new Map(doc.nodes.map((node) => [node.name.trim(), node.key]));
+  return teamChecks(checked.spec).map((check) => ({ text: check.text, keys: check.who.flatMap((name) => (keyOf.has(name) ? [keyOf.get(name)!] : [])) }));
 }
 
 /** The parameters the texts of the canvas use, with what each one is and its default. */

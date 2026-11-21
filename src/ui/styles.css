@@ -3694,6 +3694,26 @@ header.top .view-switch button:not(.on):hover {
   color: var(--claude);
 }
 
+/* Something in its settings works against itself (shared/team-checks.ts): it starts anyway. */
+.studio-warn {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: help;
+}
+
+.studio-checks li {
+  color: var(--accent);
+}
+
+.team-checks {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--accent);
+}
+
 /* The dot to pull an arrow from: under the box, in the middle. */
 .studio-handle {
   position: absolute;

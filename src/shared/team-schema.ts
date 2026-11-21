@@ -1,6 +1,7 @@
 import { MCP_SERVERS, TOOL_LIMITS } from './agent-tools.ts';
 import { CREW_MAX_MEMBERS, CREW_NAME_MAX, DELIVERABLE_MAX, MEMBER_NAME_MAX, MODELS, MODES, PARAM_HINT_MAX, PARAMS_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, RULES_MAX, VALUE_MAX } from './crew.ts';
 import { SKILLS, SKILLS_PER_AGENT_MAX } from './skills.ts';
+import { TEAM_CHECKS_GUIDE } from './team-checks.ts';
 
 // A template of a team as JSON Schema, with what each field is for: the tool save_team_template of the MCP server
 // of Forchetta takes it (mcp/team.ts), and a team drawn from a description comes back in this shape
@@ -147,4 +148,5 @@ export const TEMPLATE_GUIDE = [
   'Forchetta adds by itself who the lead and the members are and how requests, answers and questions travel between them (the tools send_request, wait_for_answers and ask_lead): the roles say only what each one does. Rules the whole team shares, longer than a role (the conventions of the project, how to commit, what never to do), go in rules: every session of the team gets them in its system prompt, and nothing is written in the folder of the project.',
   'The org chart can have more levels: a member reports to the lead, or to another member (reportsTo), which then leads it, gives it requests and gets its answers; a junior under a senior under the lead. Each one talks only with the one it reports to and with those that report to it. The relation of a member with the one it reports to can have its own prompt (relation): how the two work together, what goes down, what comes back, when to ask; both read it. Put there what is said about that link (formats of requests and reports, rules), not in the roles.',
   'Give an agent tools only where its role needs them (a browser for a tester of a web app; read-only and no-push for a reviewer), a checkpoint of the user (approve) only where one is asked, parameters ({ticket}) for what changes each time the team starts, and a deliverable when the work has one result.',
+  TEAM_CHECKS_GUIDE,
 ].join(' ');

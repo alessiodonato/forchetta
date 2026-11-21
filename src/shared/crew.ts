@@ -1006,7 +1006,7 @@ export const BUILTIN_ROLES: readonly RolePreset[] = [
   { name: 'tester', builtin: true, model: 'sonnet', skills: ['webapp-testing', 'property-based-testing'], tools: { mcp: ['playwright'] }, role: 'Writes and runs the tests of what it is asked, end to end where it matters, and reports what fails with how to reproduce it.' },
   { name: 'frontend', builtin: true, model: 'sonnet', skills: ['frontend-design', 'accessibility-engineering'], role: 'Builds the user interface it is asked for, following the conventions of the project.' },
   { name: 'backend', builtin: true, model: 'sonnet', skills: ['test-driven-development', 'security-and-hardening', 'performance-optimization'], role: 'Builds the server side it is asked for: data, logic and API, with tests.' },
-  { name: 'researcher', builtin: true, model: 'sonnet', role: 'Finds the facts it is asked for, checks them against the sources, and reports them with where they come from.' },
+  { name: 'researcher', builtin: true, model: 'sonnet', tools: { limits: ['read-only'] }, role: 'Finds the facts it is asked for, checks them against the sources, and reports them with where they come from.' },
   { name: 'writer', builtin: true, model: 'sonnet', role: 'Writes the text it is asked for, clear and short, from what the request gives it.' },
 ];
 
@@ -1102,7 +1102,7 @@ export const BUILTIN_TEMPLATES: readonly CrewTemplate[] = [
     lead: { kind: 'claude', name: 'lead', role: 'Split the topic into questions for the researcher, then have the writer turn what came back into the text asked.' },
     talk: 'twoway',
     members: [
-      { name: 'researcher', role: 'Find the facts you are asked for, check them against the sources, and report them with where they come from.' },
+      { name: 'researcher', ...skillsOfRole('researcher'), role: 'Find the facts you are asked for, check them against the sources, and report them with where they come from.' },
       { name: 'writer', role: 'Write the text you are asked for, clear and short, from what the request gives you.', talk: 'oneway' },
     ],
   },

@@ -129,7 +129,7 @@ async function listTeams(args: readonly string[], io: RunIO): Promise<number> {
 
 type StartAnswer =
   | { ok: true; ask: SkillToFetch[] }
-  | { ok: true; crewId: string; name: string; agentIds: string[]; notes: string[]; warning?: string; goal?: { n: number; to: string[] }; goalError?: string }
+  | { ok: true; crewId: string; name: string; agentIds: string[]; notes: string[]; warning?: string; checks?: string[]; goal?: { n: number; to: string[] }; goalError?: string }
   | { ok: false; error: string };
 
 /**
@@ -210,6 +210,8 @@ async function startTeam(all: readonly string[], io: RunIO): Promise<number> {
   io.stdout(`${s.mark('✓', 'green', `Team ${s.bold(answer.name)} started in ${tildify(cwd)}${s.dim(from)}: ${answer.agentIds.length} ${answer.agentIds.length === 1 ? 'session' : 'sessions'}.`)}\n`);
   for (const note of answer.notes) io.stdout(`  ${s.dim('·')} ${note}\n`);
   if (answer.warning) io.stdout(`${s.mark('▲', 'amber', answer.warning)}\n`);
+  // What does not hold together in the team: it started anyway.
+  for (const check of answer.checks ?? []) io.stdout(`${s.mark('▲', 'amber', check)}\n`);
   if (answer.goal) io.stdout(`${s.mark('→', 'claude', `Goal sent to ${answer.goal.to.join(', ')} (request #${answer.goal.n}).`)}\n`);
   if (answer.goalError) io.stdout(`${s.mark('✗', 'red', `The goal was not sent: ${answer.goalError}`)}\n`);
   io.stdout(`  ${code('Follow it in the app, or with `forchetta team ls`.', s)}\n`);

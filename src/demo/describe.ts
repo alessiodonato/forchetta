@@ -25,7 +25,7 @@ export function demoDescribe(text: string, roles: readonly RolePreset[] = BUILTI
     const { builtin: _builtin, modified: _modified, ...fields } = preset(name);
     return { ...fields, ...extra };
   };
-  const approve = /approv|check(point)?|ok\b/.test(words);
+  const approve = /approv|\bcheck(point)?s?\b|\bok\b/.test(words);
   const members: CrewMemberSpec[] = names.flatMap((name) => (name === 'senior' ? [member('senior', approve ? { approve: true } : {}), member('junior', { reportsTo: 'senior' })] : [member(name, approve && name !== 'reviewer' ? { approve: true } : {})]));
   // "A team to add a CSV export to the orders page…" → "add a CSV export".
   const words2 = text
@@ -39,6 +39,7 @@ export function demoDescribe(text: string, roles: readonly RolePreset[] = BUILTI
     name: title,
     lead: { kind: 'claude', name: 'lead', model: 'opus', role: `Turns the goal into requests for the members (${names.join(', ')}), follows their work, checks it and tells the user what is done.` },
     talk: 'twoway',
+    worktrees: true,
     members,
     ...(/pull request|\bpr\b/.test(words) ? { deliverable: 'a pull request with the change, its tests passing' } : {}),
   });

@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.11.0. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.11.1. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -378,7 +378,7 @@ forchetta setup</pre>
         <p><span class="ui">Describe…</span>, at the top of the studio, takes a sentence or a few: what the team is for, and who does what if you know (“a team to move the frontend to React 19: a lead that plans, two developers on separate folders, a tester with a browser, a reviewer that approves before the merge”). Claude draws it on the canvas, with roles, models, skills, tools, arrows and their relations, starting from your presets. It replaces what is on the canvas (<kbd>⌘</kbd><kbd>Z</kbd> brings that back); change what you like, then <span class="ui">Create team</span> or <span class="ui">Save as template</span>. Nothing starts before that.</p>
         <ul>
           <li>It runs your Claude Code in print mode (<code>claude -p</code>, Sonnet), with your account and your plan, but alone: <code>--safe-mode</code> (none of your <code>CLAUDE.md</code>, memory, skills, plugins or MCP servers), no tools, no hooks, nothing kept of the conversation. It usually takes 20 to 60 seconds and a few cents.</li>
-          <li>Forchetta checks the team as it checks every template; one it refuses goes back to Claude once, with the reason. A name you already have gets a number.</li>
+          <li>Forchetta checks the team as it checks every template; one it refuses goes back to Claude once, with the reason, and so does one that works against itself (<a href="#studio-checks">the checks before it starts</a>): if the second answer is worse, the first stays. A name you already have gets a number.</li>
           <li>The <a href="studio/">Studio Maker</a> has no Claude of its own: <span class="ui">Copy the prompt for Claude</span> copies the whole request, to paste in a chat with Claude; its answer goes in <span class="ui">Import</span>.</li>
         </ul>
 
@@ -389,7 +389,7 @@ forchetta setup</pre>
           <li><strong>MCP servers</strong> from a small catalog, each pinned to a version: a <strong>browser</strong> (Playwright MCP 0.0.84), <strong>Chrome DevTools</strong> (chrome-devtools-mcp 1.12.0, its usage statistics off) and <strong>library docs</strong> (Context7 4.5.1, which asks <code>context7.com</code>). Drag one from <strong>Tools</strong>, on the left, onto an agent, or add it from its tools. Its session gets it in its own MCP configuration, run with <code>npx</code> at that version (fetched from npm the first time), with its tools allowed without asking for that agent. The browsers run headless, with a profile that is not kept, so that several agents can use one at once.</li>
           <li><span class="ui">none of your MCP servers</span>: the agent starts with only its own and those of the team (<code>--strict-mcp-config</code>), not the ones of your Claude Code.</li>
         </ul>
-        <p>The presets of Forchetta give the reviewer <em>read only</em> and <em>no git push</em>, and the tester a browser. The lead sees what each member has. A team file carries only the names of the catalog, never a command: opening a team from someone else runs nothing new.</p>
+        <p>The presets of Forchetta give the reviewer <em>read only</em> and <em>no git push</em>, the researcher <em>read only</em>, and the tester a browser. The lead sees what each member has. A team file carries only the names of the catalog, never a command: opening a team from someone else runs nothing new.</p>
 
         <h4 id="approvals">You approve before it goes on</h4>
         <p>On an arrow from an agent to one it leads, <span class="ui">you approve its requests first</span> makes a point of the chart where you look: every request sent along it waits for your yes, and the arrow says <span class="ui">· you approve</span>. The plan of the lead before the developers build it, say. Your own requests go at once.</p>
@@ -405,6 +405,17 @@ forchetta setup</pre>
           <li><strong>Its first goal</strong>: what to do first, sent to the lead as soon as the team starts (to every member when you lead), like <code>--goal</code>.</li>
           <li><strong>It delivers</strong>: what the team hands over when its work is done, in a line (a pull request, <code>docs/report.md</code>, a report). The Claude lead gets one more tool, <code>deliver</code>, and calls it when the work is ready and checked: you are told, and the team panel says <span class="ui">✓ delivered</span>, with where it is.</li>
         </ul>
+
+        <h4 id="studio-checks">What it checks before it starts</h4>
+        <p>Some settings work against each other, and a team made so would find out only at work. The studio marks them with an amber <span class="ui">▲</span> on the boxes they are about, lists them under <span class="ui">Worth checking</span> in the column of the team, and says the first one in the line at the bottom. They do not stop it: the team starts anyway.</p>
+        <ul>
+          <li>A member in a worktree of its own that writes but has <em>no shell</em>: it cannot commit, so the one it reports to never sees its work.</li>
+          <li>A reviewer with <em>no shell</em> (without <code>git log</code> and <code>git diff</code> it cannot see the commits); one with no one else in the team who writes and commits; one that can change the files, which may fix the code itself instead of approving it or sending it back (give it <em>read only</em>).</li>
+          <li>A team that delivers a pull request, or something pushed, when no agent can <code>git push</code>.</li>
+          <li>A team that delivers something when you lead it: only a Claude lead says when it is delivered.</li>
+          <li>Two members that change files in the folder of the team at the same time, none with files of its own or a worktree. One above the other does not count: it waits for the one below.</li>
+        </ul>
+        <p>Only what follows from the settings, never a guess from the words of a role. The panel <span class="ui">New team</span> shows the same ones above <span class="ui">Create team</span>, and <code>forchetta team start</code> prints them once the team started.</p>
 
         <h4 id="studio-canvas">A canvas for large teams</h4>
         <ul>
@@ -538,7 +549,7 @@ forchetta setup</pre>
 
         <h3>Limits</h3>
         <ul>
-          <li>6 members per team, the lead aside, on any number of levels; team names are unique.</li>
+          <li>50 members per team, the lead aside, on any number of levels; team names are unique.</li>
           <li>20 requests open at once in a team: a lead cannot hand out more work than you can follow.</li>
           <li>20,000 characters per request.</li>
         </ul>

@@ -34,7 +34,7 @@ Drag the agents onto a canvas, draw who leads whom, and start the team in your p
 
 <img src="docs/img/studio.png" alt="The studio of Forchetta: agents on the left, a team on the canvas with you above the manager, the manager leading a senior and a reviewer, the senior leading a junior; on the right, the junior's role, model and skills." width="100%">
 
-A team is a few Claude Code sessions that work together. In the studio you drag the agents onto a canvas, each with a role, a model, its skills and its tools (a browser for the tester, read-only for the reviewer), and pull an arrow from each one to the agents it leads. Or describe the team in a sentence, and Claude draws it.
+A team is a few Claude Code sessions that work together. In the studio you drag the agents onto a canvas, each with a role, a model, its skills and its tools (a browser for the tester, read-only for the reviewer), and pull an arrow from each one to the agents it leads. Or describe the team in a sentence, and Claude draws it. Before you start it, the studio points out what in it works against itself, like a reviewer that could fix the code itself.
 
 Then you start it with a goal. The lead, a Claude session or you, splits it into requests; the others do the work, and ask the one above them when they're stuck. Where you want to look first, mark the arrow: its requests wait for your yes. You see what each agent costs while it works, and afterwards you can replay the run on the canvas. Save the team as a template, with `{ticket}` for what changes each time, and start it again in another project.
 
@@ -69,7 +69,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.11.0. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.11.1. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

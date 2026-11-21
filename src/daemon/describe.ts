@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import type { CrewTemplate, RolePreset } from '../shared/crew.ts';
 import { DESCRIBE_MAX, DESCRIBE_SYSTEM, describePrompt, templateOfAnswer } from '../shared/describe.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
+import { teamChecks } from '../shared/team-checks.ts';
 import { TEMPLATE_SCHEMA } from '../shared/team-schema.ts';
 
 // A team drawn from a sentence of the studio (shared/describe.ts): Claude Code in print mode writes its template.
@@ -10,7 +11,9 @@ import { TEMPLATE_SCHEMA } from '../shared/team-schema.ts';
 // (--safe-mode: no CLAUDE.md, no memory, no skills, plugins or MCP servers), no tools (--tools ""), no hook (so it
 // is not a session of Forchetta and the guard is not asked), nothing kept of the conversation, in an empty private
 // folder. Its answer must follow the schema of
-// a template (--json-schema), and Forchetta checks it again; a wrong one is asked to be fixed, once.
+// a template (--json-schema), and Forchetta checks it again; a wrong one is asked to be fixed, once. A team that
+// works against itself (shared/team-checks.ts) goes back once too, with what does not hold together; if the second
+// answer is refused, the first one stays.
 
 export const DESCRIBE_MODEL = 'sonnet';
 /** How long a team may take to be drawn, and what it may cost at most (it costs a few cents). */
@@ -123,27 +126,46 @@ export async function describeTeam(
   const env = describeEnv();
   let prompt = describePrompt(description, options.roles);
   let usd = 0;
-  // A template Forchetta refuses goes back once, with the reason.
+  // The first team, when it went back only for its warnings: it stays if the second answer is refused.
+  let first: CrewTemplate | undefined;
+  const started = Date.now();
+  const drawn = (template: CrewTemplate, cost: { usd?: number }): DescribeResult => {
+    // A name of a template you have gets a number: drawing never replaces one.
+    const taken = new Set((options.templates ?? []).map((one) => one.name.toLowerCase()));
+    let name = template.name;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${template.name.slice(0, 36)} ${n}`;
+    const warnings = teamChecks(template).length;
+    options.log(
+      `describe a team: "${name}" drawn in ${Math.round((Date.now() - started) / 1000)} s, ${template.members.length + (template.lead.kind === 'claude' ? 1 : 0)} agents${usd > 0 ? `, $${usd.toFixed(3)}` : ''}${warnings > 0 ? `, ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : ''}`,
+    );
+    return { ok: true, template: { ...template, name }, ...cost };
+  };
+  // A template Forchetta refuses, or one that works against itself, goes back once, with the reason.
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const started = Date.now();
     const result = await run(args, prompt, { cwd: dir, env, timeoutMs: DESCRIBE_TIMEOUT_MS });
     const output = readOutput(result.stdout);
     usd += output.usd ?? 0;
     const cost = usd > 0 ? { usd: Math.round(usd * 10_000) / 10_000 } : {};
     if (output.error || result.code !== 0) {
       const why = output.error ?? (result.stderr.trim().split('\n').at(-1) || `claude ended with code ${result.code}`);
+      if (first) {
+        options.log(`describe a team: the second answer failed (${why}): the first one stays`, 'warn');
+        return drawn(first, cost);
+      }
       options.log(`describe a team: ${why}`, 'warn');
       return { ok: false, error: `Claude could not draw it: ${why}`, ...cost };
     }
     const checked = templateOfAnswer(output.answer);
     if ('template' in checked) {
-      // A name of a template you have gets a number: drawing never replaces one.
-      const taken = new Set((options.templates ?? []).map((template) => template.name.toLowerCase()));
-      let name = checked.template.name;
-      for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${checked.template.name.slice(0, 36)} ${n}`;
-      options.log(`describe a team: "${name}" drawn in ${Math.round((Date.now() - started) / 1000)} s, ${checked.template.members.length + (checked.template.lead.kind === 'claude' ? 1 : 0)} agents${usd > 0 ? `, $${usd.toFixed(3)}` : ''}`);
-      return { ok: true, template: { ...checked.template, name }, ...cost };
+      const checks = teamChecks(checked.template);
+      // The second one, unless it holds together less than the first.
+      if (first) return drawn(checks.length > teamChecks(first).length ? first : checked.template, cost);
+      if (checks.length === 0 || attempt === 2) return drawn(checked.template, cost);
+      first = checked.template;
+      prompt = `${describePrompt(description, options.roles)}\n\nForchetta warns about your last answer, as it would warn the user before the team starts:\n${checks.map((check) => `- ${check.text}`).join('\n')}\nWrite the whole team again with these fixed, unless the description asks for them as they are.\nYour last answer:\n${JSON.stringify(checked.template).slice(0, 20_000)}`;
+      continue;
     }
+    if (first) return drawn(first, cost);
     if (attempt === 2) return { ok: false, error: `Claude drew a team Forchetta cannot open: ${checked.error}`, ...cost };
     prompt = `${describePrompt(description, options.roles)}\n\nYour last answer was refused by Forchetta: ${checked.error}. Write the whole team again, fixed.\nYour last answer:\n${JSON.stringify(output.answer).slice(0, 20_000)}`;
   }

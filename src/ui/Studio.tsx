@@ -19,6 +19,7 @@ import {
   addTemplate,
   addTool,
   canvasSize,
+  checksOfDoc,
   clampZoom,
   clipOf,
   contentBox,
@@ -1170,6 +1171,9 @@ export function Studio({
   const spawn = store.state.crewSpawn;
   const edit = store.state.crewEdit;
   const issues = problems(maker ? { ...doc, folder: doc.folder.trim() || '/' } : doc, !maker && !live);
+  // What does not hold together, worth a look before it starts: it does not stop it.
+  const checks = checksOfDoc(doc);
+  const checksOf = (key: number): string[] => checks.filter((check) => check.keys.includes(key)).map((check) => check.text);
   const lead = leadKey(doc);
   // What goes on along each arrow of a running team: a request in the queue or at work, an answer, a question.
   const lineStates = crew ? linkStates(crew) : new Map<string, LinkKind>();
@@ -2127,6 +2131,11 @@ export function Studio({
                 <div class="studio-node-head">
                   <strong>{node.name.trim() || 'unnamed'}</strong>
                   {lead === node.key && <span class="studio-tag">lead</span>}
+                  {!frame && checksOf(node.key).length > 0 && (
+                    <span class="studio-warn" title={checksOf(node.key).join('\n')} aria-label={`Worth checking: ${checksOf(node.key).join(' ')}`}>
+                      ▲
+                    </span>
+                  )}
                 </div>
                 <p class="studio-node-role">{firstLine(node.role) || 'No role yet: click to write it'}</p>
                 <div class="studio-node-traits">{traits.join(' · ') || 'default model and permissions'}</div>
@@ -2291,6 +2300,13 @@ export function Studio({
                 ? `Reports to ${fromName(doc, incoming(doc, selectedNode.key)!.from)}.`
                 : 'Not connected yet: drag an arrow onto it from the one it reports to.'}
             </p>
+            {checksOf(selectedNode.key).length > 0 && (
+              <ul class="studio-list studio-checks" aria-label="Worth checking">
+                {checksOf(selectedNode.key).map((text) => (
+                  <li key={text}>{text}</li>
+                ))}
+              </ul>
+            )}
             <AgentForm
               fields={selectedNode}
               worktrees={doc.worktrees}
@@ -2473,6 +2489,17 @@ export function Studio({
                 {doc.folder.trim() ? `"Create team" starts ${doc.nodes.length} sessions in ${lastPart(doc.folder)}.` : 'Choose its folder, then "Create team".'}
               </p>
             )}
+            {checks.length > 0 && (
+              <>
+                <p class="studio-section">Worth checking</p>
+                <ul class="studio-list studio-checks">
+                  {checks.map((check) => (
+                    <li key={check.text}>{check.text}</li>
+                  ))}
+                </ul>
+                <p class="studio-hint">It starts anyway: these are what in its settings works against itself.</p>
+              </>
+            )}
             {skillsUsed.ids.length > 0 && (
               <p class="studio-hint">
                 Skills: {skillsUsed.ids.length} ({skillsUsed.kb >= 1000 ? `${(skillsUsed.kb / 1024).toFixed(1)} MB` : `${skillsUsed.kb} KB`}), downloaded the first time a team uses them, into Forchetta and not into the project; then kept for the next teams.
@@ -2491,9 +2518,11 @@ export function Studio({
               ? 'Running: a box says what its agent does, an arrow what goes along it. Add an agent by dragging it here and drawing its arrow.'
               : issues.length > 0
                 ? issues[0]
-                : maker
-                  ? 'Ready: "Export" saves it as a file; in Forchetta, "Import" opens it. This browser keeps the canvas as you go.'
-                  : 'Ready: "Create team" starts it, "Save as template" keeps it.')}
+                : checks.length > 0
+                  ? `Ready, but worth checking${checks.length > 1 ? ` (${checks.length})` : ''}: ${checks[0]!.text}`
+                  : maker
+                    ? 'Ready: "Export" saves it as a file; in Forchetta, "Import" opens it. This browser keeps the canvas as you go.'
+                    : 'Ready: "Create team" starts it, "Save as template" keeps it.')}
         </span>
       </footer>
 

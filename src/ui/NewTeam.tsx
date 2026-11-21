@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import type { AgentTools } from '../shared/agent-tools.ts';
 import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, missingParams, PATH_MAX, PATHS_MAX, paramsUsed, pathsText, RELATION_MAX, ROLE_MAX, RULES_MAX, type Talk, treeOrder, VALUE_MAX } from '../shared/crew.ts';
+import { teamChecks } from '../shared/team-checks.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
@@ -259,6 +260,8 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
   const drafted = specOf({ name, folder: folder || '/', leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, leadTools, talk, worktrees, rules, kept: { ...kept, values }, members });
   const used = paramsUsed(drafted).map((param) => kept.params?.find((one) => one.name === param) ?? { name: param });
   const missing = missingParams(drafted);
+  // What does not hold together in it: worth a look, but it starts anyway.
+  const checks = teamChecks(drafted);
   const ready = name.trim() !== '' && folder.trim() !== '' && members.length > 0 && members.every((draft) => draft.name.trim() !== '') && missing.length === 0;
   const leadLabel = leadKind === 'you' ? 'you' : leadName.trim() || 'lead';
   const nameOf = (key: number | undefined): string => {
@@ -598,6 +601,17 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
               />
             </label>
           ))}
+        </div>
+      )}
+
+      {checks.length > 0 && (
+        <div class="broadcast-row top">
+          <span class="broadcast-label">Worth checking</span>
+          <ul class="team-checks">
+            {checks.map((check) => (
+              <li key={check.text}>{check.text}</li>
+            ))}
+          </ul>
         </div>
       )}
 

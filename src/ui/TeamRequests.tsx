@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { type CrewSummary, type DeliveryStatus, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, ROLE_MAX, type Talk, type ThreadEntry, threadOf } from '../shared/crew.ts';
+import { CREW_MAX_MEMBERS, type CrewSummary, type DeliveryStatus, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, ROLE_MAX, type Talk, type ThreadEntry, threadOf } from '../shared/crew.ts';
 import type { Agent } from '../shared/agent.ts';
 import { crewUsage, shortTokens, tokensDetail, tokensTotal, usdText } from '../shared/present.ts';
 import { MODELS } from './NewSession.tsx';
@@ -388,7 +388,8 @@ function EditTeam({ crew, store }: { crew: CrewSummary; store: Store }) {
         <button
           type="button"
           class="primary"
-          disabled={busy || !name.trim() || members.length >= 6}
+          disabled={busy || !name.trim() || members.length >= CREW_MAX_MEMBERS}
+          title={members.length >= CREW_MAX_MEMBERS ? `${CREW_MAX_MEMBERS} members at most` : undefined}
           onClick={() =>
             store.editCrew(crew.id, { action: 'add', member: { name: name.trim(), role: role.trim(), talk, ...(model ? { model } : {}), ...(under && leaders.includes(under) ? { reportsTo: under } : {}) } })
           }

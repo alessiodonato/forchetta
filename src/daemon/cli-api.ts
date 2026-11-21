@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import { type Crew, type CrewSpec, type CrewTemplate, type ReviewRecord, cleanBudget, cleanCrewSpec, fillParams, leadName, templateOf, threadOf } from '../shared/crew.ts';
 import type { Agent, AgentState, TokenUsage } from '../shared/agent.ts';
 import { activity, sumTokens, tokensTotal } from '../shared/present.ts';
+import { teamChecks } from '../shared/team-checks.ts';
 import { teamFileName, teamFileOf } from '../shared/team-file.ts';
 import type { CreateResult, Result } from './crews.ts';
 import type { SkillToFetch } from './team-files.ts';
@@ -207,7 +208,18 @@ export function cliApi(deps: CliApiDeps): (method: string, path: string, query: 
         else goalError = sent.error;
       }
       deps.log(`team "${name}" started from the command line in ${cwd}${goal ? ` with its goal (#${goal.n})` : ''}`);
-      return ok({ crewId: created.crewId, name, agentIds: created.agentIds ?? [], notes, ...(created.error ? { warning: created.error } : {}), ...(goal ? { goal } : {}), ...(goalError ? { goalError } : {}) });
+      // What does not hold together in it (shared/team-checks.ts): it started anyway.
+      const checks = teamChecks(checked.spec).map((check) => check.text);
+      return ok({
+        crewId: created.crewId,
+        name,
+        agentIds: created.agentIds ?? [],
+        notes,
+        ...(created.error ? { warning: created.error } : {}),
+        ...(checks.length > 0 ? { checks } : {}),
+        ...(goal ? { goal } : {}),
+        ...(goalError ? { goalError } : {}),
+      });
     }
     return undefined;
   };
