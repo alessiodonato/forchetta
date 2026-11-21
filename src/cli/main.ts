@@ -11,6 +11,7 @@ import { defaultAppDir, setupCommand } from './setup.ts';
 import { parseDays, statsCommand } from './stats.ts';
 import { pairs, styleFor, tildify } from './style.ts';
 import { autoCommand } from './auto.ts';
+import { reopenCommand } from './reopen.ts';
 import { teamCommand } from './team.ts';
 import { reportCommand } from './report.ts';
 import { doctorCommand } from './doctor.ts';
@@ -158,6 +159,8 @@ async function main(argv: string[]): Promise<number> {
       return teamCommand(rest, io);
     case 'auto':
       return autoCommand(rest, io);
+    case 'reopen':
+      return reopenCommand(rest, io);
     case 'report':
       return reportCommand(rest, io);
     case 'hooks': {

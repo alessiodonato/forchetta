@@ -4,6 +4,7 @@ import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
 import type { AutomationView } from '../shared/automation.ts';
+import type { LostSession } from '../shared/reopen.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset } from '../shared/crew.ts';
 import type { ReplayData } from '../shared/replay.ts';
@@ -18,7 +19,7 @@ import type { SystemInfo } from '../shared/system.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[] }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[]; reopen?: LostSession[] }
   /** The installation (checks, optional features, settings), when it changed. */
   | { type: 'system'; now: number; system: SystemInfo }
   /** How saving the settings went, for the window that asked; what takes effect only after a restart. */
@@ -53,6 +54,10 @@ export type ServerMessage =
   | { type: 'crews'; now: number; crews: CrewSummary[] }
   /** The teams that start by themselves, after any change: their queues, runs, why the next one waits. */
   | { type: 'automations'; now: number; automations: AutomationView[] }
+  /** The sessions that ended with the Mac, to reopen, after any change. */
+  | { type: 'reopenList'; now: number; sessions: LostSession[] }
+  /** How reopening went, for the window that asked: the sessions that reopened, and why the others did not. */
+  | { type: 'reopened'; now: number; reopened: { agentId: string; newAgentId: string; name: string }[]; failed: { agentId: string; name: string; error: string }[] }
   /** How a change of an automation went, for the window that asked. */
   | { type: 'autoEdited'; now: number; action: string; ok: boolean; id?: string; error?: string; added?: number }
   /** How the start of a team went, for the window that asked. */
@@ -118,6 +123,9 @@ export type ClientMessage =
   | { type: 'team'; agentId: string; team: unknown }
   /** A new team of agents, as the panel writes it (shared/crew.ts checks it). */
   | { type: 'createCrew'; spec: unknown }
+  /** Sessions that ended, each on its conversation again; or not now (all of them, or these). */
+  | { type: 'reopen'; agentIds: string[] }
+  | { type: 'dismissReopen'; agentIds?: string[] }
   /** A team that starts by itself, new or changed (id), as the panel writes it (shared/automation.ts checks it). */
   | { type: 'saveAutomation'; id?: string; automation: unknown }
   | { type: 'deleteAutomation'; id: string }
@@ -185,6 +193,10 @@ export interface HubOptions {
   onCreateCrew?: (spec: unknown) => Promise<{ ok: boolean; crewId?: string; agentIds?: string[]; error?: string }>;
   /** The teams of agents, for the page. */
   crews?: () => CrewSummary[];
+  /** The sessions that ended with the Mac (daemon/reopen.ts), reopening them, not now. */
+  reopenList?: () => LostSession[];
+  onReopen?: (agentIds: string[]) => Promise<{ reopened: { agentId: string; newAgentId: string; name: string }[]; failed: { agentId: string; name: string; error: string }[] }>;
+  onDismissReopen?: (agentIds?: string[]) => void;
   /** The teams that start by themselves (daemon/automations.ts), and their changes. */
   automations?: () => AutomationView[];
   onSaveAutomation?: (automation: unknown, id?: string) => { ok: boolean; id?: string; error?: string };
@@ -295,6 +307,7 @@ export class Hub {
       guardStats: this.guardStats,
       system: this.options.system?.(),
       automations: this.options.automations?.(),
+      reopen: this.options.reopenList?.(),
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -355,6 +368,14 @@ export class Hub {
             },
             (error: unknown) => this.send(ws, { type: 'crewCreated', now: Date.now(), ok: false, error: String(error) }),
           );
+        } else if (message.type === 'reopen' && Array.isArray(message.agentIds) && this.options.onReopen) {
+          const ids = message.agentIds.filter((id): id is string => typeof id === 'string').slice(0, 200);
+          void this.options.onReopen(ids).then(
+            (outcome) => this.send(ws, { type: 'reopened', now: Date.now(), ...outcome }),
+            (error: unknown) => this.send(ws, { type: 'reopened', now: Date.now(), reopened: [], failed: ids.map((agentId) => ({ agentId, name: agentId.slice(0, 8), error: String(error) })) }),
+          );
+        } else if (message.type === 'dismissReopen' && this.options.onDismissReopen) {
+          this.options.onDismissReopen(Array.isArray(message.agentIds) ? message.agentIds.filter((id): id is string => typeof id === 'string') : undefined);
         } else if (message.type === 'saveAutomation' && this.options.onSaveAutomation) {
           const result = this.options.onSaveAutomation(message.automation, typeof message.id === 'string' ? message.id : undefined);
           this.send(ws, { type: 'autoEdited', now: Date.now(), action: 'save', ...result });
@@ -581,6 +602,11 @@ export class Hub {
 
   private crewsPending = false;
   private automationsPending = false;
+
+  /** The sessions to reopen changed: the page gets them again. */
+  reopenChanged(): void {
+    this.broadcast({ type: 'reopenList', now: Date.now(), sessions: this.options.reopenList?.() ?? [] });
+  }
 
   /** The automations changed: the page gets them again, once for changes close together. */
   automationsChanged(): void {

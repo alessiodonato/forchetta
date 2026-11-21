@@ -1335,6 +1335,58 @@ export class Crews {
   }
 
   /**
+   * A session of the team that ended (with the Mac), started again on its conversation (claude --resume), in the
+   * folder it had (its worktree, for a member that had one), with its role, prompt and tools as when the team started.
+   * What it was working on when it ended is lost with its process: those requests are said failed, to send again.
+   * Undefined when the team does not take it back: the team is gone, stopped, or has another session in its place.
+   */
+  reopen(crewId: string, oldAgentId: string, sessionId: string, cwd: string, start: Starter = this.spawn): Promise<SpawnResult> | undefined {
+    const crew = this.crews.get(crewId);
+    if (!crew || crew.stoppedAt) return undefined;
+    const key = Object.entries(crew.agents).find(([, agentId]) => agentId === oldAgentId)?.[0];
+    if (!key) return undefined;
+    const lead = key === 'lead' && crew.lead.kind === 'claude' ? crew.lead : undefined;
+    const member = lead ? undefined : crew.members.find((candidate) => candidate.name === key);
+    if (!lead && !member) return undefined;
+    const extras: SpawnExtras = lead
+      ? {
+          system: leadPrompt(crew),
+          name: lead.name,
+          team: this.place(crew, { label: lead.name, role: shortRole(fillParams(lead.role, crew.values)), lead: true }),
+          teamTools: teamToolsFor(crew, 'lead'),
+          pluginDir: this.pluginOf(crew, lead.name, lead.skills),
+          tools: lead.tools,
+        }
+      : {
+          system: memberPrompt(crew, member!),
+          name: member!.name,
+          team: this.place(crew, { label: member!.name, role: shortRole(fillParams(member!.role, crew.values)), talk: effectiveTalk(crew, member!) }),
+          teamTools: teamToolsFor(crew, member!),
+          pluginDir: this.pluginOf(crew, member!.name, member!.skills),
+          tools: member!.tools,
+        };
+    const spec = lead ?? member!;
+    return start({ cwd, model: spec.model, mode: spec.mode, resume: sessionId }, extras).then((result) => {
+      if (!result.ok) return result;
+      crew.agents[key] = result.agentId;
+      const now = Date.now();
+      for (const request of crew.requests ?? []) {
+        for (const delivery of request.deliveries) {
+          if (delivery.agentId !== oldAgentId) continue;
+          if (OPEN.includes(delivery.status) && delivery.status !== 'approval') {
+            Object.assign(delivery, { status: 'failed', reason: 'its session ended with the Mac: send it again', at: now });
+          }
+          delivery.agentId = result.agentId;
+        }
+      }
+      this.settle(crew, undefined, now);
+      this.log(`team "${crew.name}": ${lead ? lead.name : member!.name} reopened on its conversation`);
+      this.changed(crew);
+      return result;
+    });
+  }
+
+  /**
    * A new member: checked with the rest of the team (names, the ceiling of members), then started like the others. It can report
    * to the lead, or to a member whose session started with the tools to lead (the tools of a session are fixed when
    * it starts).

@@ -28,6 +28,7 @@ import { boxLabel } from './announce.ts';
 import { Check, ToolIcon } from './icons.tsx';
 import { useMotionAnchor } from './anchor.ts';
 import { CommandBar, CommandStatus, currentCommand } from './Commands.tsx';
+import { ReopenButton } from './Reopen.tsx';
 import { animateEnter, animateShake } from './motion.ts';
 import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
@@ -337,6 +338,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
       )}
       <SubagentRows agent={agent} now={now} store={store} />
       <CommandStatus agent={agent} store={store} now={now} />
+      <ReopenButton agent={agent} store={store} />
       <ContextBar agent={agent} />
       <Meta agent={agent} now={now} store={store} />
       {openable && (

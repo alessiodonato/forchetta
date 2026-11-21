@@ -4959,3 +4959,101 @@ header.top .view-switch button:not(.on):hover {
   font-family: var(--mono);
   font-size: 12px;
 }
+
+/* The sessions that ended with the Mac: a line under the top one, and "reopen" in the box of one that ended. */
+.reopen-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.reopen-head,
+.reopen-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.reopen-head .grow,
+.reopen-row .grow {
+  flex: 1;
+}
+
+.reopen-notice button,
+.reopen-box button {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.reopen-notice button.primary {
+  border-color: var(--claude);
+  background: var(--claude-strong);
+  color: #fff;
+}
+
+.reopen-notice button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.reopen-notice button:disabled,
+.reopen-box button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.reopen-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 40vh;
+  margin: 0;
+  padding: 6px 0 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.reopen-large {
+  color: var(--accent);
+}
+
+.reopen-done {
+  color: var(--green);
+}
+
+.reopen-failed {
+  color: var(--accent);
+}
+
+.reopen-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.reopen-box button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--claude);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

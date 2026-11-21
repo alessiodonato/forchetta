@@ -10,6 +10,7 @@ import { type TeamMcpServer, writeMcpConfig } from '../shared/mcp-config.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import { type Tmux, tmuxSessionName } from '../shared/tmux.ts';
 import type { Registry } from './registry.ts';
+import { SESSION_ID } from '../shared/reopen.ts';
 import { markEnded } from './state.ts';
 
 // A new session started from the app: a folder and, if you want, a first prompt. It runs in the tmux of
@@ -31,6 +32,8 @@ export interface SpawnChoices {
   mode?: unknown;
   /** true for a worktree with a name chosen by Claude Code, or the name. */
   worktree?: unknown;
+  /** A conversation to go on with (claude --resume): the session id of Claude Code. */
+  resume?: unknown;
 }
 
 /** The arguments of claude for the choices of the panel, or the reason one is not valid. */
@@ -43,6 +46,10 @@ export function claudeArgs(choices: SpawnChoices): { args: string[] } | { error:
   if (choices.mode !== undefined && choices.mode !== '') {
     if (!(MODES as readonly unknown[]).includes(choices.mode)) return { error: 'invalid permission mode' };
     args.push('--permission-mode', String(choices.mode));
+  }
+  if (choices.resume !== undefined && choices.resume !== '') {
+    if (typeof choices.resume !== 'string' || !SESSION_ID.test(choices.resume)) return { error: 'invalid conversation to resume' };
+    args.push('--resume', choices.resume);
   }
   if (choices.worktree === true) args.push('--worktree');
   else if (typeof choices.worktree === 'string' && choices.worktree.trim()) {

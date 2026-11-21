@@ -3,6 +3,7 @@ import { resultAt } from '../shared/present.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { AutomationView } from '../shared/automation.ts';
+import type { LostSession } from '../shared/reopen.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset, Talk } from '../shared/crew.ts';
 import type { ReplayData } from '../shared/replay.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
@@ -58,6 +59,10 @@ export interface UiState {
   crews: readonly CrewSummary[];
   /** The teams that start by themselves (shared/automation.ts): their queues, runs, why the next one waits. */
   automations: readonly AutomationView[];
+  /** The sessions that ended with the Mac, to reopen; undefined with a daemon that cannot (the demo, an older one). */
+  reopen?: readonly LostSession[];
+  /** Reopening sessions: under way, then which reopened and why the others did not. */
+  reopening?: { busy: boolean; agentIds: string[]; reopened?: { agentId: string; newAgentId: string; name: string }[]; failed?: { agentId: string; name: string; error: string }[]; at: number };
   /** The last change of an automation asked from its panel, and how it went. */
   autoEdit?: { action: string; busy: boolean; ok?: boolean; error?: string; id?: string; added?: number; at: number };
   /** A team being started from its panel; when it started, its id; what did not start, if anything. */
@@ -157,7 +162,7 @@ function loadSeen(): Record<string, number> | undefined {
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
 /** The actions of the page that wait for an answer of the daemon, each with its busy flag. */
-const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest', 'settingsSave', 'describe', 'autoEdit'] as const satisfies readonly (keyof UiState)[];
+const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest', 'settingsSave', 'describe', 'autoEdit', 'reopening'] as const satisfies readonly (keyof UiState)[];
 
 /** What an action says when the daemon was not there to take it. */
 export const NOT_SENT = 'not sent: the daemon of Forchetta is not connected (the page reconnects by itself; try again in a moment)';
@@ -258,6 +263,14 @@ export class Store {
         this.set({ spawn: { busy: false, startedId: message.agentId } });
         this.openWhenThere(message.agentId);
       } else this.set({ spawn: { busy: false, error: message.error ?? 'the session did not start' } });
+      return;
+    }
+    if (message.type === 'reopenList') {
+      this.set({ reopen: message.sessions });
+      return;
+    }
+    if (message.type === 'reopened') {
+      this.set({ reopening: { busy: false, agentIds: this.state.reopening?.agentIds ?? [], reopened: message.reopened, failed: message.failed, at: Date.now() } });
       return;
     }
     if (message.type === 'automations') {
@@ -387,6 +400,7 @@ export class Store {
         extra.prompts = message.prompts ?? [];
         extra.crews = message.crews ?? [];
         extra.automations = message.automations ?? [];
+        extra.reopen = message.reopen;
         extra.templates = message.templates ?? [];
         extra.roles = message.roles ?? [];
         setCustomSkills(message.skills ?? []);
@@ -605,6 +619,18 @@ export class Store {
   ): void {
     this.set({ crewEdit: { action: change.action, busy: true, at: Date.now() } });
     this.send({ type: 'editCrew', crewId, ...change });
+  }
+
+  /** Sessions that ended, each on its conversation again: the daemon answers with what reopened. */
+  reopen(agentIds: readonly string[]): void {
+    if (agentIds.length === 0 || this.state.reopening?.busy) return;
+    this.set({ reopening: { busy: true, agentIds: [...agentIds], at: Date.now() } });
+    this.send({ type: 'reopen', agentIds: [...agentIds] });
+  }
+
+  /** Not now: the sessions ended with the Mac (all, or these) are offered no more. */
+  dismissReopen(agentIds?: readonly string[]): void {
+    this.send({ type: 'dismissReopen', ...(agentIds ? { agentIds: [...agentIds] } : {}) });
   }
 
   /** A team that starts by itself, new or changed (id): the daemon checks it and answers with autoEdited. */

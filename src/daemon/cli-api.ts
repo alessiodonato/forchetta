@@ -3,6 +3,7 @@ import { type Crew, type CrewSpec, type CrewTemplate, type ReviewRecord, cleanBu
 import type { Agent, AgentState, TokenUsage } from '../shared/agent.ts';
 import { activity, sumTokens, tokensTotal } from '../shared/present.ts';
 import { type Automation, type AutomationView, triggerText } from '../shared/automation.ts';
+import { type LostSession, lostName } from '../shared/reopen.ts';
 import { teamChecks } from '../shared/team-checks.ts';
 import { teamFileName, teamFileOf } from '../shared/team-file.ts';
 import type { CreateResult, Result } from './crews.ts';
@@ -56,6 +57,11 @@ export interface CliApiDeps {
   log: (message: string) => void;
   /** The installation, for `forchetta doctor`. */
   system?: () => unknown;
+  /** The sessions that ended with the Mac, for `forchetta reopen`. */
+  reopen?: {
+    list(): LostSession[];
+    reopen(agentIds: readonly string[]): Promise<{ reopened: { agentId: string; newAgentId: string; name: string }[]; failed: { agentId: string; name: string; error: string }[] }>;
+  };
   /** The teams that start by themselves, for `forchetta auto`. */
   automations?: {
     views(): AutomationView[];
@@ -205,6 +211,17 @@ export function cliApi(deps: CliApiDeps): (method: string, path: string, query: 
     if (method === 'GET' && path === '/api/system' && deps.system) return ok({ system: deps.system() });
     // The runs of automations that ended are not teams at work any more: their threads stay (team thread).
     if (method === 'GET' && path === '/api/teams') return ok({ teams: deps.crews.list().filter((crew) => !crew.endedAt).map((crew) => teamLine(crew, deps.agent)) });
+
+    if (path === '/api/reopen' && deps.reopen) {
+      const sessions = deps.reopen.list();
+      if (method === 'GET') return ok({ sessions });
+      if (method !== 'POST') return undefined;
+      // All of them, or those named: a name of the window, a folder, or a team (all its sessions).
+      const names = Array.isArray(input.names) ? input.names.filter((name): name is string => typeof name === 'string').map((name) => name.trim().toLowerCase()) : [];
+      const wanted = input.all === true ? sessions : sessions.filter((one) => names.some((name) => [lostName(one), one.project, one.team?.group ?? ''].some((key) => key.toLowerCase() === name)));
+      if (wanted.length === 0) return fail(sessions.length === 0 ? 'no session ended with the Mac is waiting to reopen' : 'no session to reopen is called so: see `forchetta reopen`', 404);
+      return ok(await deps.reopen.reopen(wanted.map((one) => one.agentId)));
+    }
 
     if (path === '/api/auto' || path.startsWith('/api/auto/')) {
       const automations = deps.automations;

@@ -20,6 +20,7 @@ import { type NewKind, NewMenu, newKindOf } from './NewMenu.tsx';
 import { Studio } from './Studio.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
 import { AutoPanel } from './Automations.tsx';
+import { ReopenNotice } from './Reopen.tsx';
 import type { AutomationView } from '../shared/automation.ts';
 import { crewLineOf } from '../shared/crew.ts';
 import { guardTotal, type GuardStatsInfo, statsTitle } from '../shared/guard-stats.ts';
@@ -465,6 +466,7 @@ export function App({ store }: { store: Store }) {
           )}
         </div>
       </header>
+      {state.ready && <ReopenNotice store={store} />}
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && panel === 'new' && <NewSessionPanel agents={agents} store={store} onClose={() => toggle('new')} />}
       {state.ready && panel === 'team' && (

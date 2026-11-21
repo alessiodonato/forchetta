@@ -2,7 +2,7 @@ import { execFile, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { migrateData, readDataJson, writeDataJson } from '../shared/data-file.ts';
-import { homedir } from 'node:os';
+import { homedir, uptime } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { contextWindowOf, detectArricurdai, loadConfig, resolveTool, saveConfig, which } from '../shared/config.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
@@ -56,7 +56,9 @@ import { promptEndingIn, transcriptTail } from './prompt-ending.ts';
 import { anySubagentActive, applySubagentHook, checkSubagents, readSubagentThread } from './subagents.ts';
 import { sameTokens, subagentKey, sumTokens } from '../shared/present.ts';
 import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
-import { type Agent, startsTurn } from './state.ts';
+import { type Agent, markEnded, startsTurn } from './state.ts';
+import { Reopener } from './reopen.ts';
+import { endedAtShutdown, endedByRestart } from '../shared/reopen.ts';
 import { displayName, type GuardHold } from '../shared/agent.ts';
 import { haikuComplete, Summarizer } from './summarizer.ts';
 import { Limits } from './limits.ts';
@@ -456,8 +458,11 @@ function main(): void {
   const watchPrompt = (agent: Agent, at: number, prompt: string): void => {
     for (const delay of REFUSAL_CHECKS_MS) setTimeout(() => void checkRefused(agent, at, prompt), delay).unref();
   };
+  /** The state as the daemon last saved it, for the sessions the shutdown of the Mac ended (below). */
+  let savedState: { savedAt?: number; agents?: Agent[] } | undefined;
   try {
-    const saved = readDataJson(paths.state, 'saved state', log) as { agents?: Agent[]; writes?: unknown; ledger?: Record<string, { usd: number }> } | undefined;
+    const saved = readDataJson(paths.state, 'saved state', log) as { savedAt?: number; agents?: Agent[]; writes?: unknown; ledger?: Record<string, { usd: number }> } | undefined;
+    savedState = saved;
     if (saved) {
       registry.restore(saved.agents ?? []);
       // What the ledger counted of each session; a state from before the ledger: it counts from now.
@@ -479,6 +484,39 @@ function main(): void {
     }
   } catch (error) {
     log(`saved state not readable, ignored: ${String(error)}`, 'warn');
+  }
+
+  // The sessions a restart of the Mac ended: their processes are gone, and their last sign of life came before the
+  // Mac started (their pid may already belong to another process). Said ended now, and offered to reopen, each on
+  // its conversation.
+  const reopener = new Reopener({
+    file: paths.reopen,
+    log,
+    agent: (agentId) => registry.agents.get(agentId),
+    agents: () => registry.agents.values(),
+    isFolder,
+    spawn: (input, extras) => spawnSession({ tmux, registry, claude, log, teamMcp }, input, extras),
+    crewReopen: (crewId, agentId, sessionId, cwd) => crews.reopen(crewId, agentId, sessionId, cwd),
+    forget: (agentId) => registry.forget(agentId),
+    onChange: () => hub?.reopenChanged(),
+  });
+  {
+    const bootAt = Date.now() - uptime() * 1000;
+    const lost = endedByRestart([...registry.agents.values()], bootAt);
+    // Those the shutdown ended while the daemon still listened: saved as ended, not on purpose.
+    const atShutdown = typeof savedState?.savedAt === 'number' ? endedAtShutdown(savedState.agents ?? [], savedState.savedAt, bootAt) : [];
+    const now = Date.now();
+    for (const agent of lost) {
+      markEnded(agent, 'the Mac restarted', now);
+      if (!endedInLedger.has(agent.id)) {
+        endedInLedger.add(agent.id);
+        ledger.append({ t: now, kind: 'session', event: 'end', ...who(agent) });
+      }
+    }
+    // The runs of automations are not offered: their automation says what to do with them ("again").
+    const ended = [...lost, ...atShutdown];
+    const offered = reopener.remember(ended.filter((agent) => !(agent.team?.crew && crews.get(agent.team.crew)?.auto)));
+    if (ended.length > 0) log(`${ended.length} ${ended.length === 1 ? 'session' : 'sessions'} ended when the Mac restarted${offered ? `: ${offered} can be reopened` : ''}`);
   }
 
   // A failed automatic update of Claude Code: read from its file at start and every minute, said in the top line.
@@ -572,6 +610,9 @@ function main(): void {
     onSpawn: (input) => spawnSession({ tmux, registry, claude, log, teamMcp }, input),
     crews: () => crews.summaries(),
     automations: () => automations?.views() ?? [],
+    reopenList: () => reopener.list(),
+    onReopen: (agentIds) => reopener.reopen(agentIds),
+    onDismissReopen: (agentIds) => reopener.dismiss(agentIds),
     onSaveAutomation: (input, id) => {
       if (!automations) return { ok: false, error: 'the daemon is starting' };
       // The folder as a session started from the panel keeps it: ~ and the rest resolved.
@@ -949,6 +990,7 @@ function main(): void {
       log,
       system: () => hub?.system(),
       ...(automations ? { automations } : {}),
+      reopen: reopener,
     }),
     info: () => ({ pid: process.pid, port: config.port, startedAt, version: VERSION, agents: registry.agents.size, windows: hub?.size ?? 0, terminals: terminals.size }),
     onShutdown: () => shutdown('asked to stop'),

@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.0. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.1. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -233,6 +233,16 @@ forchetta setup</pre>
         <h3>Names, groups and roles</h3>
         <p>Hover a box and click <strong>✎</strong> to give the session a <strong>name</strong> (shown in place of the folder), a <strong>color</strong> (a dot before the name, in the box, the column and the pane, and a tint in the background of its terminal, to tell sessions apart at a glance), a <strong>group</strong>, a <strong>role</strong> in free text, and the mark <span class="ui">lead of the group</span>. The choice is kept for its folder too: a session that starts again in the same folder finds its place again. <span class="ui">Remove</span> clears it.</p>
         <p>With at least one group, <span class="ui">grid / org chart</span> appears at the top. In the org chart each group has its section, the leads above and the others below; the sessions with no group come last. A team of agents is a group too.</p>
+
+        <h3 id="reopen">After a restart of the Mac</h3>
+        <p>A restart closes every session: each one is a Claude Code process, in the tmux of Forchetta or in a terminal, and none survives it. Their conversations stay with Claude Code. When Forchetta starts again it finds the sessions that ended with the Mac (their last sign of life came before the Mac started) and says so at the top: <span class="ui">4 sessions ended when the Mac restarted: api, docs and the team Studio (2)</span>.</p>
+        <ul>
+          <li><span class="ui">Reopen all</span>: each session goes on with its conversation (<code>claude --resume</code>), in its folder, with its name, color and model, in the tmux of Forchetta, also one that ran in another terminal. A member of a team goes back into its team, with its role, its prompt and its tools; a request it was working on when the Mac stopped is marked failed, to send again.</li>
+          <li><span class="ui">Choose…</span> lists them, with how large each conversation is: Claude reads the whole of it again at the first message after it reopens, and a large one (in amber) costs a share of your limits. <span class="ui">reopen</span> one, or <span class="ui">×</span> to leave it.</li>
+          <li><span class="ui">Not now</span>: they are offered no more. They are offered for a week anyway.</li>
+          <li>The box of any session that ended has <span class="ui">reopen</span> too, while it shows. The runs of <a href="#auto">automatic teams</a> are not offered: their automation pauses, and <span class="ui">again</span> starts them over.</li>
+        </ul>
+        <p>From a terminal: <code>forchetta reopen</code> lists them, <code>forchetta reopen --all</code> reopens every one, <code>forchetta reopen api "Studio"</code> those named (a team: all its sessions).</p>
       </section>
 
       <section id="terminals">
@@ -348,6 +358,7 @@ forchetta setup</pre>
         <p>Every session starts in the tmux of Forchetta, the lead first. From its system prompt each one knows who it is, its role, its lead and the other members. Its name shows in its box, in its pane and in Claude Code. <span class="ui">Save as template</span> keeps the team without its folder, to start it again elsewhere.</p>
 
         <h3 id="studio">The studio: draw a team</h3>
+        <p>The video <a href="https://www.youtube.com/watch?v=4UWLtGgq0E4">Draw a team, then let it run</a> (4:51) shows the studio and the <a href="#auto">automatic teams</a> step by step.</p>
         <p><span class="ui">+ new</span> › <span class="ui">draw a team</span>, at the top (or <kbd>⌥</kbd><kbd>⌘</kbd><kbd>N</kbd>, or <span class="ui">or draw it in the studio</span> in the panel of a new team), opens a canvas over the whole window. On the left the presets: <strong>agents</strong> (manager, senior, junior, developer, reviewer, tester, frontend, backend, researcher, writer, and yours) and whole <strong>teams</strong> (the templates). On the right, whatever you selected. <span class="ui">+ new agent</span>, under the agents, is one of your own: drag it onto the canvas and fill its box there, or click it to write a preset for every team, with its name, role, model, permissions and skills.</p>
         <figure>
           <img src="img/studio.png" width="2400" height="1520" loading="lazy" alt="The studio: on the left the agents and the teams to drag; on the canvas You, the manager that leads, the senior and the reviewer under it, the junior under the senior; on the right the junior, selected, with its role, model, permissions, files and three skills.">
@@ -494,7 +505,7 @@ forchetta setup</pre>
         <p><strong>A budget</strong>, in dollars at API prices, in the studio or with <code>--budget</code>: when the sessions of the team cost more, you are told once, and its cost in the team panel turns amber. Nothing stops: it is a warning, not a limit.</p>
 
         <h3 id="auto">A team that starts by itself</h3>
-        <p>An <strong>automatic team</strong> starts on its own, without <span class="ui">Create team</span>: <span class="ui">+ new</span> → <span class="ui">automatic team</span>, then the button <span class="ui">auto</span> at the top. It is a template with a Claude lead, a folder, a way to start, the goal of each run, and what one run may cost and take. Each run is a new team, named after the automation and its item, with fresh worktrees; the runs of one automation go one at a time.</p>
+        <p>An <strong>automatic team</strong> starts on its own, without <span class="ui">Create team</span>: <span class="ui">+ new</span> → <span class="ui">automatic team</span>, then the button <span class="ui">auto</span> at the top. It is a template with a Claude lead, a folder, a way to start, the goal of each run, and what one run may cost and take. Each run is a new team, named after the automation and its item, with fresh worktrees; the runs of one automation go one at a time. <a href="https://www.youtube.com/watch?v=4UWLtGgq0E4">The video</a> shows one from the start.</p>
         <ul>
           <li><strong>From a queue</strong>: you add items, one per line, and each is <code>{item}</code> of one run (“Fix {item}”, with <code>APP-42</code> as an item). From a script too: <code>forchetta auto add fixes APP-42 APP-43</code>.</li>
           <li><strong>At a time</strong>: days of the week and an hour, in the time of your Mac (<code>{date}</code>, <code>{time}</code>). If the Mac sleeps then, the run starts once when it wakes; the times missed while the automation is paused do not. <span class="ui">Run now</span> adds one more.</li>
@@ -727,6 +738,8 @@ Read them again before you write code that relies on them.</code></pre>
             <tr><td><code>forchetta ls --json</code></td><td>The same as JSON, for scripts: <code>forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'</code></td></tr>
             <tr><td><code>forchetta stats</code></td><td>What the guard did on this Mac in the last 7 days, by kind. <code>--days N</code> for another span (up to 120), <code>--json</code> for scripts.</td></tr>
             <tr><td><code>forchetta team ls|start|export|thread</code></td><td>The teams from a terminal: list them, start one with its goal, write a template into <code>.forchetta/teams</code>, read the thread of a team (see <a href="#repo-teams">A team in the repository</a>).</td></tr>
+            <tr><td><code>forchetta auto ls|add|pause|resume</code></td><td>The teams that start by themselves: where each stands, items into a queue (from a script, a git hook), pause and resume (see <a href="#auto">A team that starts by itself</a>).</td></tr>
+            <tr><td><code>forchetta reopen [--all|&lt;name&gt;…]</code></td><td>The sessions that ended with the Mac: the list, or each one on its conversation again (see <a href="#reopen">After a restart of the Mac</a>).</td></tr>
             <tr><td><code>forchetta report</code></td><td>What the sessions and the teams did and cost, from the ledger (see <a href="#report">The ledger and reports</a>).</td></tr>
             <tr><td><code>forchetta doctor</code></td><td>Checks the installation and says what to fix; the warnings of the log of the last day. <code>--bundle</code> writes <code>forchetta-doctor-&lt;date&gt;.tar.gz</code> for an issue, with your home, user name, project and team names, e-mails and tokens replaced.</td></tr>
             <tr><td><code>forchetta daemon start|stop|status</code></td><td>Manages the local daemon. Stopping it stops no session; <code>status</code> exits with 1 when it is not running.</td></tr>
@@ -786,7 +799,7 @@ Read them again before you write code that relies on them.</code></pre>
         <ul>
           <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>hooks.sock</code>, where the hooks of Claude Code talk to the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
           <li><code>state.json</code>, the sessions; <code>teams.json</code>, names, groups and roles by folder;</li>
-          <li><code>crews/</code>, the teams of agents, one file each (<code>crews/archive/</code>: the runs of automations past the last 50); <code>automations.json</code>, the <a href="#auto">teams that start by themselves</a>, their queues and last runs; <code>crew-templates.json</code>, your templates; <code>crew-roles.json</code>, your presets of agents; <code>skills/</code>, the <a href="#skills">skills</a> downloaded, and the plugin of each session of a team that has some;</li>
+          <li><code>crews/</code>, the teams of agents, one file each (<code>crews/archive/</code>: the runs of automations past the last 50); <code>automations.json</code>, the <a href="#auto">teams that start by themselves</a>, their queues and last runs; <code>reopen.json</code>, the <a href="#reopen">sessions that ended with the Mac</a>, for a week; <code>crew-templates.json</code>, your templates; <code>crew-roles.json</code>, your presets of agents; <code>skills/</code>, the <a href="#skills">skills</a> downloaded, and the plugin of each session of a team that has some;</li>
           <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>guard-stats.json</code>, how many times a day the guard did each thing; <code>ledger/</code>, the <a href="#report">ledger</a>; <code>daemon.log</code>, in English with the level of each line (INFO, WARN, ERROR), started again past 5 MB (the last three kept as <code>daemon.log.1</code> … <code>.3</code>).</li>
         </ul>
         <p>Each file is written whole or not at all, and the version before stays next to it as <code>.bak</code>. A file that cannot be read is never written over: Forchetta sets it aside as <code>.corrupt-&lt;time&gt;</code> and goes on with the version before; entries that are not valid any more (a template, a skill) are kept in <code>&lt;file&gt;.rejected.json</code>. <code>data-version</code> says the format of the folder: a Forchetta older than its data does not start on it.</p>

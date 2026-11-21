@@ -38,6 +38,10 @@ A team is a few Claude Code sessions that work together. In the studio you drag 
 
 Then you start it with a goal. The lead, a Claude session or you, splits it into requests; the others do the work, and ask the one above them when they're stuck. Where you want to look first, mark the arrow: its requests wait for your yes. You see what each agent costs while it works, and afterwards you can replay the run on the canvas. Save the team as a template, with `{ticket}` for what changes each time, and start it again in another project. Or let it start by itself: the items of a queue one at a time, at a set time, or for each GitHub issue with a label.
 
+<a href="https://www.youtube.com/watch?v=4UWLtGgq0E4"><img src="docs/img/video-teams-poster-play.jpg" alt="Draw a team of Claude Code agents, then let it run by itself: play the video on YouTube" width="100%"></a>
+
+<sub>The studio and automatic teams, step by step, in five minutes on YouTube.</sub>
+
 The studio is also in your browser, as the [Studio Maker](https://forchetta.dev/studio/): draw a team, export it as a file, open it in Forchetta. [Teams in the manual](https://forchetta.dev/manual.html#teams).
 
 ## The guard
@@ -56,7 +60,7 @@ So there's no worktree to set up: one folder, one set of dependencies, one dev s
 
 Every Claude Code session on your Mac shows up by itself, wherever you started it: the Terminal, iTerm, your editor. Same CLI, same settings, same hooks of yours. Each box tells you what the session is doing, how full its context is and what it costs, and turns amber when it waits for you.
 
-Answer a permission from the box. Click it, and its terminal opens next to the others. A notification tells you when a session waits for you, or seems stuck. Start a session with `forchetta run claude`, or from the app, and Forchetta can also type commands into it. [The window in the manual](https://forchetta.dev/manual.html#window).
+Answer a permission from the box. Click it, and its terminal opens next to the others. A notification tells you when a session waits for you, or seems stuck. Start a session with `forchetta run claude`, or from the app, and Forchetta can also type commands into it. After a restart of the Mac, it reopens your sessions, each on its conversation. [The window in the manual](https://forchetta.dev/manual.html#window).
 
 ## Install
 
@@ -69,7 +73,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.12.0. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.12.1. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

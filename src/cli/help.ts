@@ -137,6 +137,20 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
     examples: ['forchetta team start review-squad --goal "Add a CSV export to the orders page"', 'forchetta team start bugfix --set ticket=APP-123 --goal "Fix {ticket}"', 'forchetta team export "Feature squad"', 'forchetta team ls --json | jq \'.[] | {name, usd}\''],
   },
+  reopen: {
+    summary: 'Reopen the sessions that ended with the Mac, each on its conversation',
+    usage: 'forchetta reopen [--all | <name>…] [--json]',
+    about: [
+      'A restart of the Mac closes every session. Forchetta remembers them for a week: each one reopens on its',
+      'conversation (claude --resume), in its folder, with its name; a member of a team goes back into its team.',
+      'Claude reads the whole conversation again at its first message: a large one costs a share of your limits.',
+    ],
+    options: [
+      { name: '--all', text: 'Reopen every one' },
+      { name: '--json', text: 'The list, or what reopened, as JSON' },
+    ],
+    examples: ['forchetta reopen', 'forchetta reopen --all', 'forchetta reopen api "Checkout team"'],
+  },
   auto: {
     summary: 'The teams that start by themselves: a queue, a time, GitHub',
     usage: 'forchetta auto <ls|add|pause|resume> [options]',
@@ -171,6 +185,7 @@ const LIST: Entry[] = [
   { name: 'setup', text: COMMANDS.setup!.summary },
   { name: 'run', args: 'claude [arguments]', text: COMMANDS.run!.summary },
   { name: 'ls', text: COMMANDS.ls!.summary },
+  { name: 'reopen', args: '[--all|<name>…]', text: COMMANDS.reopen!.summary },
   { name: 'stats', text: COMMANDS.stats!.summary },
   { name: 'team', args: 'ls|start|export|thread', text: COMMANDS.team!.summary },
   { name: 'auto', args: 'ls|add|pause|resume', text: COMMANDS.auto!.summary },

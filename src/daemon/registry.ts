@@ -371,6 +371,15 @@ export class Registry {
     return this.live().filter((agent) => !agent.pid && agent.control.kind === 'tmux');
   }
 
+  /** Forgets one session that ended, at once: a session that reopened its conversation takes its place. */
+  forget(id: string): void {
+    const agent = this.agents.get(id);
+    if (!agent || agent.state !== 'ended') return;
+    this.agents.delete(id);
+    this.prompts.delete(id);
+    this.options.onRemove?.([id]);
+  }
+
   /** Forgets the agents that ended more than `retentionMs` ago, and returns their ids. */
   sweep(retentionMs: number): string[] {
     const now = this.now();
