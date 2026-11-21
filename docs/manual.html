@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.10.0. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.11.0. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -357,7 +357,7 @@ forchetta setup</pre>
           <li>Drag agents, or a whole team, onto the canvas. Each agent is a box; move it where you like.</li>
           <li>Pull an arrow from the dot under <strong>You</strong> or under a box, and drop it on the agent it leads. On release you choose the relation: <a href="#talk">⇄ answers or → executes</a>, and its prompt. An agent has one arrow coming in; a new one moves it under someone else, and a circle is refused.</li>
           <li>If You point at one agent only, and it leads others, it is the Claude lead of the team (its arrow says <span class="ui">lead</span>). If You point at several, you lead, and they are the members at the top.</li>
-          <li>Click a box to change its name, role, model, permissions, worktree, files and review; click an arrow, or its label, to change the relation. <kbd>Delete</kbd> removes what is selected; the agents it led go up to the one above it. <kbd>⌘</kbd><kbd>Z</kbd> undoes the last change of the canvas, <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd> does it again (also ↶ and ↷, at the top); changes in a row, like typing a role or dragging a box, are one step.</li>
+          <li>Click a box to change its name, role, model, permissions, worktree, files, review, skills and <a href="#agent-tools">tools</a>; click an arrow, or its label, to change the relation. <kbd>Delete</kbd> removes what is selected; the agents it led go up to the one above it. <kbd>⌘</kbd><kbd>Z</kbd> undoes the last change of the canvas, <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd> does it again (also ↶ and ↷, at the top); changes in a row, like typing a role or dragging a box, are one step.</li>
           <li>In the right column, with nothing selected: the folder of the team (<span class="ui">Choose…</span> opens the panel of macOS), the default of the arrows and the worktrees, and what is still missing before it can start. <span class="ui">Tidy up</span> lays the boxes out as a tree.</li>
           <li><span class="ui">Create team</span> starts it, as the panel does; <span class="ui">Save as template</span> keeps it among the teams, with where its boxes stand.</li>
         </ol>
@@ -373,6 +373,38 @@ forchetta setup</pre>
 
         <h4 id="studio-rules">Rules and notes</h4>
         <p>In the right column, with nothing selected, <strong>Rules of the team</strong>: what every agent follows, whatever its role (the conventions of the project, how to commit, what never to do). Each session of the team gets them in its system prompt, after its role; nothing is written in the folder of the project, and a <code>CLAUDE.md</code> of yours stays as it is. The panel of a new team has the same field, and a session that sets up teams from a document can write them too. <span class="ui">+ note</span>, at the top, puts a note on the canvas, for whoever opens the team after you; the agents do not read it. Rules and notes are kept with the template.</p>
+
+        <h4 id="studio-describe">Describe it, and Claude draws it</h4>
+        <p><span class="ui">Describe…</span>, at the top of the studio, takes a sentence or a few: what the team is for, and who does what if you know (“a team to move the frontend to React 19: a lead that plans, two developers on separate folders, a tester with a browser, a reviewer that approves before the merge”). Claude draws it on the canvas, with roles, models, skills, tools, arrows and their relations, starting from your presets. It replaces what is on the canvas (<kbd>⌘</kbd><kbd>Z</kbd> brings that back); change what you like, then <span class="ui">Create team</span> or <span class="ui">Save as template</span>. Nothing starts before that.</p>
+        <ul>
+          <li>It runs your Claude Code in print mode (<code>claude -p</code>, Sonnet), with your account and your plan, but alone: <code>--safe-mode</code> (none of your <code>CLAUDE.md</code>, memory, skills, plugins or MCP servers), no tools, no hooks, nothing kept of the conversation. It usually takes 20 to 60 seconds and a few cents.</li>
+          <li>Forchetta checks the team as it checks every template; one it refuses goes back to Claude once, with the reason. A name you already have gets a number.</li>
+          <li>The <a href="studio/">Studio Maker</a> has no Claude of its own: <span class="ui">Copy the prompt for Claude</span> copies the whole request, to paste in a chat with Claude; its answer goes in <span class="ui">Import</span>.</li>
+        </ul>
+
+        <h4 id="agent-tools">The tools of an agent</h4>
+        <p>Besides its skills, each agent can have <strong>tools</strong> of its own, for its session only, on the right of its box:</p>
+        <ul>
+          <li><strong>Limits</strong>: <span class="ui">read only</span> (no Edit, Write or NotebookEdit; it can still run commands), <span class="ui">no shell</span> (no Bash), <span class="ui">no git push</span>, <span class="ui">no web</span> (no WebFetch, no WebSearch). Claude Code refuses those tools to that agent (<code>--disallowedTools</code>), and its system prompt says so.</li>
+          <li><strong>MCP servers</strong> from a small catalog, each pinned to a version: a <strong>browser</strong> (Playwright MCP 0.0.84), <strong>Chrome DevTools</strong> (chrome-devtools-mcp 1.12.0, its usage statistics off) and <strong>library docs</strong> (Context7 4.5.1, which asks <code>context7.com</code>). Drag one from <strong>Tools</strong>, on the left, onto an agent, or add it from its tools. Its session gets it in its own MCP configuration, run with <code>npx</code> at that version (fetched from npm the first time), with its tools allowed without asking for that agent. The browsers run headless, with a profile that is not kept, so that several agents can use one at once.</li>
+          <li><span class="ui">none of your MCP servers</span>: the agent starts with only its own and those of the team (<code>--strict-mcp-config</code>), not the ones of your Claude Code.</li>
+        </ul>
+        <p>The presets of Forchetta give the reviewer <em>read only</em> and <em>no git push</em>, and the tester a browser. The lead sees what each member has. A team file carries only the names of the catalog, never a command: opening a team from someone else runs nothing new.</p>
+
+        <h4 id="approvals">You approve before it goes on</h4>
+        <p>On an arrow from an agent to one it leads, <span class="ui">you approve its requests first</span> makes a point of the chart where you look: every request sent along it waits for your yes, and the arrow says <span class="ui">· you approve</span>. The plan of the lead before the developers build it, say. Your own requests go at once.</p>
+        <ul>
+          <li>A request that waits shows in the team panel, in amber, with <span class="ui">Approve</span>, <span class="ui">Change…</span> (you rewrite it, and it goes as you wrote it) and <span class="ui">Send back…</span> (with a note: the one that sent it gets “The user sent back request #4 to developer:” and your reason, and changes the request or goes on without it). A notification tells you, and the box of the sender says <em>waits on #4 developer (your approval)</em>.</li>
+          <li>The lead knows which members wait for you. A wait for answers (<code>wait_for_answers</code>) counts a request that waits for you as still open.</li>
+          <li>On a running team the arrow can change too, from its studio: it counts from the next request, and the one above is told.</li>
+        </ul>
+
+        <h4 id="params">Parameters, a first goal, what it delivers</h4>
+        <ul>
+          <li><strong>Parameters</strong>: write <code>{ticket}</code> (lowercase letters, digits, <code>_</code> and <code>-</code>) in a role, a relation, the rules or what the team delivers, for what changes each time it starts. In the right column of the studio, what each one is and its default go with the template, and its value is for this start. A team starts only when each one has a value; its sessions read the texts filled, and your requests to it are filled too (“Fix {ticket}” reaches it as “Fix APP-123”). <code>${HOME}</code> of a shell is not a parameter. From the terminal: <code>forchetta team start bugfix --set ticket=APP-123 --goal "Fix {ticket}"</code>.</li>
+          <li><strong>Its first goal</strong>: what to do first, sent to the lead as soon as the team starts (to every member when you lead), like <code>--goal</code>.</li>
+          <li><strong>It delivers</strong>: what the team hands over when its work is done, in a line (a pull request, <code>docs/report.md</code>, a report). The Claude lead gets one more tool, <code>deliver</code>, and calls it when the work is ready and checked: you are told, and the team panel says <span class="ui">✓ delivered</span>, with where it is.</li>
+        </ul>
 
         <h4 id="studio-canvas">A canvas for large teams</h4>
         <ul>
@@ -394,7 +426,8 @@ forchetta setup</pre>
           <li>change <a href="#talk">⇄ or →</a> on an arrow (it counts from the next request), or the files of a member;</li>
           <li>take a member away (<span class="ui">Remove from the team</span>, in its panel): its session closes.</li>
         </ul>
-        <p>A running session keeps its role, model, skills and the prompt of its relation: change them in a template (<span class="ui">Save as template</span> keeps the team with where its boxes stand) for its next start.</p>
+        <p>A running session keeps its role, model, skills, tools and the prompt of its relation: change them in a template (<span class="ui">Save as template</span> keeps the team with where its boxes stand) for its next start.</p>
+        <p id="replay"><span class="ui">Replay</span>, at the top, shows the run of the team again, step by step: each request, approval, question, answer, verdict and delivery, in order, from the file of the team and the <a href="#ledger">ledger</a>. ▶ plays it one event after the other, ◀ and ▶| step, the bar goes to any moment, the list on the right jumps to an event. Each arrow lights up while a request goes along it (amber while it waits for your approval), green when an answer goes back; each box shows the request its agent was on, and what it had cost and written until then. <span class="ui">Live</span> goes back to the team as it is now.</p>
 
         <h3 id="team-from-document">A team from a document</h3>
         <p>Every session Forchetta starts, from the app or with <code>forchetta run claude</code>, has two tools of the MCP server <code>forchetta</code>: <code>list_team_templates</code> and <code>save_team_template</code>. So a team can come from a description. Ask any session “Set up in Forchetta the teams described in roles.md”, or point it at an artifact, or describe the team in your own words. Claude reads the description and saves one template per team, with the name, the role, the model and the permissions of the lead and of each member, and for each member whether it answers or executes only (<a href="#talk">⇄ or →</a>): as the document says, or as Claude judges from the role. When the document has more levels, each member also gets who it reports to, and the prompt of that relation (the formats of requests and reports, the rules of that link): see <a href="#team-levels">More levels</a>.</p>
@@ -649,7 +682,7 @@ Read them again before you write code that relies on them.</code></pre>
       </section>
 
       <section id="report">
-        <h2>The ledger and reports</h2>
+        <h2 id="ledger">The ledger and reports</h2>
         <p>The daemon writes what the sessions and the teams do in a ledger, on this Mac: a line for each turn (how long, the files it wrote), each cost (from the status line of Claude Code, at API prices; tokens for the sessions of teams), each time the guard stopped, asked or wrote a note, each request of a team and each verdict of a reviewer. It is in <code>ledger/</code>, in the <a href="#data">data folder</a>, a file a month; lines are only added.</p>
         <p><code>forchetta report</code> reads it, also with the daemon off: by team (the default), <code>--by session</code>, <code>project</code>, <code>model</code> or <code>day</code>, from <code>--since 7d</code> (or <code>24h</code>, <code>4w</code>, a date like <code>2026-11-01</code>). <code>--team "&lt;name&gt;"</code> keeps one team; <code>--csv</code> writes the rows for a spreadsheet, <code>--json</code> for scripts.</p>
         <p><code>forchetta team thread "&lt;name&gt;"</code> writes the whole thread of a team as Markdown: each request, question, answer and verdict, in order (<code>--json</code> for the data).</p>
@@ -730,7 +763,7 @@ Read them again before you write code that relies on them.</code></pre>
           <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>guard-stats.json</code>, how many times a day the guard did each thing; <code>ledger/</code>, the <a href="#report">ledger</a>; <code>daemon.log</code>, in English with the level of each line (INFO, WARN, ERROR), started again past 5 MB (the last three kept as <code>daemon.log.1</code> … <code>.3</code>).</li>
         </ul>
         <p>Each file is written whole or not at all, and the version before stays next to it as <code>.bak</code>. A file that cannot be read is never written over: Forchetta sets it aside as <code>.corrupt-&lt;time&gt;</code> and goes on with the version before; entries that are not valid any more (a template, a skill) are kept in <code>&lt;file&gt;.rejected.json</code>. <code>data-version</code> says the format of the folder: a Forchetta older than its data does not start on it.</p>
-        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code>, after asking <code>~/.claude/settings.json</code>, and only when you ask: a LaunchAgent (<code>forchetta daemon keepalive on</code>), a team file in <code>.forchetta/teams</code> (<code>forchetta team export</code>), the file of <code>forchetta doctor --bundle</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token; the hooks talk to it on <code>hooks.sock</code>, in the data folder, which only you can open. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception. Forchetta also downloads: when a team whose agents have <a href="#skills">skills</a> starts, it fetches the ones it does not have yet from GitHub, with <code>git</code>, at the commit of its catalog. Nothing of yours is sent.</p>
+        <p>Outside that folder, Forchetta writes only the app in <code>~/Applications</code>, after asking <code>~/.claude/settings.json</code>, and only when you ask: a LaunchAgent (<code>forchetta daemon keepalive on</code>), a team file in <code>.forchetta/teams</code> (<code>forchetta team export</code>), the file of <code>forchetta doctor --bundle</code>. The daemon listens on <code>127.0.0.1</code> only, and every request needs its token; the hooks talk to it on <code>hooks.sock</code>, in the data folder, which only you can open. Nothing about your sessions leaves your Mac; the summaries by Haiku, off by default, are the one exception. Forchetta also downloads: when a team whose agents have <a href="#skills">skills</a> starts, it fetches the ones it does not have yet from GitHub, with <code>git</code>, at the commit of its catalog. Nothing of yours is sent. An agent you give an <a href="#agent-tools">MCP server</a> of the studio runs it with <code>npx</code> at a pinned version, fetched from npm the first time; Context7 asks <code>context7.com</code> about the libraries it looks up. <a href="#studio-describe">Describe</a> sends what you write to Claude through your own Claude Code, as any session does, with none of your files, settings or memory.</p>
       </section>
 
       <section id="trouble">

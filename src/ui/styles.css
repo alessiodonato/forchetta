@@ -2644,6 +2644,13 @@ header.top .view-switch button:not(.on):hover {
   stroke-width: 1.5;
 }
 
+/* A request on this line waits for your approval. */
+.org-link[data-kind='approval'] {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
 .org-flash {
   --flash: var(--claude);
 }
@@ -2995,6 +3002,78 @@ header.top .view-switch button:not(.on):hover {
 .crew-delivery[data-status='failed'] {
   border-color: rgba(239, 91, 91, 0.5);
   color: var(--red);
+}
+
+/* Waiting for your approval: amber, as anything that waits for you. */
+.crew-delivery[data-status='approval'] {
+  border-color: rgba(240, 164, 60, 0.6);
+  border-style: dashed;
+  color: var(--accent);
+}
+
+/* A request that waits for your approval, under its step of the thread: what to do with it. */
+.crew-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(240, 164, 60, 0.45);
+  border-radius: 6px;
+  background: rgba(240, 164, 60, 0.07);
+}
+
+.crew-approval-head {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.crew-approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.crew-waiting {
+  color: var(--accent);
+}
+
+/* What the team delivers: gray until its lead says it is ready, then green. */
+.crew-goal-row {
+  gap: 12px;
+}
+
+.crew-deliverable {
+  overflow: hidden;
+  font: 11.5px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+
+.crew-deliverable.done {
+  color: var(--green);
+}
+
+.thread-entry[data-kind='approval'] {
+  border-left-color: var(--accent);
+}
+
+.thread-entry[data-kind='approval'][data-verdict='approved'] .thread-tag {
+  color: var(--green);
+}
+
+.thread-entry[data-kind='approval'][data-verdict='rejected'] .thread-tag {
+  color: var(--accent);
+}
+
+.thread-entry[data-kind='delivered'] {
+  border-left-color: var(--green);
+}
+
+.thread-entry[data-kind='delivered'] .thread-who,
+.thread-entry[data-kind='delivered'] .thread-tag {
+  color: var(--green);
 }
 
 /* The lasting choices of a permission dialog: a list under the buttons, one line each. */
@@ -4118,6 +4197,130 @@ header.top .view-switch button:not(.on):hover {
   color: var(--text-2);
 }
 
+/* While a run is replayed its bar takes the top of the stage: the canvas starts under it. */
+.studio-stage.replaying > .studio-canvas {
+  top: 54px;
+}
+
+/* The replay of a run, at the top of the canvas: the controls, the bar of time, the event of the moment. */
+.studio-replay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+}
+
+.studio-replay button {
+  flex: none;
+  min-width: 28px;
+  padding: 2px 8px;
+}
+
+.studio-replay-range {
+  flex: 0 1 260px;
+  min-width: 90px;
+  accent-color: var(--claude);
+}
+
+.studio-replay-time,
+.studio-replay-count {
+  flex: none;
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.studio-replay-event {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.studio-replay-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-replay-list button {
+  width: 100%;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.studio-replay-list li.on button {
+  background: var(--claude-soft);
+  color: var(--text);
+}
+
+.studio-replay-list li.later button {
+  color: var(--text-3);
+}
+
+.studio-replay-at {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+/* The limits of an agent, in a row that wraps; its MCP servers as chips. */
+.studio-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.studio-tool-chip {
+  border-color: rgba(217, 119, 87, 0.5);
+}
+
+/* On an arrow whose requests wait for your approval. */
+.studio-approve-mark {
+  color: var(--accent);
+}
+
+/* A parameter of the team: its name, what it is, its default, its value this time. */
+.studio-param {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 6px;
+  margin-bottom: 8px;
+}
+
+/* What it is takes the whole first line; its default and its value this time share the second. */
+.studio-param > input:first-of-type {
+  grid-column: 2 / 4;
+}
+
+.studio-param > input:nth-of-type(2) {
+  grid-column: 2;
+}
+
+.studio-param code {
+  font: 11.5px var(--mono);
+  color: var(--claude);
+}
+
 .studio-minimap {
   position: absolute;
   left: 12px;
@@ -4220,6 +4423,12 @@ header.top .view-switch button:not(.on):hover {
 .studio-link.live-question {
   stroke: var(--accent);
   stroke-width: 2;
+}
+
+.studio-link.live-approval {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
 }
 
 /* The top bar of the studio in a narrow window: the buttons keep their line; the name and the count give way. */

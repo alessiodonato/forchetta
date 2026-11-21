@@ -2,7 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { type Agent, STATE_LABEL } from '../shared/agent.ts';
 import { crewUsage, shortTokens, tokensTotal, usdText } from '../shared/present.ts';
 import { type LinkKind, linkStates } from './org-lines.ts';
-import { cleanBudget, CREW_NAME_MAX, type CrewTemplate, MEMBER_NAME_MAX, NOTE_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, RULES_MAX, type Talk } from '../shared/crew.ts';
+import { type AgentTools, hasTools, MCP_SERVERS, type McpServerInfo, mcpServerById, TOOL_LIMITS, type ToolLimitId, toolsText } from '../shared/agent-tools.ts';
+import { cleanBudget, CREW_NAME_MAX, type CrewTemplate, DELIVERABLE_MAX, MEMBER_NAME_MAX, NOTE_MAX, PARAM_HINT_MAX, PATH_MAX, PATHS_MAX, RELATION_MAX, ROLE_MAX, type RolePreset, RULES_MAX, type Talk, VALUE_MAX } from '../shared/crew.ts';
+import { DESCRIBE_MAX, describeChatPrompt } from '../shared/describe.ts';
+import { eventLine, type ReplayData, replayAt, type ReplayEvent } from '../shared/replay.ts';
 import { allSkills, SKILL_GROUPS, type SkillInfo, SKILLS_PER_AGENT_MAX, skillById, skillUrl } from '../shared/skills.ts';
 import { openLink } from './Artifacts.tsx';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
@@ -14,6 +17,7 @@ import {
   addNote,
   addSkill,
   addTemplate,
+  addTool,
   canvasSize,
   clampZoom,
   clipOf,
@@ -40,6 +44,7 @@ import {
   pathsOf,
   reserveKeys,
   noteOf,
+  paramsOfDoc,
   presetOfNode,
   problems,
   redoStep,
@@ -59,6 +64,7 @@ import {
   undoStep,
   updateLink,
   updateNode,
+  updateParam,
   YOU_H,
   YOU_W,
 } from './studio-model.ts';
@@ -94,7 +100,25 @@ const liveDocs = new Map<string, StudioDoc>();
 /** Its undo and redo, kept with it until the page reloads. */
 let history: StudioHistory = emptyHistory();
 
-type Selection = { kind: 'node'; key: number } | { kind: 'link'; to: number } | { kind: 'role'; name: string } | { kind: 'new-role' } | { kind: 'team'; name: string } | { kind: 'skill'; id: string } | { kind: 'new-skill' } | { kind: 'note'; key: number } | { kind: 'import' } | { kind: 'nodes'; keys: number[] } | undefined;
+type Selection =
+  | { kind: 'node'; key: number }
+  | { kind: 'link'; to: number }
+  | { kind: 'role'; name: string }
+  | { kind: 'new-role' }
+  | { kind: 'team'; name: string }
+  | { kind: 'skill'; id: string }
+  | { kind: 'new-skill' }
+  | { kind: 'tool'; id: string }
+  | { kind: 'note'; key: number }
+  | { kind: 'import' }
+  | { kind: 'describe' }
+  | { kind: 'nodes'; keys: number[] }
+  | undefined;
+
+/** What you wrote to have a team drawn, kept while the window lives. */
+let describing = '';
+/** The drawn team last opened on the canvas, by when it came: each one opens once. */
+let describedOpened: number | undefined;
 
 /** "+ new agent" in the palette: dragged, a box to fill on the canvas; clicked, a preset of your own to write. */
 const BLANK_AGENT: RolePreset = { name: 'agent', role: '' };
@@ -105,6 +129,7 @@ type Drag =
   | { kind: 'role'; preset: RolePreset; x0: number; y0: number; x: number; y: number; moved: boolean }
   | { kind: 'team'; template: CrewTemplate; x0: number; y0: number; x: number; y: number; moved: boolean }
   | { kind: 'skill'; skill: SkillInfo; x0: number; y0: number; x: number; y: number; moved: boolean }
+  | { kind: 'tool'; tool: McpServerInfo; x0: number; y0: number; x: number; y: number; moved: boolean }
   /** Several boxes moved together, from where each one was. */
   | { kind: 'group'; key: number; starts: Map<number, { x: number; y: number }>; px: number; py: number; x0: number; y0: number; moved: boolean }
   /** A rectangle drawn from an empty spot, to select the boxes it touches (canvas points). */
@@ -144,7 +169,286 @@ function Text({ label, value, onInput, max, placeholder, area, mono }: { label: 
 }
 
 /** What an agent is and how it runs: the fields of a box, and of a preset. */
-type AgentFields = Pick<StudioNode, 'name' | 'role' | 'model' | 'mode' | 'worktree' | 'paths' | 'reviews' | 'skills'>;
+type AgentFields = Pick<StudioNode, 'name' | 'role' | 'model' | 'mode' | 'worktree' | 'paths' | 'reviews' | 'skills' | 'tools'>;
+
+/** The tools of an agent as chosen: only what is on, undefined for nothing. */
+function toolsOf(limits: readonly ToolLimitId[], mcp: readonly string[], strictMcp: boolean): AgentTools | undefined {
+  const tools: AgentTools = {
+    ...(limits.length > 0 ? { limits: TOOL_LIMITS.filter((limit) => limits.includes(limit.id)).map((limit) => limit.id) } : {}),
+    ...(mcp.length > 0 ? { mcp: MCP_SERVERS.filter((server) => mcp.includes(server.id)).map((server) => server.id) } : {}),
+    ...(strictMcp ? { strictMcp: true } : {}),
+  };
+  return hasTools(tools) ? tools : undefined;
+}
+
+/** What an agent may not do, and the MCP servers it has: for its session only. */
+function ToolsField({ tools, onChange }: { tools: AgentTools | undefined; onChange: (tools: AgentTools | undefined) => void }) {
+  const limits = tools?.limits ?? [];
+  const mcp = tools?.mcp ?? [];
+  const strict = tools?.strictMcp === true;
+  const left = MCP_SERVERS.filter((server) => !mcp.includes(server.id));
+  return (
+    <div class="studio-field">
+      <span>
+        Tools <span class="studio-hint">· for this agent only</span>
+      </span>
+      <div class="studio-checks">
+        {TOOL_LIMITS.map((limit) => (
+          <label key={limit.id} class="studio-check" title={limit.summary}>
+            <input
+              type="checkbox"
+              checked={limits.includes(limit.id)}
+              onChange={() => onChange(toolsOf(limits.includes(limit.id) ? limits.filter((id) => id !== limit.id) : [...limits, limit.id], mcp, strict))}
+            />
+            {limit.label}
+          </label>
+        ))}
+      </div>
+      {mcp.length > 0 && (
+        <div class="studio-chips">
+          {mcp.map((id) => (
+            <span key={id} class="studio-skill-chip studio-tool-chip" title={mcpServerById(id)?.summary}>
+              {mcpServerById(id)?.label ?? id}
+              <button type="button" class="quiet" aria-label={`Remove the tool ${id}`} onClick={() => onChange(toolsOf(limits, mcp.filter((other) => other !== id), strict))}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {left.length > 0 && (
+        <select
+          value=""
+          aria-label="Add an MCP server"
+          onChange={(event) => {
+            const id = (event.target as HTMLSelectElement).value;
+            if (id) onChange(toolsOf(limits, [...mcp, id], strict));
+          }}
+        >
+          <option value="">+ add a tool (MCP server)…</option>
+          {left.map((server) => (
+            <option key={server.id} value={server.id}>
+              {server.label} ({server.id})
+            </option>
+          ))}
+        </select>
+      )}
+      <label class="studio-check" title="It starts with only its own MCP servers and those of the team: none of the MCP servers of your Claude Code">
+        <input type="checkbox" checked={strict} onChange={() => onChange(toolsOf(limits, mcp, !strict))} />
+        none of your MCP servers
+      </label>
+    </div>
+  );
+}
+
+/** An MCP server of the catalog: what it does, where it comes from, what it talks to. */
+function ToolCard({ tool }: { tool: McpServerInfo }) {
+  const url = `https://github.com/${tool.repo}`;
+  return (
+    <>
+      <p class="studio-title">
+        {tool.label}
+        <span class="studio-tag">MCP server</span>
+      </p>
+      <p class="studio-hint studio-strong">{tool.summary}</p>
+      <ul class="studio-list">
+        <li>
+          <code>
+            {tool.package}@{tool.version}
+          </code>
+          , from{' '}
+          <a
+            href={url}
+            onClick={(event) => {
+              event.preventDefault();
+              openLink(url);
+            }}
+          >
+            {tool.repo}
+          </a>
+        </li>
+        <li>License {tool.license}</li>
+        <li>Its tools: mcp__{tool.id}__…</li>
+        {tool.network && <li>Beyond this Mac: {tool.network}</li>}
+      </ul>
+      <p class="studio-hint">
+        Only the agents you give it to have it, for their session: npx runs it at this version when the session starts (the first time it downloads it), and its tools are allowed without asking for those agents. It is in no
+        file of your project and in none of your settings.
+      </p>
+      <p class="studio-hint">Drag it onto an agent, or add it from the tools of the agent.</p>
+    </>
+  );
+}
+
+/**
+ * A team from a sentence. In the app Claude draws it (your Claude Code, with no tools): it opens on the canvas, in
+ * place of what is there. In the browser there is no Claude of Forchetta: the prompt is copied, for a chat with
+ * Claude, and its answer goes into "Import".
+ */
+function DescribeForm({ store, maker, roles, onImport }: { store: Store; maker?: boolean; roles: readonly RolePreset[]; onImport: () => void }) {
+  const [text, setText] = useState(describing);
+  const [copied, setCopied] = useState(false);
+  const busy = store.state.describe?.busy === true;
+  const state = store.state.describe;
+  return (
+    <>
+      <p class="studio-title">Describe the team</p>
+      <p class="studio-hint">
+        {maker
+          ? 'Say what the team is for, and who does what if you know. The prompt for Claude is copied: paste it in a chat with Claude, then its answer in Import, and the team is on the canvas.'
+          : 'Say what the team is for, and who does what if you know: Claude draws it on the canvas, with roles, models, skills, tools and arrows, for you to change. It runs your Claude Code alone: no tools, none of your files, settings or memory. It takes half a minute or so, and a few cents. Nothing starts until you press "Create team".'}
+      </p>
+      <Text
+        label="The team you want"
+        area
+        value={text}
+        max={DESCRIBE_MAX}
+        placeholder="A team to move the frontend to React 19: a lead that plans, two developers on separate folders, a tester with a browser, a reviewer that approves before the merge."
+        onInput={(value) => {
+          describing = value;
+          setText(value);
+        }}
+      />
+      <div class="studio-actions">
+        {maker ? (
+          <>
+            <button
+              type="button"
+              class="primary"
+              disabled={!text.trim()}
+              onClick={() => {
+                void navigator.clipboard?.writeText(describeChatPrompt(text, roles)).then(
+                  () => setCopied(true),
+                  () => setCopied(false),
+                );
+              }}
+            >
+              Copy the prompt for Claude
+            </button>
+            <button type="button" onClick={onImport}>
+              Import the answer
+            </button>
+          </>
+        ) : (
+          <button type="button" class="primary" disabled={!text.trim() || busy} onClick={() => store.describeTeam(text)}>
+            {busy ? 'Claude is drawing it…' : 'Draw it'}
+          </button>
+        )}
+      </div>
+      {maker && copied && <p class="studio-hint">Copied: paste it in a chat with Claude, then paste its answer in Import.</p>}
+      {!maker && busy && <p class="studio-hint">Usually 20 to 60 seconds. The canvas stays as it is until the team comes.</p>}
+      {!maker && state && !state.busy && state.error && <p class="studio-note error">{state.error}</p>}
+    </>
+  );
+}
+
+/**
+ * The parameters of the team: each {name} its texts use, with what it is and its default (kept in the template), and
+ * its value for the next start (not kept).
+ */
+function ParamsFields({ doc, maker, onChange }: { doc: StudioDoc; maker?: boolean; onChange: (doc: StudioDoc) => void }) {
+  const params = paramsOfDoc(doc);
+  if (params.length === 0)
+    return <p class="studio-hint">Parameters: write {'{ticket}'} in a role, a relation, the rules or what it delivers, and it is filled each time the team starts.</p>;
+  return (
+    <div class="studio-field">
+      <span>Parameters</span>
+      {params.map((param) => (
+        <div key={param.name} class={`studio-param${maker ? '' : ' values'}`}>
+          <code>{`{${param.name}}`}</code>
+          <input
+            class="command-input"
+            type="text"
+            value={param.hint ?? ''}
+            maxLength={PARAM_HINT_MAX}
+            placeholder="what it is: the ticket, like APP-123"
+            aria-label={`What {${param.name}} is`}
+            onInput={(event) => onChange(updateParam(doc, param.name, { hint: (event.target as HTMLInputElement).value }))}
+          />
+          <input
+            class="command-input mono"
+            type="text"
+            value={param.default ?? ''}
+            maxLength={VALUE_MAX}
+            placeholder="default"
+            aria-label={`The default of {${param.name}}`}
+            onInput={(event) => onChange(updateParam(doc, param.name, { default: (event.target as HTMLInputElement).value }))}
+          />
+          {!maker && (
+            <input
+              class="command-input mono"
+              type="text"
+              value={doc.values?.[param.name] ?? ''}
+              maxLength={VALUE_MAX}
+              placeholder={param.default ? `this time: ${param.default}` : 'value, this time'}
+              aria-label={`The value of {${param.name}} for this start`}
+              onInput={(event) => onChange({ ...doc, values: { ...doc.values, [param.name]: (event.target as HTMLInputElement).value } })}
+            />
+          )}
+        </div>
+      ))}
+      <p class="studio-hint">
+        {maker
+          ? 'What each one is, and its default, go with the template: whoever starts the team fills them.'
+          : 'What each one is and its default go with the template; the value is for this start only, and fills the texts and your goal.'}
+      </p>
+    </div>
+  );
+}
+
+const clockOf = (at: number): string => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+/** The replay of a run: back to the start, one event back, play, one event forward, and the time on a bar. */
+function ReplayBar({ data, t, playing, onTime, onPlay, onClose }: { data: ReplayData; t: number; playing: boolean; onTime: (t: number) => void; onPlay: () => void; onClose: () => void }) {
+  const frame = replayAt(data, t);
+  const step = (forward: boolean): void => {
+    const events = data.events;
+    if (forward) {
+      const next = events.find((event) => event.t > t);
+      if (next) onTime(next.t);
+    } else {
+      const before = [...events].reverse().find((event) => event.t < t);
+      onTime(before ? before.t : data.start);
+    }
+  };
+  const current: ReplayEvent | undefined = frame.index >= 0 ? data.events[frame.index] : undefined;
+  return (
+    <div class="studio-replay" role="group" aria-label="Replay of the run">
+      <button type="button" class="quiet" title="Back to the start" aria-label="Back to the start" onClick={() => onTime(data.start)}>
+        ⏮
+      </button>
+      <button type="button" class="quiet" title="One event back" aria-label="One event back" onClick={() => step(false)}>
+        ◀
+      </button>
+      <button type="button" class="primary" title={playing ? 'Pause' : 'Play: one event after the other'} aria-label={playing ? 'Pause' : 'Play'} onClick={onPlay}>
+        {playing ? '❚❚' : '▶'}
+      </button>
+      <button type="button" class="quiet" title="One event forward" aria-label="One event forward" onClick={() => step(true)}>
+        ▶︎|
+      </button>
+      <input
+        type="range"
+        class="studio-replay-range"
+        min={data.start}
+        max={Math.max(data.end, data.start + 1)}
+        step={1000}
+        value={t}
+        aria-label="Time of the run"
+        onInput={(event) => onTime(Number((event.target as HTMLInputElement).value))}
+      />
+      <span class="studio-replay-time">{clockOf(t)}</span>
+      <span class="studio-replay-event" title={current ? eventLine(current) : undefined}>
+        {current ? eventLine(current) : 'The team starts: ▶ plays the run, one event after the other.'}
+      </span>
+      <span class="studio-replay-count">
+        {frame.index + 1}/{data.events.length}
+      </span>
+      <button type="button" class="quiet" title="Back to the team as it is now" onClick={onClose}>
+        Live
+      </button>
+    </div>
+  );
+}
 
 /** `lead`: the box is the Claude lead, which stays in the folder of the team, reviews nothing and has no files of its own. */
 function AgentForm({ fields, worktrees, lead, onChange }: { fields: AgentFields; worktrees: boolean; lead?: boolean; onChange: (patch: Partial<AgentFields>) => void }) {
@@ -158,6 +462,7 @@ function AgentForm({ fields, worktrees, lead, onChange }: { fields: AgentFields;
       </div>
       {lead ? <p class="studio-hint">As the lead it works in the folder of the team, with no worktree and no files of its own.</p> : <MemberOptions fields={fields} worktrees={worktrees} onChange={onChange} />}
       <SkillsField skills={fields.skills} onChange={(skills) => onChange({ skills })} />
+      <ToolsField tools={fields.tools} onChange={(tools) => onChange({ tools })} />
     </>
   );
 }
@@ -531,6 +836,7 @@ function RelationForm({
   onRemove,
   onDone,
   onTalk,
+  onApprove,
 }: {
   doc: StudioDoc;
   to: number;
@@ -539,6 +845,8 @@ function RelationForm({
   onDone?: () => void;
   /** A member of a running team: → / ⇄ changes in the team itself; its prompt and its place stay. */
   onTalk?: (talk: Talk) => void;
+  /** A member of a running team: whether its requests wait for your approval, from now on. */
+  onApprove?: (approve: boolean) => void;
 }) {
   const link = incoming(doc, to);
   const target = nodeOf(doc, to);
@@ -578,6 +886,19 @@ function RelationForm({
               </button>
             ))}
           </span>
+          {link.from !== 'you' && (
+            <label class="studio-check" title={`Each request ${above} sends to ${below} waits for your yes (in the panel of the team): you approve it, change it, or send it back with a note`}>
+              <input
+                type="checkbox"
+                checked={link.approve === true}
+                onChange={() => {
+                  onChange(updateLink(doc, to, { approve: !link.approve }));
+                  onApprove?.(!link.approve);
+                }}
+              />
+              you approve its requests first
+            </label>
+          )}
           {onTalk ? (
             <p class="studio-hint">
               {link.relation.trim() ? `Its prompt: ${link.relation.trim()}` : 'No prompt of its own.'} A running session keeps its prompt; → / ⇄ counts from the next request.
@@ -848,10 +1169,39 @@ export function Studio({
 
   const spawn = store.state.crewSpawn;
   const edit = store.state.crewEdit;
-  const issues = problems(maker ? { ...doc, folder: doc.folder.trim() || '/' } : doc);
+  const issues = problems(maker ? { ...doc, folder: doc.folder.trim() || '/' } : doc, !maker && !live);
   const lead = leadKey(doc);
   // What goes on along each arrow of a running team: a request in the queue or at work, an answer, a question.
   const lineStates = crew ? linkStates(crew) : new Map<string, LinkKind>();
+  // The replay of a running team: its run from its file and the ledger, at a moment you choose.
+  const [replaying, setReplaying] = useState(false);
+  const [replayT, setReplayT] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const replayData = replaying && live && store.state.crewReplay?.crewId === live ? store.state.crewReplay.replay : undefined;
+  const frame = replayData ? replayAt(replayData, replayT) : undefined;
+  const startReplay = (): void => {
+    if (!live) return;
+    setReplaying(true);
+    setPlaying(false);
+    setSelection(undefined);
+    store.requestReplay(live);
+  };
+  const replayAsked = store.state.crewReplay?.at;
+  useEffect(() => {
+    if (replaying && replayData) setReplayT(replayData.start);
+  }, [replayAsked]);
+  // Playing: one event after the other, a little under a second each; at the end it stops.
+  useEffect(() => {
+    if (!playing || !replayData) return;
+    const timer = setTimeout(() => {
+      const next = replayData.events.find((event) => event.t > replayT);
+      if (next) setReplayT(next.t);
+      else setPlaying(false);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [playing, replayT, replayData]);
+  /** What goes along the arrow into a box: the run at the moment of the replay, or the team now. */
+  const flowOf = (node: StudioNode): LinkKind | undefined => (frame ? frame.arrows.get(node.name.trim()) : crew ? lineStates.get(recipientOf(node)?.agentId ?? '') : undefined);
   const size = canvasSize(doc);
   const members = doc.nodes.length - (lead !== undefined ? 1 : 0);
 
@@ -976,6 +1326,22 @@ export function Studio({
     const file = event.dataTransfer?.files[0];
     if (file) store.importTeam(await file.text());
   };
+
+  // A team drawn from a description: on the canvas, in place of what was there (⌘Z brings it back).
+  const described = store.state.describe;
+  // Each drawn team once (also when it came while the studio was closed), and never on the canvas of a running team.
+  useEffect(() => {
+    if (live || !described || described.at === describedOpened || described.busy || !described.ok || !described.template) return;
+    describedOpened = described.at;
+    setDoc(docOfTemplate(described.template, docRef.current.folder));
+    setSelection(undefined);
+    setPopover(undefined);
+    setNote({
+      text: described.note
+        ? `${described.template.name} is on the canvas. ${described.note} ⌘Z brings back what was there.`
+        : `Claude drew ${described.template.name}${described.usd ? ` (≈ ${usdText(described.usd)})` : ''}: change what you like, then "Create team" or "Save as template". ⌘Z brings back what was on the canvas.`,
+    });
+  }, [described?.at, described?.busy]);
 
   // The result of saving a template or a preset, said once.
   useEffect(() => {
@@ -1136,7 +1502,9 @@ export function Studio({
               : { kind: 'role', name: current.preset.name }
             : current.kind === 'team'
               ? { kind: 'team', name: current.template.name }
-              : { kind: 'skill', id: current.skill.id },
+              : current.kind === 'tool'
+                ? { kind: 'tool', id: current.tool.id }
+                : { kind: 'skill', id: current.skill.id },
         );
         return;
       }
@@ -1150,6 +1518,16 @@ export function Studio({
         setDoc(result.doc);
         setSelection({ kind: 'node', key: target!.key });
         setNote({ text: `${target!.name} has ${current.skill.id}: it is downloaded when the team starts, outside the project.` });
+        return;
+      }
+      if (current.kind === 'tool') {
+        const target = nodeAt(doc, point.x, point.y);
+        if (target && live && !pending(target)) return setNote({ text: `${target.name} is running: its session keeps the tools it started with.`, error: true });
+        const result = target ? addTool(doc, target.key, current.tool.id) : { error: 'Drop a tool on an agent: it is for that agent only.' };
+        if ('error' in result) return setNote({ text: result.error, error: true });
+        setDoc(result.doc);
+        setSelection({ kind: 'node', key: target!.key });
+        setNote({ text: `${target!.name} has the ${current.tool.label}: its session starts with it, and only its session.` });
         return;
       }
       if (current.kind === 'role') addPreset(current.preset, { x: Math.max(0, point.x - NODE_W / 2), y: Math.max(0, point.y - 20) });
@@ -1208,11 +1586,19 @@ export function Studio({
     const point = toCanvas(event.clientX, event.clientY);
     begin({ kind: 'link', from, x: point.x, y: point.y });
   };
-  const startPalette = (event: PointerEvent, item: { preset: RolePreset } | { template: CrewTemplate } | { skill: SkillInfo }): void => {
+  const startPalette = (event: PointerEvent, item: { preset: RolePreset } | { template: CrewTemplate } | { skill: SkillInfo } | { tool: McpServerInfo }): void => {
     if (event.button !== 0) return;
     event.preventDefault();
     const base = { x0: event.clientX, y0: event.clientY, x: event.clientX, y: event.clientY, moved: false };
-    begin('preset' in item ? { kind: 'role', preset: item.preset, ...base } : 'template' in item ? { kind: 'team', template: item.template, ...base } : { kind: 'skill', skill: item.skill, ...base });
+    begin(
+      'preset' in item
+        ? { kind: 'role', preset: item.preset, ...base }
+        : 'template' in item
+          ? { kind: 'team', template: item.template, ...base }
+          : 'tool' in item
+            ? { kind: 'tool', tool: item.tool, ...base }
+            : { kind: 'skill', skill: item.skill, ...base },
+    );
   };
 
   const remove = (): void => {
@@ -1376,7 +1762,7 @@ export function Studio({
   const create = (): void => {
     const checked = specOfDoc(doc);
     if ('error' in checked) return setNote({ text: checked.error, error: true });
-    store.createCrew(checked.spec);
+    store.createCrew(checked.spec, doc.goal);
   };
   const saveTemplate = (): void => {
     const checked = templateOfDoc(doc);
@@ -1387,7 +1773,7 @@ export function Studio({
   const selectedNode = selection?.kind === 'node' ? nodeOf(doc, selection.key) : undefined;
   const selectedRole = selection?.kind === 'role' ? store.state.roles.find((role) => role.name === selection.name) : undefined;
   const selectedTeam = selection?.kind === 'team' ? store.state.templates.find((template) => template.name === selection.name) : undefined;
-  const ghost = drag && (drag.kind === 'role' || drag.kind === 'team' || drag.kind === 'skill') && drag.moved ? drag : undefined;
+  const ghost = drag && (drag.kind === 'role' || drag.kind === 'team' || drag.kind === 'skill' || drag.kind === 'tool') && drag.moved ? drag : undefined;
   const selectedSkill = selection?.kind === 'skill' ? skillById(selection.id) : undefined;
   const skillsUsed = skillsOf(doc);
   const drawing = drag?.kind === 'link' ? drag : undefined;
@@ -1436,6 +1822,16 @@ export function Studio({
         {!live && (
           <button type="button" class="quiet studio-undo" title="Redo (⇧⌘Z)" aria-label="Redo" disabled={history.future.length === 0} onClick={() => step(false)}>
             ↷
+          </button>
+        )}
+        {!live && (
+          <button type="button" class={`quiet${selection?.kind === 'describe' ? ' on' : ''}`} title="Say what the team is for: Claude draws it on the canvas" onClick={() => setSelection({ kind: 'describe' })}>
+            Describe…
+          </button>
+        )}
+        {live && (
+          <button type="button" class={`quiet${replaying ? ' on' : ''}`} title="The run of the team again, step by step: what went along each arrow, what each agent cost and wrote" onClick={() => (replaying ? setReplaying(false) : startReplay())}>
+            Replay
           </button>
         )}
         <button type="button" class="quiet" title="A note on the canvas, for whoever opens the team after you" onClick={newNote}>
@@ -1526,6 +1922,22 @@ export function Studio({
             </span>
           </div>
         ))}
+        <p class="studio-section" title="MCP servers, chosen and pinned to a version: drop one on an agent, and only its session has it.">
+          Tools
+        </p>
+        {MCP_SERVERS.map((tool) => (
+          <div
+            key={tool.id}
+            class={`studio-preset studio-skill${selection?.kind === 'tool' && selection.id === tool.id ? ' on' : ''}`}
+            title={`${tool.summary}\n\n${tool.package}@${tool.version} · ${tool.license}. Drag it onto an agent; click it for more.`}
+            onPointerDown={(event) => startPalette(event, { tool })}
+          >
+            <strong>{tool.label}</strong>
+            <span>
+              {tool.id} · {tool.license}
+            </span>
+          </div>
+        ))}
         <p class="studio-section" title="Open-source skills of Claude Code, chosen and pinned to a commit: drop one on an agent. Nothing is downloaded until a team uses it.">
           Skills
         </p>
@@ -1574,7 +1986,7 @@ export function Studio({
         })}
       </aside>
 
-      <div class="studio-stage">
+      <div class={`studio-stage${replaying ? ' replaying' : ''}`}>
       <div
         ref={viewport}
         class="studio-canvas"
@@ -1617,7 +2029,7 @@ export function Studio({
               const on = (selection?.kind === 'link' && selection.to === link.to) || popover?.to === link.to;
               const d = curve(ends.x1, ends.y1, ends.x2, ends.y2);
               const target = nodeOf(doc, link.to);
-              const flowing = crew && target ? lineStates.get(recipientOf(target)?.agentId ?? '') : undefined;
+              const flowing = target ? flowOf(target) : undefined;
               return (
                 <g key={link.to}>
                   <path d={d} class={`studio-link${on ? ' on' : ''}${(link.talk ?? doc.talk) === 'oneway' ? ' oneway' : ''}${flowing ? ` live-${flowing}` : ''}`} marker-end={`url(#${on ? 'studio-arrow-on' : 'studio-arrow'})`} />
@@ -1646,7 +2058,11 @@ export function Studio({
                 type="button"
                 class={`studio-link-label${selection?.kind === 'link' && selection.to === link.to ? ' on' : ''}`}
                 style={{ left: `${(ends.x1 + ends.x2) / 2}px`, top: `${(ends.y1 + ends.y2) / 2}px` }}
-                title={isLead ? 'The lead of the team' : `${talk === 'twoway' ? 'Answers' : 'Executes only'}${link.relation.trim() ? `: ${firstLine(link.relation)}` : ''}. Click to change.`}
+                title={
+                  isLead
+                    ? 'The lead of the team'
+                    : `${talk === 'twoway' ? 'Answers' : 'Executes only'}${link.relation.trim() ? `: ${firstLine(link.relation)}` : ''}${link.approve ? '. Its requests wait for your approval' : ''}. Click to change.`
+                }
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => {
                   setPopover(undefined);
@@ -1655,6 +2071,7 @@ export function Studio({
               >
                 {isLead ? 'lead' : talk === 'twoway' ? '⇄' : '→'}
                 {!isLead && link.relation.trim() ? ' ✎' : ''}
+                {!isLead && link.approve ? <span class="studio-approve-mark"> · you approve</span> : null}
               </button>
             );
           })}
@@ -1671,11 +2088,21 @@ export function Studio({
               member && (node.worktree ?? doc.worktrees) ? 'worktree' : undefined,
               member && node.paths.trim() ? 'files' : undefined,
               node.skills.length > 0 ? `${node.skills.length} ${node.skills.length === 1 ? 'skill' : 'skills'}` : undefined,
+              hasTools(node.tools) ? toolsText(node.tools) : undefined,
             ].filter(Boolean);
             const loose = !incoming(doc, node.key);
             const running = live ? liveAgentOf(node) : undefined;
             const waiting = live && pending(node);
-            if (running) {
+            const then = frame?.agents.get(node.name.trim());
+            if (frame) {
+              traits.splice(
+                0,
+                traits.length,
+                ...(then?.on !== undefined ? [`on #${then.on}`] : ['free']),
+                ...(then && then.usd > 0 ? [`≈ ${usdText(then.usd)}`] : []),
+                ...(then && then.files.length > 0 ? [`${then.files.length} ${then.files.length === 1 ? 'file' : 'files'}`] : []),
+              );
+            } else if (running) {
               const used = crewUsage([running]);
               const total = used ? tokensTotal(used.tokens) : 0;
               traits.splice(0, traits.length, STATE_LABEL[running.state], ...(used && used.usd > 0 ? [`≈ ${usdText(used.usd)}`] : []), ...(total > 0 ? [`${shortTokens(total)} tok`] : []));
@@ -1684,10 +2111,10 @@ export function Studio({
               <div
                 key={node.key}
                 class={`studio-node${selectedKeys.includes(node.key) ? ' on' : ''}${loose ? ' loose' : ''}${waiting ? ' pending' : ''}`}
-                data-live={running?.state}
+                data-live={frame ? (then?.on !== undefined ? 'working' : 'idle') : running?.state}
                 style={{ left: `${node.x}px`, top: `${node.y}px`, width: `${NODE_W}px`, height: `${NODE_H}px` }}
                 data-target={
-                  (drawing && nodeAt(doc, drawing.x, drawing.y)?.key === node.key) || (ghost?.kind === 'skill' && (() => {
+                  (drawing && nodeAt(doc, drawing.x, drawing.y)?.key === node.key) || ((ghost?.kind === 'skill' || ghost?.kind === 'tool') && (() => {
                     const point = toCanvas(ghost.x, ghost.y);
                     return overCanvas(ghost.x, ghost.y) && nodeAt(doc, point.x, point.y)?.key === node.key;
                   })())
@@ -1723,7 +2150,12 @@ export function Studio({
               <RelationForm
                 doc={doc}
                 to={popover.to}
-                {...(live && !pending(nodeOf(doc, popover.to)!) ? { onTalk: (talk: Talk) => store.editCrew(live, { action: 'talk', name: nodeOf(doc, popover.to)!.name.trim(), talk }) } : {})}
+                {...(live && !pending(nodeOf(doc, popover.to)!)
+                  ? {
+                      onTalk: (talk: Talk) => store.editCrew(live, { action: 'talk', name: nodeOf(doc, popover.to)!.name.trim(), talk }),
+                      onApprove: (approve: boolean) => store.editCrew(live, { action: 'approve', name: nodeOf(doc, popover.to)!.name.trim(), approve }),
+                    }
+                  : {})}
                 onChange={setDoc}
                 onRemove={() => {
                   setDoc(removeLink(doc, popover.to));
@@ -1762,6 +2194,33 @@ export function Studio({
         </button>
       </div>
       <Minimap doc={doc} size={size} zoom={zoom} view={viewport.current} />
+      {replaying &&
+        (replayData ? (
+          <ReplayBar
+            data={replayData}
+            t={replayT}
+            playing={playing}
+            onTime={(t) => {
+              setPlaying(false);
+              setReplayT(t);
+            }}
+            onPlay={() => {
+              if (!playing && !replayData.events.some((event) => event.t > replayT)) setReplayT(replayData.start);
+              setPlaying(!playing);
+            }}
+            onClose={() => {
+              setReplaying(false);
+              setPlaying(false);
+            }}
+          />
+        ) : (
+          <div class="studio-replay">
+            <span class="studio-replay-event">{store.state.crewReplay?.crewId === live ? 'Nothing to replay yet: the first request starts the run.' : 'Reading the run of the team…'}</span>
+            <button type="button" class="quiet" onClick={() => setReplaying(false)}>
+              Live
+            </button>
+          </div>
+        ))}
       </div>
 
       <aside class="studio-props" aria-label="Properties">
@@ -1788,6 +2247,10 @@ export function Studio({
           </>
         ) : selection?.kind === 'import' ? (
           <ImportTeam store={store} />
+        ) : selection?.kind === 'describe' ? (
+          <DescribeForm store={store} maker={maker} roles={store.state.roles} onImport={() => setSelection({ kind: 'import' })} />
+        ) : selection?.kind === 'tool' && mcpServerById(selection.id) ? (
+          <ToolCard tool={mcpServerById(selection.id)!} />
         ) : selection?.kind === 'note' && noteOf(doc, selection.key) ? (
           <>
             <p class="studio-title">Note</p>
@@ -1860,7 +2323,10 @@ export function Studio({
             onChange={setDoc}
             onRemove={remove}
             {...(live && nodeOf(doc, selection.to) && !pending(nodeOf(doc, selection.to)!)
-              ? { onTalk: (talk: Talk) => store.editCrew(live, { action: 'talk', name: nodeOf(doc, selection.to)!.name.trim(), talk }) }
+              ? {
+                  onTalk: (talk: Talk) => store.editCrew(live, { action: 'talk', name: nodeOf(doc, selection.to)!.name.trim(), talk }),
+                  onApprove: (approve: boolean) => store.editCrew(live, { action: 'approve', name: nodeOf(doc, selection.to)!.name.trim(), approve }),
+                }
               : {})}
           />
         ) : selection?.kind === 'new-role' ? (
@@ -1873,6 +2339,32 @@ export function Studio({
           <AddSkill store={store} onChoose={maker ? undefined : chooseFolder} onAdded={(id) => setSelection({ kind: 'skill', id })} />
         ) : selectedSkill ? (
           <SkillCard skill={selectedSkill} store={store} />
+        ) : live && replayData ? (
+          <>
+            <p class="studio-title">
+              Replay of {crew?.name ?? doc.name}
+              <span class="studio-tag">{replayData.events.length} events</span>
+            </p>
+            <p class="studio-hint">
+              Each arrow lights up while a request goes along it (orange; amber when it waits for your approval), green when an answer goes back. Each box shows what its agent had cost and written until then. Click an event to go there.
+            </p>
+            <ol class="studio-replay-list">
+              {replayData.events.map((event, index) => (
+                <li key={`${event.t}-${index}`} class={frame && index === frame.index ? 'on' : frame && index > frame.index ? 'later' : undefined}>
+                  <button
+                    type="button"
+                    class="quiet"
+                    onClick={() => {
+                      setPlaying(false);
+                      setReplayT(event.t);
+                    }}
+                  >
+                    <span class="studio-replay-at">{clockOf(event.t)}</span> {eventLine(event)}
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </>
         ) : live ? (
           <>
             <p class="studio-title">
@@ -1932,6 +2424,27 @@ export function Studio({
               onInput={(rules) => setDoc({ ...doc, rules })}
             />
             <p class="studio-hint">Every session of the team gets them with its role. Nothing is written in the folder of the project.</p>
+            <Text
+              label="It delivers"
+              value={doc.deliverable ?? ''}
+              max={DELIVERABLE_MAX}
+              placeholder="What it hands over: a pull request, docs/report.md, a report"
+              onInput={(deliverable) => setDoc({ ...doc, deliverable })}
+            />
+            <p class="studio-hint">The lead says when it is ready (the tool deliver), and you are told. Optional.</p>
+            <ParamsFields doc={doc} maker={maker} onChange={setDoc} />
+            {!maker && (
+              <>
+                <Text
+                  label="Its first goal"
+                  area
+                  value={doc.goal ?? ''}
+                  max={20_000}
+                  placeholder="What to do first: it goes to the lead as soon as the team starts (to every member when you lead). Optional: you can write it in the panel of the team later."
+                  onInput={(goal) => setDoc({ ...doc, goal })}
+                />
+              </>
+            )}
             <Text label="Budget, in dollars" value={doc.budget ?? ''} max={12} placeholder="none: for example 20" mono onInput={(budget) => setDoc({ ...doc, budget })} />
             <p class="studio-hint">{doc.budget?.trim() && !cleanBudget(doc.budget) ? 'A number of dollars, like 20 or 12.50.' : 'When its sessions cost more, you are told once. Nothing stops: a warning, not a limit.'}</p>
             <label class="studio-field">
@@ -1986,7 +2499,7 @@ export function Studio({
 
       {ghost && (
         <div class="studio-ghost" style={{ left: `${ghost.x}px`, top: `${ghost.y}px` }}>
-          {ghost.kind === 'role' ? ghost.preset.name : ghost.kind === 'team' ? `${ghost.template.name} (team)` : `${ghost.skill.id} (skill)`}
+          {ghost.kind === 'role' ? ghost.preset.name : ghost.kind === 'team' ? `${ghost.template.name} (team)` : ghost.kind === 'tool' ? `${ghost.tool.label} (tool)` : `${ghost.skill.id} (skill)`}
         </div>
       )}
       {menu && (

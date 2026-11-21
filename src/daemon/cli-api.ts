@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs';
-import { type Crew, type CrewSpec, type CrewTemplate, type ReviewRecord, cleanBudget, cleanCrewSpec, leadName, templateOf, threadOf } from '../shared/crew.ts';
+import { type Crew, type CrewSpec, type CrewTemplate, type ReviewRecord, cleanBudget, cleanCrewSpec, fillParams, leadName, templateOf, threadOf } from '../shared/crew.ts';
 import type { Agent, AgentState, TokenUsage } from '../shared/agent.ts';
 import { activity, sumTokens, tokensTotal } from '../shared/present.ts';
 import { teamFileName, teamFileOf } from '../shared/team-file.ts';
@@ -122,7 +122,9 @@ export function threadMarkdown(crew: Crew, reviews: readonly ReviewRecord[]): st
       .map((line) => `> ${line}`.trimEnd())
       .join('\n');
   const lines = [`# ${crew.name}`, '', `Folder: ${crew.cwd}  `, `Lead: ${leadName(crew)}  `, `Started: ${time(crew.createdAt)}`, ''];
-  for (const entry of threadOf(crew.requests ?? [], reviews)) {
+  if (crew.deliverable) lines.push(`Delivers: ${fillParams(crew.deliverable, crew.values)}  `, '');
+  if (crew.values) lines.push(`Values: ${Object.entries(crew.values).map(([name, value]) => `${name} = ${value}`).join(', ')}`, '');
+  for (const entry of threadOf(crew.requests ?? [], reviews, crew.delivered ?? [])) {
     if (entry.kind === 'request') {
       const to = entry.deliveries.map((delivery) => `${delivery.to} (${delivery.status})`).join(', ');
       lines.push(`## #${entry.n} · ${entry.from} → ${to}${entry.parent !== undefined ? ` · from #${entry.parent}` : ''}`, `*${time(entry.at)}*`, '', quote(entry.text), '');
@@ -130,6 +132,10 @@ export function threadMarkdown(crew: Crew, reviews: readonly ReviewRecord[]): st
       lines.push(`**Question from ${entry.from} to ${entry.to}** (#${entry.n}, ${time(entry.at)})`, '', quote(entry.text), '');
     } else if (entry.kind === 'answer') {
       lines.push(`**Answer from ${entry.from} to ${entry.to}** (#${entry.n}, ${time(entry.at)})`, '', entry.text ? quote(entry.text) : '> (no text)', '');
+    } else if (entry.kind === 'approval') {
+      lines.push(`**${entry.decision === 'approved' ? `You approved #${entry.n} for ${entry.to}${entry.edited ? ', changed' : ''}` : `You sent back #${entry.n} to ${entry.to}`}** (${time(entry.at)})`, '', ...(entry.text ? [quote(entry.text), ''] : []));
+    } else if (entry.kind === 'delivered') {
+      lines.push(`**Delivered by ${entry.from}**${entry.where ? `: ${entry.where}` : ''} (${time(entry.at)})`, '', quote(entry.text), '');
     } else {
       lines.push(`**Review by ${entry.from}**: ${entry.verdict === 'approved' ? 'approved' : 'changes asked'} ${entry.short}${entry.subject ? ` (${entry.subject})` : ''} · ${time(entry.at)}`, '', ...(entry.text ? [quote(entry.text), ''] : []));
     }
@@ -184,7 +190,9 @@ export function cliApi(deps: CliApiDeps): (method: string, path: string, query: 
       const name = typeof input.name === 'string' && input.name.trim() ? input.name.trim() : template.name;
       const budget = input.budgetUsd === undefined ? template.budgetUsd : cleanBudget(input.budgetUsd);
       if (input.budgetUsd !== undefined && budget === undefined) return fail('the budget is a number of dollars, like 20 or 12.50');
-      const checked = cleanCrewSpec({ ...template, name, cwd, ...(budget ? { budgetUsd: budget } : {}) });
+      // The values of its parameters ({ticket}), from --set: the daemon says which are missing.
+      const values = input.values && typeof input.values === 'object' && !Array.isArray(input.values) ? input.values : undefined;
+      const checked = cleanCrewSpec({ ...template, name, cwd, ...(budget ? { budgetUsd: budget } : {}), ...(values ? { values } : {}) });
       if ('error' in checked) return fail(checked.error);
       const created = await deps.crews.create(deps.withRepoRules(checked.spec));
       if (!created.ok || !created.crewId) return fail(created.error ?? 'the team did not start');

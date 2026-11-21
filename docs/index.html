@@ -666,8 +666,8 @@
     <section class="part" id="studio" aria-labelledby="studio-title">
       <div class="text">
         <h2 id="studio-title">Draw a team in the studio</h2>
-        <p>A team is a few Claude Code sessions that work together. You drag the agents onto a canvas, each with a role, a model and its skills, and pull an arrow from each one to the agents it leads.</p>
-        <p>Then you start it with a goal. The lead, a Claude session or you, splits it into requests; the others do the work, and ask the one above them when they're stuck. Save the team as a template, and start it again in another project.</p>
+        <p>A team is a few Claude Code sessions that work together. You drag the agents onto a canvas, each with a role, a model, its skills and its tools, and pull an arrow from each one to the agents it leads. Or describe the team in a sentence, and Claude draws it.</p>
+        <p>Then you start it with a goal. The lead, a Claude session or you, splits it into requests; the others do the work, and ask the one above them when they're stuck. Mark an arrow, and its requests wait for your yes. Save the team as a template, and start it again in another project.</p>
         <p class="studio-cta"><a class="button primary" href="studio/">Open the Studio Maker</a> <span>The same studio in your browser: draw a team, export it as a file, open it in Forchetta.</span></p>
       </div>
       <div class="clips">
@@ -846,7 +846,7 @@
           <small>To open a session's terminal from the app, start it with <code>forchetta run claude</code>, or with New session in the app.</small>
         </li>
       </ol>
-      <p><b>It stays on your Mac.</b> The daemon listens on <code>127.0.0.1</code> only, and your sessions are not sent anywhere: the one exception is an optional one-line summary by the Claude API, off unless you turn it on. The open-source skills a team uses are fetched from GitHub when it starts, at a pinned commit. Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change and asks.</p>
+      <p><b>It stays on your Mac.</b> The daemon listens on <code>127.0.0.1</code> only, and your sessions are not sent anywhere: the one exception is an optional one-line summary by the Claude API, off unless you turn it on. The open-source skills a team uses are fetched from GitHub when it starts, at a pinned commit, and the MCP servers you give an agent from npm, at a pinned version. Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change and asks.</p>
       <p>Everything else is in the <a href="manual.html">manual</a>: commands to a session, the command line, settings and shortcuts, reports. The <a href="https://github.com/alessiodonato/forchetta#readme">README</a> is in English and in Italian.</p>
     </section>
   </div>

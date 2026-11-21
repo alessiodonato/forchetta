@@ -5,7 +5,7 @@ import type { CrewRequest, CrewSummary, Delivery } from '../shared/crew.ts';
 // another member. No DOM here: the tests use it.
 
 /** What goes on along the line of a member now. */
-export type LinkKind = 'queued' | 'working' | 'answer' | 'question';
+export type LinkKind = 'approval' | 'queued' | 'working' | 'answer' | 'question';
 /** What just arrived along it: a request at the member; an answer or a question at the one above it. */
 export type ArrivalKind = 'request' | 'answer' | 'question';
 
@@ -24,7 +24,7 @@ const AT_WORK = new Set(['sent', 'working', 'delegated']);
 const ON_ITS_WAY = new Set(['queued', 'sent']);
 const ARRIVED = new Set(['sent', 'delivered', 'held']);
 const ASKED = new Set(['sent', 'delivered', 'shown']);
-export const RANK: Record<LinkKind, number> = { queued: 1, working: 2, answer: 3, question: 4 };
+export const RANK: Record<LinkKind, number> = { queued: 1, working: 2, answer: 3, question: 4, approval: 5 };
 
 export const leadAgent = (crew: CrewSummary): string | undefined => crew.recipients?.find((recipient) => recipient.lead)?.agentId;
 
@@ -53,6 +53,7 @@ export function linkStates(crew: CrewSummary): Map<string, LinkKind> {
   for (const request of crew.requests ?? []) {
     for (const delivery of request.deliveries) {
       if (!along(crew, request, delivery)) continue;
+      if (delivery.status === 'approval') mark(delivery.agentId, 'approval');
       if (QUEUED.has(delivery.status)) mark(delivery.agentId, 'queued');
       if (AT_WORK.has(delivery.status)) mark(delivery.agentId, 'working');
       if (delivery.reply && ON_ITS_WAY.has(delivery.reply.status)) mark(delivery.agentId, 'answer');

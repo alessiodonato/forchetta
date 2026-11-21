@@ -4,6 +4,7 @@ import { homedir, userInfo } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { envFileText, paneEnv } from '../cli/pane-env.ts';
 import type { TeamInfo } from '../shared/agent.ts';
+import { type AgentTools, sessionTools } from '../shared/agent-tools.ts';
 import { MODELS, MODES, TEAM_MCP, TEMPLATE_TOOLS, TEMPLATE_TOOLS_ALLOWED } from '../shared/crew.ts';
 import { type TeamMcpServer, writeMcpConfig } from '../shared/mcp-config.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
@@ -111,6 +112,8 @@ export interface SpawnExtras {
   teamTools?: readonly string[];
   /** A plugin with its skills, for this session only (claude --plugin-dir): daemon/skills.ts. */
   pluginDir?: string;
+  /** Its tools as an agent of a team: limits, MCP servers of the catalog, none of yours (shared/agent-tools.ts). */
+  tools?: AgentTools;
 }
 
 export { TEAM_MCP_TIMEOUT_MS, type TeamMcpServer, teamMcpConfig } from '../shared/mcp-config.ts';
@@ -144,13 +147,19 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   if (extras.system) env.FORCHETTA_SYSTEM_PROMPT = extras.system;
   if (extras.name) env.FORCHETTA_NAME = extras.name;
   if (extras.pluginDir) env.FORCHETTA_PLUGIN_DIR = extras.pluginDir;
-  // The tools of its team, all allowed; or, out of a team, the tools of templates, of which only reading is.
+  // The tools of its team, all allowed; or, out of a team, the tools of templates, of which only reading is. Then
+  // its own MCP servers, allowed too (you gave them to this agent), and the tools it may not use.
   const tools = extras.teamTools ?? TEMPLATE_TOOLS;
-  if (tools.length > 0 && options.teamMcp) {
-    // Its own file, kept while the session lives: Claude Code starts the server again after /clear.
-    env.FORCHETTA_MCP_CONFIG = writeMcpConfig(options.teamMcp, id, tools);
-    env.FORCHETTA_ALLOWED_TOOLS = extras.teamTools ? `mcp__${TEAM_MCP}` : TEMPLATE_TOOLS_ALLOWED;
+  const own = sessionTools(extras.tools);
+  const team = tools.length > 0 && options.teamMcp !== undefined;
+  if (team || Object.keys(own.servers).length > 0) {
+    // Its own file, kept while the session lives: Claude Code starts the servers again after /clear.
+    env.FORCHETTA_MCP_CONFIG = writeMcpConfig(team ? options.teamMcp : undefined, id, team ? tools : [], own.servers);
+    // One rule per line: forchetta-start gives each one as an argument of its own.
+    env.FORCHETTA_ALLOWED_TOOLS = [...(team ? [extras.teamTools ? `mcp__${TEAM_MCP}` : TEMPLATE_TOOLS_ALLOWED] : []), ...own.allowed].join('\n');
   }
+  if (own.disallowed.length > 0) env.FORCHETTA_DISALLOWED_TOOLS = own.disallowed.join('\n');
+  if (own.strict) env.FORCHETTA_STRICT_MCP = '1';
   writeFileSync(envFile, envFileText(env), { mode: 0o600 });
 
   const agent = registry.register({ id, cwd, tmuxSession: session });

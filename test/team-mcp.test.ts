@@ -182,13 +182,29 @@ describe('the tools of templates, for a session not in a team', () => {
     const schema = TOOLS.save_team_template.inputSchema as { properties: Record<string, { properties?: object; items?: { properties: object } }> };
     const checked = cleanTemplate({
       name: 'All',
-      lead: { kind: 'claude', name: 'l', role: 'r', model: 'opus', mode: 'plan', skills: ['brainstorming'] },
+      lead: { kind: 'claude', name: 'l', role: 'r', model: 'opus', mode: 'plan', skills: ['brainstorming'], tools: { mcp: ['context7'] } },
       talk: 'oneway',
       worktrees: true,
-      rules: 'Small commits.',
+      rules: 'Small commits on {branch}.',
+      deliverable: 'A pull request.',
+      params: [{ name: 'branch', hint: 'the branch', default: 'main' }],
       members: [
         { name: 'boss', role: 'r' },
-        { name: 'm', role: 'r', talk: 'twoway', model: 'haiku', mode: 'auto', worktree: false, paths: ['src/'], reviews: true, reportsTo: 'boss', relation: 'How the two work.', skills: ['pdf'] },
+        {
+          name: 'm',
+          role: 'r',
+          talk: 'twoway',
+          model: 'haiku',
+          mode: 'auto',
+          worktree: false,
+          paths: ['src/'],
+          reviews: true,
+          reportsTo: 'boss',
+          relation: 'How the two work.',
+          skills: ['pdf'],
+          tools: { limits: ['read-only'], mcp: ['playwright'], strictMcp: true },
+          approve: true,
+        },
       ],
     });
     if ('error' in checked) throw new Error(checked.error);
@@ -196,5 +212,9 @@ describe('the tools of templates, for a session not in a team', () => {
     expect(Object.keys(schema.properties).sort()).toEqual([...Object.keys(team), 'lead', 'members', 'replace'].sort());
     expect(Object.keys(schema.properties.lead!.properties!).sort()).toEqual(Object.keys(lead).sort());
     expect(Object.keys(schema.properties.members!.items!.properties).sort()).toEqual(Object.keys(members[1]!).sort());
+    // The tools and the parameters, field by field.
+    const tools = schema.properties.members!.items!.properties as Record<string, { properties?: object }>;
+    expect(Object.keys(tools.tools!.properties!).sort()).toEqual(Object.keys(members[1]!.tools!).sort());
+    expect(Object.keys((schema.properties.params as unknown as { items: { properties: object } }).items.properties).sort()).toEqual(['default', 'hint', 'name']);
   });
 });

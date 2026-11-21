@@ -14,6 +14,7 @@ import type { Store } from './store.ts';
 // the session is ready (daemon/crews.ts, daemon/commands.ts).
 
 export const DELIVERY_TEXT: Record<DeliveryStatus, string> = {
+  approval: 'waits for your approval',
   queued: 'queued',
   blocked: 'blocked',
   sent: 'sent',
@@ -52,6 +53,10 @@ export function entryHead(entry: ThreadEntry): string {
       return entry.status === 'kept' ? `${entry.from} · finished #${entry.n}` : `${entry.from} → ${who(entry.to)} · answer to #${entry.n}`;
     case 'review':
       return `${entry.from} · reviewed ${entry.short}${entry.subject ? ` ${entry.subject}` : ''}`;
+    case 'approval':
+      return `you · ${entry.decision === 'approved' ? 'approved' : 'sent back'} #${entry.n} ${entry.decision === 'approved' ? 'for' : 'to'} ${entry.to}`;
+    case 'delivered':
+      return `${entry.from} · delivered${entry.where ? ` ${entry.where}` : ''}`;
   }
 }
 
@@ -59,6 +64,8 @@ export function entryHead(entry: ThreadEntry): string {
 export function entryTag(entry: ThreadEntry): string | undefined {
   if (entry.kind === 'request') return undefined;
   if (entry.kind === 'review') return entry.verdict === 'approved' ? 'approved' : 'changes asked';
+  if (entry.kind === 'approval') return entry.decision === 'approved' ? (entry.edited ? 'changed by you' : 'as it was') : `back to ${who(entry.from)}`;
+  if (entry.kind === 'delivered') return 'done';
   const to = who(entry.to);
   switch (entry.status) {
     case 'shown':
@@ -80,15 +87,82 @@ export function entryTag(entry: ThreadEntry): string | undefined {
 
 const clock = (at: number): string => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-function Entry({ entry }: { entry: ThreadEntry }) {
+/**
+ * A request that waits for your approval, for one recipient: let it go as it is, change it first, or send it back to
+ * whoever sent it with a note (it gets it as a new prompt).
+ */
+function Approval({ crewId, n, to, from, text, store }: { crewId: string; n: number; to: string; from: string; text: string; store: Store }) {
+  const [mode, setMode] = useState<'choose' | 'change' | 'back'>('choose');
+  const [draft, setDraft] = useState(text);
+  const [note, setNote] = useState('');
+  const busy = store.state.crewEdit?.action === 'decide' && store.state.crewEdit.busy;
+  return (
+    <div class="crew-approval" role="group" aria-label={`Request #${n} for ${to} waits for your approval`}>
+      <span class="crew-approval-head">
+        #{n} for {to} waits for you: {who(from)} sent it, and it reaches {to} when you say so.
+      </span>
+      {mode === 'change' && (
+        <textarea class="command-input prompt-input" rows={4} value={draft} maxLength={20_000} aria-label={`The request for ${to}, to change`} onInput={(event) => setDraft((event.target as HTMLTextAreaElement).value)} />
+      )}
+      {mode === 'back' && (
+        <input
+          class="command-input"
+          type="text"
+          value={note}
+          maxLength={4000}
+          placeholder={`Why, for ${who(from)}: what to change, or what to do instead`}
+          aria-label={`Why you send it back to ${who(from)}`}
+          onInput={(event) => setNote((event.target as HTMLInputElement).value)}
+        />
+      )}
+      <div class="crew-approval-actions">
+        {mode === 'choose' && (
+          <>
+            <button type="button" class="primary" disabled={busy} onClick={() => store.decideRequest(crewId, n, to, true)}>
+              Approve
+            </button>
+            <button type="button" disabled={busy} onClick={() => setMode('change')}>
+              Change…
+            </button>
+            <button type="button" class="quiet" disabled={busy} onClick={() => setMode('back')}>
+              Send back…
+            </button>
+          </>
+        )}
+        {mode === 'change' && (
+          <>
+            <button type="button" class="primary" disabled={busy || !draft.trim()} onClick={() => store.decideRequest(crewId, n, to, true, { text: draft })}>
+              Approve as changed
+            </button>
+            <button type="button" class="quiet" onClick={() => setMode('choose')}>
+              Cancel
+            </button>
+          </>
+        )}
+        {mode === 'back' && (
+          <>
+            <button type="button" class="primary" disabled={busy} onClick={() => store.decideRequest(crewId, n, to, false, note.trim() ? { note } : {})}>
+              Send back to {who(from)}
+            </button>
+            <button type="button" class="quiet" onClick={() => setMode('choose')}>
+              Cancel
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Entry({ entry, crewId, store }: { entry: ThreadEntry; crewId: string; store: Store }) {
   const [open, setOpen] = useState(false);
   const tag = entryTag(entry);
   return (
     <li
       class="thread-entry"
       data-kind={entry.kind}
-      data-status={entry.kind === 'request' || entry.kind === 'review' ? undefined : entry.status}
-      data-verdict={entry.kind === 'review' ? entry.verdict : undefined}
+      data-status={entry.kind === 'question' || entry.kind === 'answer' ? entry.status : undefined}
+      data-verdict={entry.kind === 'review' ? entry.verdict : entry.kind === 'approval' ? entry.decision : undefined}
     >
       <div class="thread-head">
         <span class="thread-who">{entryHead(entry)}</span>
@@ -130,6 +204,10 @@ function Entry({ entry }: { entry: ThreadEntry }) {
           ))}
         </div>
       )}
+      {entry.kind === 'request' &&
+        entry.deliveries
+          .filter((delivery) => delivery.status === 'approval')
+          .map((delivery) => <Approval key={delivery.to} crewId={crewId} n={entry.n} to={delivery.to} from={entry.from} text={entry.text} store={store} />)}
     </li>
   );
 }
@@ -400,7 +478,9 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
   const busy = state?.busy === true && state.crewId === crew?.id;
   const thread = store.state.crewThread?.crewId === crew?.id ? store.state.crewThread?.requests : undefined;
   const reviews = store.state.crewThread?.crewId === crew?.id ? store.state.crewThread?.reviews : undefined;
-  const entries = thread ? threadOf(thread, reviews) : [];
+  const delivered = store.state.crewThread?.crewId === crew?.id ? store.state.crewThread?.delivered : undefined;
+  const entries = thread ? threadOf(thread, reviews, delivered) : [];
+  const waiting = (thread ?? []).flatMap((request) => request.deliveries.filter((delivery) => delivery.status === 'approval')).length;
 
   useEffect(() => {
     if (!crew) return;
@@ -459,7 +539,10 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
         <button type="button" class="chip" title="Start a team of Claude Code sessions that work together: a lead and its members" onClick={onNew}>
           + new team
         </button>
-        <span class="team-hint thread-count">{thread ? `${thread.length} ${thread.length === 1 ? 'request' : 'requests'}` : ''}</span>
+        <span class="team-hint thread-count">
+          {thread ? `${thread.length} ${thread.length === 1 ? 'request' : 'requests'}` : ''}
+          {waiting > 0 ? <span class="crew-waiting"> · {waiting} {waiting === 1 ? 'waits' : 'wait'} for your approval</span> : null}
+        </span>
         {((used && (used.usd > 0 || usedTokens > 0)) || crew.budgetUsd) && (
           <button
             type="button"
@@ -482,6 +565,22 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
           edit team
         </button>
       </div>
+      {(crew.deliverable || crew.values) && (
+        <div class="broadcast-row crew-goal-row">
+          {crew.deliverable && (
+            <span class={`crew-deliverable${crew.delivered ? ' done' : ''}`} title={crew.delivered ? crew.delivered.summary : 'The lead says when it is ready (the tool deliver): you are told.'}>
+              {crew.delivered ? `✓ delivered${crew.delivered.where ? `: ${crew.delivered.where}` : ''}` : `delivers: ${crew.deliverable}`}
+            </span>
+          )}
+          {crew.values && (
+            <span class="team-hint" title="The values of its parameters, as it started">
+              {Object.entries(crew.values)
+                .map(([name, value]) => `${name} = ${value}`)
+                .join(' · ')}
+            </span>
+          )}
+        </div>
+      )}
       {usageOpen && <UsageTable rows={usageRows} />}
       {editing && <EditTeam crew={crew} store={store} />}
       {thread && entries.length === 0 && <p class="team-hint thread-empty">Nothing yet: the first request starts the thread of the team.</p>}
@@ -496,7 +595,12 @@ export function TeamPanel({ crews, store, onClose, onNew, onStudio }: { crews: r
           }}
         >
           {entries.map((entry) => (
-            <Entry key={`${entry.kind}-${entry.n}-${entry.kind === 'request' ? '' : entry.from}-${entry.kind === 'review' ? entry.short : ''}-${entry.at}`} entry={entry} />
+            <Entry
+              key={`${entry.kind}-${entry.n}-${entry.kind === 'request' ? '' : entry.from}-${entry.kind === 'review' ? entry.short : entry.kind === 'approval' ? entry.to : ''}-${entry.at}`}
+              entry={entry}
+              crewId={crew.id}
+              store={store}
+            />
           ))}
         </ol>
       )}

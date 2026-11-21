@@ -129,12 +129,13 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
     options: [
       { name: '--goal', args: '"<text>"', text: 'start: the first request, to the lead (to every member when you lead)' },
+      { name: '--set', args: '<name>=<value>', text: 'start: the value of a parameter of the team, {name} in its texts (once for each)' },
       { name: '--cwd', args: '<folder>', text: 'start: the folder of the team (default: this one)' },
       { name: '--name', args: '"<name>"', text: 'start: another name for the team' },
       { name: '--budget', args: '<dollars>', text: 'start: what it may cost before you are told (a warning, not a limit)' },
       { name: '--skills', args: 'fetch|skip', text: 'start: for a file with skills from GitHub, without asking' },
     ],
-    examples: ['forchetta team start review-squad --goal "Add a CSV export to the orders page"', 'forchetta team export "Feature squad"', 'forchetta team ls --json | jq \'.[] | {name, usd}\''],
+    examples: ['forchetta team start review-squad --goal "Add a CSV export to the orders page"', 'forchetta team start bugfix --set ticket=APP-123 --goal "Fix {ticket}"', 'forchetta team export "Feature squad"', 'forchetta team ls --json | jq \'.[] | {name, usd}\''],
   },
   hooks: {
     summary: 'Add or remove the hooks in ~/.claude/settings.json',

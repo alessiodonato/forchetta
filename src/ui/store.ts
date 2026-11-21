@@ -2,7 +2,8 @@ import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SessionColor, Su
 import { resultAt } from '../shared/present.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
-import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, ReviewRecord, RolePreset, Talk } from '../shared/crew.ts';
+import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset, Talk } from '../shared/crew.ts';
+import type { ReplayData } from '../shared/replay.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import { cleanSelection } from '../shared/selection.ts';
@@ -82,7 +83,11 @@ export interface UiState {
   /** The last change of a team or of the templates asked from a panel, and how it went. */
   crewEdit?: { action: string; busy: boolean; ok?: boolean; error?: string; at: number };
   /** The whole thread of the team the panel shows: asked again each time the teams change. */
-  crewThread?: { crewId: string; requests?: CrewRequest[]; reviews?: ReviewRecord[] };
+  crewThread?: { crewId: string; requests?: CrewRequest[]; reviews?: ReviewRecord[]; delivered?: Delivered[] };
+  /** The run of a team, for the replay of the studio (requestReplay). */
+  crewReplay?: { crewId: string; replay?: ReplayData; at: number };
+  /** A team drawn from a description (describeTeam): under way, or its template, or why there is none. */
+  describe?: { busy: boolean; ok?: boolean; error?: string; template?: CrewTemplate; usd?: number; note?: string; at: number };
   /** The last request sent from the panel of a team: its number once it is in the queues, or why not. */
   crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
   /** The installation, from the daemon: checks, optional features, settings (shared/system.ts). */
@@ -147,7 +152,7 @@ function loadSeen(): Record<string, number> | undefined {
 export const canOpen = (agent: Agent | undefined): boolean => agent !== undefined && agent.control.kind === 'tmux' && agent.state !== 'ended';
 
 /** The actions of the page that wait for an answer of the daemon, each with its busy flag. */
-const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest', 'settingsSave'] as const satisfies readonly (keyof UiState)[];
+const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn', 'crewEdit', 'skillEdit', 'teamFile', 'crewRequest', 'settingsSave', 'describe'] as const satisfies readonly (keyof UiState)[];
 
 /** What an action says when the daemon was not there to take it. */
 export const NOT_SENT = 'not sent: the daemon of Forchetta is not connected (the page reconnects by itself; try again in a moment)';
@@ -304,7 +309,19 @@ export class Store {
       return;
     }
     if (message.type === 'crewThread') {
-      if (this.state.crewThread?.crewId === message.crewId) this.set({ crewThread: { crewId: message.crewId, requests: message.requests, ...(message.reviews ? { reviews: message.reviews } : {}) } });
+      if (this.state.crewThread?.crewId === message.crewId) {
+        this.set({ crewThread: { crewId: message.crewId, requests: message.requests, ...(message.reviews ? { reviews: message.reviews } : {}), ...(message.delivered ? { delivered: message.delivered } : {}) } });
+      }
+      return;
+    }
+    if (message.type === 'crewReplay') {
+      this.set({ crewReplay: { crewId: message.crewId, ...(message.replay ? { replay: message.replay } : {}), at: Date.now() } });
+      return;
+    }
+    if (message.type === 'teamDescribed') {
+      this.set({
+        describe: { busy: false, ok: message.ok, ...(message.template ? { template: message.template } : {}), ...(message.error ? { error: message.error } : {}), ...(message.usd ? { usd: message.usd } : {}), ...(message.note ? { note: message.note } : {}), at: Date.now() },
+      });
       return;
     }
     if (message.type === 'crewRequested') {
@@ -315,6 +332,10 @@ export class Store {
       if (message.ok && message.crewId) {
         this.set({ crewSpawn: { busy: false, createdId: message.crewId, ...(message.error ? { error: message.error } : {}) } });
         this.openWhenThere(...panesToOpen(message.agentIds ?? []));
+        // Its first goal, from the studio: to the lead, or to every member when you lead. It waits in their queues.
+        const goal = this.goal;
+        this.goal = undefined;
+        if (goal) this.sendCrewRequest(message.crewId, goal.to, goal.text);
       } else this.set({ crewSpawn: { busy: false, error: message.error ?? 'the team did not start' } });
       return;
     }
@@ -528,9 +549,30 @@ export class Store {
   }
 
   /** A new team of agents: the daemon checks it, starts its sessions and keeps it. */
-  createCrew(spec: CrewSpec): void {
+  /** The first goal of the team being created: it goes once the team is there. */
+  private goal: { to: string[]; text: string } | undefined;
+
+  createCrew(spec: CrewSpec, goal?: string): void {
+    this.goal = goal?.trim() ? { to: spec.lead.kind === 'claude' ? [spec.lead.name] : [], text: goal.trim() } : undefined;
     this.set({ crewSpawn: { busy: true } });
     this.send({ type: 'createCrew', spec });
+  }
+
+  /** Your decision on a request that waits for your approval: let it go (with its text changed, if `text`), or send it back with a note. */
+  decideRequest(crewId: string, n: number, to: string, approve: boolean, options: { note?: string; text?: string } = {}): void {
+    this.set({ crewEdit: { action: 'decide', busy: true, at: Date.now() } });
+    this.send({ type: 'crewDecide', crewId, n, to, approve, ...options });
+  }
+
+  /** The run of a team, for its replay on the canvas. */
+  requestReplay(crewId: string): void {
+    this.send({ type: 'crewReplay', crewId });
+  }
+
+  /** A team drawn by Claude from a description; the studio opens it when it comes (describe). */
+  describeTeam(text: string): void {
+    this.set({ describe: { busy: true, at: Date.now() } });
+    this.send({ type: 'describeTeam', text });
   }
 
   endCrewSpawn(): void {
@@ -540,7 +582,12 @@ export class Store {
   /** A change of a team: a member added, taken away, or its → / ⇄. */
   editCrew(
     crewId: string,
-    change: { action: 'add'; member: CrewMemberSpec } | { action: 'remove'; name: string } | { action: 'talk'; name: string; talk: Talk } | { action: 'paths'; name: string; paths: string },
+    change:
+      | { action: 'add'; member: CrewMemberSpec }
+      | { action: 'remove'; name: string }
+      | { action: 'talk'; name: string; talk: Talk }
+      | { action: 'paths'; name: string; paths: string }
+      | { action: 'approve'; name: string; approve: boolean },
   ): void {
     this.set({ crewEdit: { action: change.action, busy: true, at: Date.now() } });
     this.send({ type: 'editCrew', crewId, ...change });

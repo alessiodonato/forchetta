@@ -41,7 +41,8 @@ import { isInteractiveCommand, readCommandLine } from './process.ts';
 import { Registry } from './registry.ts';
 import { createDaemonServer } from './server.ts';
 import { cliApi } from './cli-api.ts';
-import { Ledger, whoOf } from './ledger.ts';
+import { Ledger, readLedger, whoOf } from './ledger.ts';
+import { describeTeam } from './describe.ts';
 import { createLog } from './log.ts';
 import { editableSettings, readClaudeSettings, systemInfo } from './system.ts';
 import { cleanSettings, needsRestart } from '../shared/system.ts';
@@ -569,6 +570,13 @@ function main(): void {
     onCrewRequest: (crewId, to, text) => crews.request(crewId, to, text),
     crewThread: (crewId) => crews.thread(crewId),
     crewReviews: (crewId) => crews.reviewsOf(crewId),
+    crewDelivered: (crewId) => crews.deliveredOf(crewId),
+    onCrewDecide: (crewId, n, to, approve, options) => crews.decide(crewId, n, to, approve, options),
+    crewReplay: (crewId) => {
+      const crew = crews.get(crewId);
+      return crew ? crews.replay(crewId, readLedger(join(paths.varDir, 'ledger'), crew.createdAt)) : undefined;
+    },
+    onDescribeTeam: (text) => describeTeam(text, { claude, log, templates: templates.list(), roles: roles.list() }),
     templates: () => templates.list(),
     onTemplate: (message) => {
       if (message.type === 'deleteCrewTemplate') return templates.delete(message.name);
@@ -619,6 +627,9 @@ function main(): void {
       }
       if (message.action === 'paths' && message.name) {
         return crews.setPaths(message.crewId, message.name, message.paths);
+      }
+      if (message.action === 'approve' && message.name) {
+        return crews.setApprove(message.crewId, message.name, message.approve === true);
       }
       return { ok: false, error: 'unknown change' };
     },
@@ -731,6 +742,17 @@ function main(): void {
   }
 
   crews.onChange = () => hub?.crewsChanged();
+  // A request that waits for your approval, and a team that delivered: you are told, as for a session that waits.
+  crews.onApproval = (crew, request, delivery) => {
+    const agentId = crew.agents[delivery.to] ?? crew.agents.lead;
+    const first = request.text.split('\n').find((line) => line.trim())?.trim() ?? '';
+    log(`team "${crew.name}": request #${request.n} from ${request.from} to ${delivery.to} waits for your approval`);
+    if (agentId) hub?.notify({ agentId, kind: 'approval', title: `${crew.name}: #${request.n} waits for your approval`, body: `${request.from} → ${delivery.to}: ${first.slice(0, 140)}` });
+  };
+  crews.onDelivered = (crew, item) => {
+    const agentId = crew.agents.lead ?? Object.values(crew.agents)[0];
+    if (agentId) hub?.notify({ agentId, kind: 'delivered', title: `${crew.name} delivered`, body: `${item.where ? `${item.where}: ` : ''}${item.summary.split('\n')[0]!.slice(0, 160)}` });
+  };
   const terminals = new Terminals({ token, port: () => config.port, registry, tmux, log });
   commander = new Commander({ registry, tmux, log, notes, onRequest: (_agent, command) => crews.commandChanged(command) });
   const queue = commander;

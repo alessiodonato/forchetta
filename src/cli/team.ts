@@ -132,7 +132,33 @@ type StartAnswer =
   | { ok: true; crewId: string; name: string; agentIds: string[]; notes: string[]; warning?: string; goal?: { n: number; to: string[] }; goalError?: string }
   | { ok: false; error: string };
 
-async function startTeam(args: readonly string[], io: RunIO): Promise<number> {
+/**
+ * The values of the parameters of a team, from `--set ticket=APP-123` (as many as it has), taken out of the
+ * arguments; the rest of them as they were.
+ */
+export function takeValues(args: readonly string[]): { rest: string[]; values: Record<string, string> } {
+  const rest: string[] = [];
+  const values: Record<string, string> = {};
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (arg === '--') {
+      rest.push(...args.slice(index));
+      break;
+    }
+    if (arg !== '--set' && !arg.startsWith('--set=')) {
+      rest.push(arg);
+      continue;
+    }
+    const pair = arg === '--set' ? args[++index] : arg.slice('--set='.length);
+    const equals = pair?.indexOf('=') ?? -1;
+    if (!pair || equals <= 0) throw new UserError('--set takes a parameter and its value: --set ticket=APP-123');
+    values[pair.slice(0, equals).trim().replace(/^\{|\}$/g, '')] = pair.slice(equals + 1);
+  }
+  return { rest, values };
+}
+
+async function startTeam(all: readonly string[], io: RunIO): Promise<number> {
+  const { rest: args, values: params } = takeValues(all);
   const { positional, values, flags } = parseArgs('team start', args, { values: ['--goal', '--cwd', '--name', '--budget', '--skills'], flags: ['--json'] });
   const what = positional[0];
   if (!what || positional.length > 1) throw new UserError(what ? 'team start takes one team: put the goal in --goal "…"' : 'say which team to start', 'see `forchetta team ls --templates`');
@@ -149,6 +175,7 @@ async function startTeam(args: readonly string[], io: RunIO): Promise<number> {
     ...(values.has('--name') ? { name: values.get('--name') } : {}),
     ...(values.has('--budget') ? { budgetUsd: values.get('--budget') } : {}),
     ...(skills ? { skills } : {}),
+    ...(Object.keys(params).length > 0 ? { values: params } : {}),
   };
   // Starting the sessions and fetching skills can take a while.
   const send = (): Promise<StartAnswer> => apiAnswer<StartAnswer>(info, 'POST', '/api/teams/start', body, 120_000);

@@ -2,6 +2,7 @@
 // sessions. Registry, Hub, Guard, Conflicts, Commander, Permissions, Crews, Attention and the changes of the files
 // are the real ones; tmux and Claude Code are the fakes of this folder, and the files live in memory.
 
+import { demoDescribe } from './describe.ts';
 import type { Agent, GuardHold, SubagentStep } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
 import { addArtifact, artifactOf } from '../shared/artifacts.ts';
@@ -193,7 +194,16 @@ export class DemoDaemon {
       },
       crews: () => this.crews.summaries(),
       crewThread: (crewId) => this.crews.thread(crewId),
+      crewReviews: (crewId) => this.crews.reviewsOf(crewId),
+      crewDelivered: (crewId) => this.crews.deliveredOf(crewId),
       onCrewRequest: (crewId, to, text) => this.crews.request(crewId, to, text),
+      onCrewDecide: (crewId, n, to, approve, options) => this.crews.decide(crewId, n, to, approve, options),
+      // No ledger in a browser: the replay has the steps of the team, without costs and files.
+      crewReplay: (crewId) => this.crews.replay(crewId, []),
+      onDescribeTeam: async (text) => {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        return demoDescribe(text, this.roles.list());
+      },
       templates: () => this.templates.list(),
       onTemplate: (message) => (message.type === 'deleteCrewTemplate' ? this.templates.delete(message.name) : this.templates.save(message.template, { override: true })),
       roles: () => this.roles.list(),
@@ -251,6 +261,8 @@ export class DemoDaemon {
           return result;
         }
         if (message.action === 'add') return this.crews.addMember(message.crewId, message.member, (start, extras) => this.spawn(start, extras));
+        if (message.action === 'paths' && message.name) return this.crews.setPaths(message.crewId, message.name, message.paths);
+        if (message.action === 'approve' && message.name) return this.crews.setApprove(message.crewId, message.name, message.approve === true);
         return { ok: false, error: 'unknown change' };
       },
       onRecall: async () => ({ ok: false, error: 'Searching earlier sessions needs arricurdAI: not in the demo.' }),

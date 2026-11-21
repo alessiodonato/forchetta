@@ -4,7 +4,8 @@ import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
-import type { CrewRequest, CrewSummary, CrewTemplate, ReviewRecord, RolePreset } from '../shared/crew.ts';
+import type { CrewRequest, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset } from '../shared/crew.ts';
+import type { ReplayData } from '../shared/replay.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import type { SkillInfo } from '../shared/skills.ts';
 import type { SystemInfo } from '../shared/system.ts';
@@ -52,7 +53,11 @@ export type ServerMessage =
   /** How the start of a team went, for the window that asked. */
   | { type: 'crewCreated'; now: number; ok: boolean; crewId?: string; agentIds?: string[]; error?: string }
   /** The whole thread of a team, for the window that shows it. */
-  | { type: 'crewThread'; now: number; crewId: string; requests: CrewRequest[]; reviews?: ReviewRecord[] }
+  | { type: 'crewThread'; now: number; crewId: string; requests: CrewRequest[]; reviews?: ReviewRecord[]; delivered?: Delivered[] }
+  /** A run of a team, step by step, for the replay of the studio. */
+  | { type: 'crewReplay'; now: number; crewId: string; replay?: ReplayData }
+  /** A team drawn from a description: its template, or why there is none. */
+  | { type: 'teamDescribed'; now: number; ok: boolean; template?: CrewTemplate; error?: string; usd?: number; note?: string }
   /** How a request to a team went, for the window that asked: its number, or why it did not go. */
   | { type: 'crewRequested'; now: number; ok: boolean; crewId: string; n?: number; error?: string }
   /** What every session cost since midnight, read again from arricurdAI. */
@@ -72,7 +77,7 @@ export type ServerMessage =
   /** The transcript of a subagent, for the window that asked: its steps, or why there are none. */
   | { type: 'subagent'; now: number; agentId: string; key: string; steps: SubagentStep[]; model?: string; skipped?: number; note?: string }
   /** A session waits for you, seems stuck or ended with an error: the app shows a notification of macOS. */
-  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget'; title: string; body: string };
+  | { type: 'notify'; now: number; agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget' | 'approval' | 'delivered'; title: string; body: string };
 
 /** What the page needs to know of the configuration. */
 export interface UiSettings {
@@ -112,8 +117,14 @@ export type ClientMessage =
   | { type: 'crewRequest'; crewId: string; to: string[]; text: string }
   /** The whole thread of a team. */
   | { type: 'crewThread'; crewId: string }
+  /** Your decision on a request that waits for your approval: let it go (its text maybe changed), or send it back. */
+  | { type: 'crewDecide'; crewId: string; n: number; to: string; approve: boolean; note?: string; text?: string }
+  /** A run of a team, to replay on the canvas. */
+  | { type: 'crewReplay'; crewId: string }
+  /** A team to draw from a sentence: Claude writes its template. */
+  | { type: 'describeTeam'; text: string }
   /** A change of a team: a member added (member), taken away (name), its → / ⇄ (name, talk), or its files (name, paths). */
-  | { type: 'editCrew'; crewId: string; action: 'add' | 'remove' | 'talk' | 'paths'; name?: string; talk?: string; member?: unknown; paths?: unknown }
+  | { type: 'editCrew'; crewId: string; action: 'add' | 'remove' | 'talk' | 'paths' | 'approve'; name?: string; talk?: string; member?: unknown; paths?: unknown; approve?: boolean }
   /** A template: from the panel of a new team (template), or from an existing team (crewId, with its name). */
   | { type: 'saveCrewTemplate'; template?: unknown; crewId?: string }
   | { type: 'deleteCrewTemplate'; name: string }
@@ -168,6 +179,14 @@ export interface HubOptions {
   crewThread?: (crewId: string) => CrewRequest[] | undefined;
   /** The verdicts of the reviewers of a team, with its thread. */
   crewReviews?: (crewId: string) => ReviewRecord[];
+  /** What the lead of a team delivered, with its thread. */
+  crewDelivered?: (crewId: string) => Delivered[];
+  /** Your decision on a request that waits for your approval. */
+  onCrewDecide?: (crewId: string, n: number, to: string, approve: boolean, options: { note?: string; text?: string }) => { ok: boolean; error?: string };
+  /** A run of a team: its file and the ledger, step by step. */
+  crewReplay?: (crewId: string) => ReplayData | undefined;
+  /** A team drawn from a description, by Claude. */
+  onDescribeTeam?: (text: string) => Promise<{ ok: boolean; template?: CrewTemplate; error?: string; usd?: number; note?: string }>;
   /** A change of a team. */
   onEditCrew?: (message: Extract<ClientMessage, { type: 'editCrew' }>) => Promise<{ ok: boolean; error?: string }>;
   /** The templates of teams, and saving or deleting one. */
@@ -328,11 +347,12 @@ export class Hub {
           const edit = {
             type: 'editCrew' as const,
             crewId: message.crewId,
-            action: message.action as 'add' | 'remove' | 'talk' | 'paths',
+            action: message.action as 'add' | 'remove' | 'talk' | 'paths' | 'approve',
             name: typeof message.name === 'string' ? message.name : undefined,
             talk: typeof message.talk === 'string' ? message.talk : undefined,
             member: message.member,
             paths: message.paths,
+            approve: message.approve === true,
           };
           void this.options.onEditCrew(edit).then(
             (result) => this.send(ws, { type: 'crewEdited', now: Date.now(), crewId: edit.crewId, action: edit.action, ...result }),
@@ -398,7 +418,31 @@ export class Hub {
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
           const reviews = this.options.crewReviews?.(message.crewId);
-          if (requests) this.send(ws, { type: 'crewThread', now: Date.now(), crewId: message.crewId, requests, ...(reviews && reviews.length > 0 ? { reviews } : {}) });
+          const delivered = this.options.crewDelivered?.(message.crewId);
+          if (requests) {
+            this.send(ws, {
+              type: 'crewThread',
+              now: Date.now(),
+              crewId: message.crewId,
+              requests,
+              ...(reviews && reviews.length > 0 ? { reviews } : {}),
+              ...(delivered && delivered.length > 0 ? { delivered } : {}),
+            });
+          }
+        } else if (message.type === 'crewDecide' && typeof message.crewId === 'string' && Number.isInteger(message.n) && typeof message.to === 'string' && this.options.onCrewDecide) {
+          const result = this.options.onCrewDecide(message.crewId, message.n as number, message.to, message.approve === true, {
+            ...(typeof message.note === 'string' ? { note: message.note } : {}),
+            ...(typeof message.text === 'string' ? { text: message.text } : {}),
+          });
+          this.send(ws, { type: 'crewEdited', now: Date.now(), crewId: message.crewId, action: 'decide', ...result });
+        } else if (message.type === 'crewReplay' && typeof message.crewId === 'string' && this.options.crewReplay) {
+          const replay = this.options.crewReplay(message.crewId);
+          this.send(ws, { type: 'crewReplay', now: Date.now(), crewId: message.crewId, ...(replay ? { replay } : {}) });
+        } else if (message.type === 'describeTeam' && typeof message.text === 'string' && this.options.onDescribeTeam) {
+          void this.options.onDescribeTeam(message.text).then(
+            (result) => this.send(ws, { type: 'teamDescribed', now: Date.now(), ...result }),
+            (error: unknown) => this.send(ws, { type: 'teamDescribed', now: Date.now(), ok: false, error: String(error) }),
+          );
         } else if (message.type === 'selection' && typeof message.agentId === 'string' && (message.phase === 'start' || message.phase === 'end') && this.options.onSelection) {
           const agentId = message.agentId;
           void this.options.onSelection(agentId, message.phase).then(
@@ -551,7 +595,7 @@ export class Hub {
     this.broadcast({ type: 'claudeUpdate', now: Date.now(), update });
   }
 
-  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget'; title: string; body: string }): void {
+  notify(notice: { agentId: string; kind: 'waiting' | 'stall' | 'error' | 'free' | 'loop' | 'budget' | 'approval' | 'delivered'; title: string; body: string }): void {
     this.broadcast({ type: 'notify', now: Date.now(), ...notice });
   }
 

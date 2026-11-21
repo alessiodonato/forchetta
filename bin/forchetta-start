@@ -2,20 +2,24 @@
 # Last step of a session started from the app, run by your login shell after it read its profile (so the
 # session has the PATH and the variables of a new terminal tab). The texts come in the environment, never through
 # tmux or a shell, and are taken out of it before claude starts:
-#   FORCHETTA_SYSTEM_PROMPT  added to the system prompt of claude (--append-system-prompt): who a member of a team is;
-#   FORCHETTA_NAME           the name of the session in Claude Code (--name);
-#   FORCHETTA_PLUGIN_DIR     a plugin with the skills of an agent of a team, for this session only (--plugin-dir);
-#   FORCHETTA_MCP_CONFIG     the MCP configuration with the tools of its team (--mcp-config);
-#   FORCHETTA_ALLOWED_TOOLS  those tools, allowed without asking (--allowedTools);
-#   FORCHETTA_PROMPT         the first prompt, given as the last argument after "--", so that claude never reads it
-#                            as an option (a prompt that starts with "-", or the name of --worktree).
+#   FORCHETTA_SYSTEM_PROMPT     added to the system prompt of claude (--append-system-prompt): who a member of a team is;
+#   FORCHETTA_NAME              the name of the session in Claude Code (--name);
+#   FORCHETTA_PLUGIN_DIR        a plugin with the skills of an agent of a team, for this session only (--plugin-dir);
+#   FORCHETTA_MCP_CONFIG        the MCP configuration with the tools of its team and its own servers (--mcp-config);
+#   FORCHETTA_STRICT_MCP        set: only those servers, none of the user's (--strict-mcp-config);
+#   FORCHETTA_ALLOWED_TOOLS     tools allowed without asking, one rule per line (--allowedTools);
+#   FORCHETTA_DISALLOWED_TOOLS  tools the agent may not use, one rule per line (--disallowedTools);
+#   FORCHETTA_PROMPT            the first prompt, given as the last argument after "--", so that claude never reads it
+#                               as an option (a prompt that starts with "-", or the name of --worktree).
 prompt=${FORCHETTA_PROMPT:-}
 system=${FORCHETTA_SYSTEM_PROMPT:-}
 name=${FORCHETTA_NAME:-}
 plugin=${FORCHETTA_PLUGIN_DIR:-}
 mcp=${FORCHETTA_MCP_CONFIG:-}
+strict=${FORCHETTA_STRICT_MCP:-}
 tools=${FORCHETTA_ALLOWED_TOOLS:-}
-unset FORCHETTA_PROMPT FORCHETTA_SYSTEM_PROMPT FORCHETTA_NAME FORCHETTA_PLUGIN_DIR FORCHETTA_MCP_CONFIG FORCHETTA_ALLOWED_TOOLS
+denied=${FORCHETTA_DISALLOWED_TOOLS:-}
+unset FORCHETTA_PROMPT FORCHETTA_SYSTEM_PROMPT FORCHETTA_NAME FORCHETTA_PLUGIN_DIR FORCHETTA_MCP_CONFIG FORCHETTA_STRICT_MCP FORCHETTA_ALLOWED_TOOLS FORCHETTA_DISALLOWED_TOOLS
 if [ -n "$system" ]; then
   set -- "$@" --append-system-prompt "$system"
 fi
@@ -25,13 +29,36 @@ fi
 if [ -n "$plugin" ]; then
   set -- "$@" --plugin-dir "$plugin"
 fi
-# --mcp-config and --allowedTools take several values: "--" or the end of the line closes them.
+# --mcp-config, --allowedTools and --disallowedTools take several values: the next option, "--" or the end closes them.
 if [ -n "$mcp" ]; then
   set -- "$@" --mcp-config "$mcp"
 fi
-if [ -n "$tools" ]; then
-  set -- "$@" --allowedTools "$tools"
+if [ -n "$strict" ]; then
+  set -- "$@" --strict-mcp-config
 fi
+# Each rule an argument of its own: split on new lines only, and no globbing ("Bash(git push:*)" stays as it is).
+set -f
+nl='
+'
+if [ -n "$tools" ]; then
+  set -- "$@" --allowedTools
+  saved=$IFS
+  IFS=$nl
+  for rule in $tools; do
+    set -- "$@" "$rule"
+  done
+  IFS=$saved
+fi
+if [ -n "$denied" ]; then
+  set -- "$@" --disallowedTools
+  saved=$IFS
+  IFS=$nl
+  for rule in $denied; do
+    set -- "$@" "$rule"
+  done
+  IFS=$saved
+fi
+set +f
 if [ -n "$prompt" ]; then
   exec "$@" -- "$prompt"
 fi

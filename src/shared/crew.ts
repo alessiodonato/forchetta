@@ -6,6 +6,7 @@
 // The daemon starts the sessions and keeps the crew in var/crews/<id>.json; the panel «New team» of the app writes
 // the spec. No Node module here: the page uses it too.
 
+import { type AgentTools, cleanTools, toolsPrompt, toolsText } from './agent-tools.ts';
 import { cleanSkills } from './skills.ts';
 
 /** How a member talks with the one it reports to: it executes and that is all, or its final answer goes back. */
@@ -36,6 +37,13 @@ export interface CrewMemberSpec {
   reviews?: boolean;
   /** Skills of Claude Code from the catalog of Forchetta (shared/skills.ts), for its session only. */
   skills?: string[];
+  /** Its tools besides its role and skills: limits on the tools of Claude Code, MCP servers of the catalog (shared/agent-tools.ts). */
+  tools?: AgentTools;
+  /**
+   * The requests a session sends it (its lead, or the member it reports to) wait for your approval before they reach
+   * it: a point of the chart where you look at the work before it goes on. Yours reach it at once.
+   */
+  approve?: boolean;
   /**
    * The member it reports to: that one leads it, gives it requests, and gets its answers and its questions.
    * Undefined: the lead of the team.
@@ -57,7 +65,7 @@ export interface CrewMemberSpec {
 /** What a member is told while it works, and what its session started with: not part of a template. */
 type MemberState = 'talkNote' | 'pathsNote' | 'reportsToNote' | 'notes' | 'canLead';
 
-export type CrewLeadSpec = { kind: 'you' } | ({ kind: 'claude' } & Omit<CrewMemberSpec, 'talk' | 'paths' | 'pathsNote' | 'reviews' | 'reportsTo' | 'relation' | MemberState>);
+export type CrewLeadSpec = { kind: 'you' } | ({ kind: 'claude' } & Omit<CrewMemberSpec, 'talk' | 'paths' | 'pathsNote' | 'reviews' | 'reportsTo' | 'relation' | 'approve' | MemberState>);
 
 /** A member as a template keeps it: without what it was told while it worked. */
 export function memberOfTemplate(member: CrewMemberSpec): CrewMemberSpec {
@@ -100,6 +108,24 @@ export interface CrewSpec {
    * Nothing stops: it is a warning, not a limit.
    */
   budgetUsd?: number;
+  /**
+   * What the team hands over when its work is done (a pull request, a file, a report): the Claude lead says when it
+   * is ready with the tool deliver, and you are told.
+   */
+  deliverable?: string;
+  /** The parameters of its texts ({ticket} in a role, a relation, the rules, the deliverable): what each one is, and its default. */
+  params?: TeamParam[];
+  /** The values of its parameters, given when it started: they fill its texts, and the goals you write to it. */
+  values?: Record<string, string>;
+}
+
+/** A parameter of a team: {name} in its texts, filled when it starts. */
+export interface TeamParam {
+  name: string;
+  /** What to write there: "the ticket, like APP-123". */
+  hint?: string;
+  /** Its value when none is given. */
+  default?: string;
 }
 
 /** The largest budget a team takes, in dollars. */
@@ -113,11 +139,12 @@ export function cleanBudget(value: unknown): number | undefined {
 }
 
 /**
- * Where a request stands for one of its recipients: waiting in the queue of the session, blocked by something on
+ * Where a request stands for one of its recipients: waiting for your approval (its arrow has one), waiting in the
+ * queue of the session, blocked by something on
  * its screen, pasted, taken by Claude Code (working on it), passed on (its turn ended, but the work it passed to the
  * members that report to it is still going: it is done when theirs is), done (its turn ended), or failed / cancelled.
  */
-export type DeliveryStatus = 'queued' | 'blocked' | 'sent' | 'working' | 'delegated' | 'done' | 'failed' | 'cancelled';
+export type DeliveryStatus = 'approval' | 'queued' | 'blocked' | 'sent' | 'working' | 'delegated' | 'done' | 'failed' | 'cancelled';
 
 export interface Delivery {
   /** The name of the recipient: a member, or the lead. */
@@ -139,6 +166,10 @@ export interface Delivery {
   reply?: { status: 'queued' | 'sent' | 'delivered' | 'failed' | 'held'; commandId?: string; reason?: string; byWait?: boolean };
   /** The questions it asked its lead while working on this request (ask_lead). */
   questions?: { text: string; at: number; status: 'queued' | 'sent' | 'delivered' | 'failed' | 'shown'; commandId?: string }[];
+  /** What you decided on it, when its arrow asks for your approval: let it go (maybe changed), or send it back. */
+  approval?: { decision: 'approved' | 'rejected'; at: number; note?: string; edited?: boolean };
+  /** The text this recipient got, when you changed it before approving: the request says the one that was sent to you. */
+  text?: string;
 }
 
 /** A request of a team: one number, the same text for each recipient. */
@@ -175,6 +206,16 @@ export interface Crew extends CrewSpec {
   budgetSaidAt?: number;
   /** The verdicts of its members that review, oldest first: the last ones only. */
   reviews?: ReviewRecord[];
+  /** What its lead delivered (the tool deliver), oldest first. */
+  delivered?: Delivered[];
+}
+
+/** The work of a team handed over: what it is and where, said by its lead. */
+export interface Delivered {
+  at: number;
+  by: string;
+  summary: string;
+  where?: string;
 }
 
 /** What the page shows of a crew. */
@@ -192,18 +233,24 @@ export interface CrewSummary {
   recipients?: { name: string; agentId?: string; talk?: Talk; lead?: boolean; paths?: string[]; reviews?: boolean; reportsTo?: string; canLead?: boolean }[];
   /** The last requests, the newest last. */
   requests?: CrewRequest[];
+  /** What it hands over when its work is done, and what its lead said it delivered, the last first. */
+  deliverable?: string;
+  delivered?: Delivered;
+  /** The values of its parameters. */
+  values?: Record<string, string>;
 }
 
 export const REQUEST_HEADER = (n: number, from: string): string => `Request #${n} from ${from}:`;
 export const ANSWER_HEADER = (n: number, from: string): string => `Answer from ${from} to request #${n}:`;
 export const QUESTION_HEADER = (n: number | undefined, from: string): string => (n === undefined ? `Question from ${from}:` : `Question from ${from} about request #${n}:`);
+export const SENT_BACK_HEADER = (n: number, to: string): string => `The user sent back request #${n} to ${to}:`;
 
 /** The MCP server of a team, as Claude Code names it: its tools are mcp__forchetta__<tool>. */
 export const TEAM_MCP = 'forchetta';
 /** At most this many deliveries open at once in a team: a lead does not spend the plan before you see it. */
 export const MAX_OPEN_DELIVERIES = 20;
 
-export type TeamTool = 'team' | 'send_request' | 'wait_for_answers' | 'ask_lead' | 'review' | 'list_team_templates' | 'save_team_template';
+export type TeamTool = 'team' | 'send_request' | 'wait_for_answers' | 'ask_lead' | 'review' | 'deliver' | 'list_team_templates' | 'save_team_template';
 
 /**
  * The tools of the templates of teams, for a session of Forchetta that is not in a team: it reads them, and saves
@@ -215,11 +262,11 @@ export const TEMPLATE_TOOLS_ALLOWED = `mcp__${TEAM_MCP}__list_team_templates`;
 
 /**
  * The tools of the team a session gets: the Claude lead, and a member others report to, send requests and wait for
- * the answers; a member that answers can ask; a member that reviews records its verdicts; a member → that does not
- * review and leads nobody gets none.
+ * the answers (the Claude lead of a team with a deliverable also says when it is delivered); a member that answers can
+ * ask; a member that reviews records its verdicts; a member → that does not review and leads nobody gets none.
  */
-export function teamToolsFor(crew: Pick<CrewSpec, 'talk' | 'members'>, member: Pick<CrewMemberSpec, 'name' | 'talk' | 'reviews'> | 'lead'): TeamTool[] {
-  if (member === 'lead') return ['team', 'send_request', 'wait_for_answers'];
+export function teamToolsFor(crew: Pick<CrewSpec, 'talk' | 'members' | 'deliverable'>, member: Pick<CrewMemberSpec, 'name' | 'talk' | 'reviews'> | 'lead'): TeamTool[] {
+  if (member === 'lead') return ['team', 'send_request', 'wait_for_answers', ...(crew.deliverable ? (['deliver'] as const) : [])];
   const answers = effectiveTalk(crew, member) === 'twoway';
   const leads = crew.members.some((other) => other.reportsTo === member.name);
   const tools: TeamTool[] = [...(leads ? (['send_request', 'wait_for_answers'] as const) : []), ...(answers ? (['ask_lead'] as const) : []), ...(member.reviews ? (['review'] as const) : [])];
@@ -382,11 +429,14 @@ const DEFAULT_MEMBER_ROLE = 'Help the team with what the lead asks.';
 const oneLine = (value: unknown, max: number): string => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const block = (value: unknown, max: number): string => (typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim().slice(0, max) : '');
 
-function cleanChoices(raw: Record<string, unknown>): { model?: string; mode?: string; worktree?: boolean; skills?: string[] } | { error: string } {
-  const out: { model?: string; mode?: string; worktree?: boolean; skills?: string[] } = {};
+function cleanChoices(raw: Record<string, unknown>): { model?: string; mode?: string; worktree?: boolean; skills?: string[]; tools?: AgentTools } | { error: string } {
+  const out: { model?: string; mode?: string; worktree?: boolean; skills?: string[]; tools?: AgentTools } = {};
   const skills = cleanSkills(raw.skills);
   if ('error' in skills) return skills;
   if (skills.skills) out.skills = skills.skills;
+  const tools = cleanTools(raw.tools);
+  if ('error' in tools) return tools;
+  if (tools.tools) out.tools = tools.tools;
   if (raw.model !== undefined && raw.model !== '') {
     if (!(MODELS as readonly unknown[]).includes(raw.model)) return { error: 'invalid model' };
     out.model = raw.model as string;
@@ -411,6 +461,9 @@ export function cleanCrewSpec(input: unknown): { spec: CrewSpec } | { error: str
   const worktrees = raw.worktrees === true;
   const rules = block(raw.rules, RULES_MAX);
   const budgetUsd = cleanBudget(raw.budgetUsd);
+  const deliverable = block(raw.deliverable, DELIVERABLE_MAX);
+  const declared = cleanParams(raw.params);
+  if ('error' in declared) return declared;
 
   const taken = new Set<string>();
   const memberName = (value: unknown, what: string): string | { error: string } => {
@@ -457,11 +510,123 @@ export function cleanCrewSpec(input: unknown): { spec: CrewSpec } | { error: str
       ...(files.paths ? { paths: files.paths } : {}),
       ...(member.reviews === true ? { reviews: true } : {}),
       ...(relation ? { relation } : {}),
+      ...(member.approve === true ? { approve: true } : {}),
     });
   }
   const levels = cleanReportsTo(raw.members as unknown[], members, lead);
   if (levels) return levels;
-  return { spec: { name, cwd, lead, talk, ...(worktrees ? { worktrees } : {}), members, ...(rules ? { rules } : {}), ...(budgetUsd ? { budgetUsd } : {}) } };
+  // The parameters its texts use: those declared keep what they are and their default, the others are just names.
+  const used = paramsUsed({ lead, members, rules, deliverable });
+  if (used.length > PARAMS_MAX) return { error: `${used.length} parameters in the texts of the team: ${PARAMS_MAX} at most` };
+  const params = declared.params.filter((param) => used.includes(param.name));
+  const values = cleanValues(raw.values, used);
+  return {
+    spec: {
+      name,
+      cwd,
+      lead,
+      talk,
+      ...(worktrees ? { worktrees } : {}),
+      members,
+      ...(rules ? { rules } : {}),
+      ...(budgetUsd ? { budgetUsd } : {}),
+      ...(deliverable ? { deliverable } : {}),
+      ...(params.length > 0 ? { params } : {}),
+      ...(values ? { values } : {}),
+    },
+  };
+}
+
+// ── parameters: {ticket} in the texts of a team, filled when it starts ─────────────────────────────────────
+
+export const PARAMS_MAX = 12;
+export const PARAM_HINT_MAX = 200;
+export const VALUE_MAX = 200;
+export const DELIVERABLE_MAX = 600;
+const PARAM_NAME = /^[a-z][a-z0-9_-]{0,23}$/;
+/** {ticket} in a text; ${ticket}, of a shell or a template literal, is not a parameter. */
+const PARAM_IN_TEXT = /(\$?)\{([a-z][a-z0-9_-]{0,23})\}/g;
+
+/** The parameters of a text, each once, in the order they appear. */
+export function paramsIn(text: string | undefined): string[] {
+  const out: string[] = [];
+  for (const match of (text ?? '').matchAll(PARAM_IN_TEXT)) if (!match[1] && !out.includes(match[2]!)) out.push(match[2]!);
+  return out;
+}
+
+/** The parameters a team uses in its roles, relations, rules and deliverable, each once. */
+export function paramsUsed(spec: Pick<CrewSpec, 'lead' | 'members' | 'rules' | 'deliverable'>): string[] {
+  const texts = [...(spec.lead.kind === 'claude' ? [spec.lead.role] : []), ...spec.members.flatMap((member) => [member.role, member.relation ?? '']), spec.rules ?? '', spec.deliverable ?? ''];
+  return [...new Set(texts.flatMap((text) => paramsIn(text)))];
+}
+
+/** A text with its parameters filled; those with no value stay as they are. */
+export function fillParams(text: string, values: Readonly<Record<string, string>> | undefined): string {
+  if (!values || Object.keys(values).length === 0) return text;
+  return text.replace(PARAM_IN_TEXT, (whole, dollar: string, name: string) => (!dollar && values[name] !== undefined ? values[name]! : whole));
+}
+
+/** The parameters as declared: a name, what it is, a default. */
+function cleanParams(raw: unknown): { params: TeamParam[] } | { error: string } {
+  const out: TeamParam[] = [];
+  for (const item of Array.isArray(raw) ? raw : []) {
+    const param = (item ?? {}) as Record<string, unknown>;
+    const name = typeof param.name === 'string' ? param.name.trim().replace(/^\{|\}$/g, '') : '';
+    if (!name) continue;
+    if (!PARAM_NAME.test(name)) return { error: `the parameter "${name.slice(0, 30)}": lowercase letters, digits, "_" and "-", starting with a letter, 24 at most` };
+    if (out.some((other) => other.name === name)) continue;
+    const hint = oneLine(param.hint, PARAM_HINT_MAX);
+    const fallback = oneLine(param.default, VALUE_MAX);
+    out.push({ name, ...(hint ? { hint } : {}), ...(fallback ? { default: fallback } : {}) });
+    if (out.length > PARAMS_MAX) return { error: `${PARAMS_MAX} parameters at most` };
+  }
+  return { params: out };
+}
+
+/** The values given for the parameters a team uses, each in a line; undefined for none. */
+function cleanValues(raw: unknown, used: readonly string[]): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    const text = oneLine(value, VALUE_MAX);
+    if (used.includes(name) && text) out[name] = text;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** The value of each parameter a team uses: the one given, else its default. */
+export function valuesOf(spec: Pick<CrewSpec, 'lead' | 'members' | 'rules' | 'deliverable' | 'params' | 'values'>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of paramsUsed(spec)) {
+    const value = spec.values?.[name]?.trim() || spec.params?.find((param) => param.name === name)?.default?.trim();
+    if (value) out[name] = value;
+  }
+  return out;
+}
+
+/** The parameters a team uses with no value and no default: to fill before it starts. */
+export function missingParams(spec: Pick<CrewSpec, 'lead' | 'members' | 'rules' | 'deliverable' | 'params' | 'values'>): TeamParam[] {
+  const values = valuesOf(spec);
+  return paramsUsed(spec)
+    .filter((name) => !values[name])
+    .map((name) => spec.params?.find((param) => param.name === name) ?? { name });
+}
+
+/** "{ticket} (the ticket, like APP-123), {area}": parameters in a line. */
+export const paramsText = (params: readonly TeamParam[]): string => params.map((param) => `{${param.name}}${param.hint ? ` (${param.hint})` : ''}`).join(', ');
+
+/** A team with its parameters filled: what its sessions read. The same object when it has none. */
+export function filledSpec<T extends CrewSpec>(spec: T): T {
+  const values = valuesOf(spec);
+  if (Object.keys(values).length === 0) return spec;
+  const fill = (text: string): string => fillParams(text, values);
+  return {
+    ...spec,
+    lead: spec.lead.kind === 'claude' ? { ...spec.lead, role: fill(spec.lead.role) } : spec.lead,
+    members: spec.members.map((member) => ({ ...member, role: fill(member.role), ...(member.relation ? { relation: fill(member.relation) } : {}) })),
+    ...(spec.rules ? { rules: fill(spec.rules) } : {}),
+    ...(spec.deliverable ? { deliverable: fill(spec.deliverable) } : {}),
+  };
 }
 
 /**
@@ -497,8 +662,11 @@ function cleanReportsTo(raw: readonly unknown[], members: CrewMemberSpec[], lead
 /** The name the members use for their lead. */
 export const leadName = (crew: Pick<CrewSpec, 'lead'>): string => (crew.lead.kind === 'claude' ? crew.lead.name : 'the user');
 
+/** ", browser, read only": the tools of an agent in its line, for the others. */
+const toolsPart = (tools: AgentTools | undefined): string => (toolsText(tools) ? `, ${toolsText(tools)}` : '');
+
 const memberLine = (crew: CrewSpec, member: CrewMemberSpec): string =>
-  `- ${member.name} (${effectiveTalk(crew, member) === 'twoway' ? 'answers you' : 'executes only, no answer'}${effectiveWorktree(crew, member) ? ', own worktree' : ''}${member.reviews ? ', reviews' : ''}): ${member.role.replace(/\s+/g, ' ')}${member.paths ? ` — files: ${pathsText(member.paths)}` : ''}`;
+  `- ${member.name} (${effectiveTalk(crew, member) === 'twoway' ? 'answers you' : 'executes only, no answer'}${effectiveWorktree(crew, member) ? ', own worktree' : ''}${member.reviews ? ', reviews' : ''}${toolsPart(member.tools)}${member.approve ? ', the user approves your requests to it first' : ''}): ${member.role.replace(/\s+/g, ' ')}${member.paths ? ` — files: ${pathsText(member.paths)}` : ''}`;
 
 /** The prompt of the relation of a member with the one it reports to, under its line: kept on its own lines. */
 const relationLines = (member: CrewMemberSpec): string[] =>
@@ -506,13 +674,24 @@ const relationLines = (member: CrewMemberSpec): string[] =>
 
 /** A member that does not report to you, as you read it: who it reports to, and what it does. */
 const otherLine = (crew: CrewSpec, member: CrewMemberSpec): string =>
-  `- ${member.name} (reports to ${managerName(crew, member)}${effectiveTalk(crew, member) === 'twoway' ? ', answers it' : ', executes only'}${member.reviews ? ', reviews' : ''}): ${member.role.replace(/\s+/g, ' ')}${member.paths ? ` — files: ${pathsText(member.paths)}` : ''}`;
+  `- ${member.name} (reports to ${managerName(crew, member)}${effectiveTalk(crew, member) === 'twoway' ? ', answers it' : ', executes only'}${member.reviews ? ', reviews' : ''}${toolsPart(member.tools)}): ${member.role.replace(/\s+/g, ' ')}${member.paths ? ` — files: ${pathsText(member.paths)}` : ''}`;
 
 const WORKTREE_LEAD =
   'A member with "own worktree" works in a git worktree of its own (a copy of the repository, on a branch of its own): you and the others do not see its changes until it commits them and they are merged. Ask it to commit its work at the end of each request. When its work is good, merge its branch into the folder of the team with git, or tell the user it is ready; the tool team shows the folder and the branch of each member.';
 
 const FILES_LEAD =
   'A member with "files" works only on those files (relative to the folder of the team), and the others stay off them: Forchetta stops its edits of other files, and the edits of the other members there. Give each one requests within its files; a change across them is yours to split between them.';
+
+const APPROVE_LEAD =
+  'A member with "the user approves your requests to it first" gets your requests only after the user approves them in Forchetta: meanwhile they wait, and they may reach it changed. If the user sends one back, you get a prompt that starts with "The user sent back request #<n> to <name>:", with the reason: change the request and send it again, or go on without it.';
+
+/** What the lead of a team with a deliverable is told: what it is, and to say when it is ready. */
+const deliverableLead = (deliverable: string): string =>
+  `What the team delivers when its work is done: ${deliverable}. When it is ready and checked, call the tool deliver of the server "forchetta" once, with what it is and where it is (a path, a branch, a link): the user is told. Until then the work is not done.`;
+
+/** The values a team started with, for whoever reads its texts. */
+const valuesLines = (crew: Pick<CrewSpec, 'values'>): string[] =>
+  crew.values && Object.keys(crew.values).length > 0 ? [`The values this team started with: ${Object.entries(crew.values).map(([name, value]) => `${name} = ${value}`).join('; ')}.`] : [];
 
 const REVIEW_LEAD =
   'A member that "reviews" checks the commits of the others and records a verdict with the tool review: approved, or changes to make, on one commit and those before it. Merge a branch only up to the last commit it approved: before a git merge of commits it did not approve, Forchetta asks the user. The tool team shows the last verdicts.';
@@ -524,12 +703,16 @@ export const pathsNote = (paths: readonly string[] | undefined): string =>
     : '(Your files in the team changed: from now on you may change any file that no other member has.)';
 
 /** The system prompt of the lead, when it is a Claude session: who it is, and its team. */
-export function leadPrompt(crew: CrewSpec): string {
-  if (crew.lead.kind !== 'claude') return '';
+export function leadPrompt(spec: CrewSpec): string {
+  if (spec.lead.kind !== 'claude') return '';
+  const crew = filledSpec(spec);
+  const lead = crew.lead as Extract<CrewLeadSpec, { kind: 'claude' }>;
   const levels = hasLevels(crew);
   return [
-    `You are ${crew.lead.name}, the lead of the team "${crew.name}" in Forchetta, a control center for parallel Claude Code sessions on this Mac.`,
-    `Your role: ${crew.lead.role}`,
+    `You are ${lead.name}, the lead of the team "${crew.name}" in Forchetta, a control center for parallel Claude Code sessions on this Mac.`,
+    `Your role: ${lead.role}`,
+    ...(toolsPrompt(lead.tools) ? [toolsPrompt(lead.tools)] : []),
+    ...valuesLines(crew),
     '',
     'Your team: each member is another Claude Code session, in its own terminal.',
     ...(levels
@@ -554,6 +737,8 @@ export function leadPrompt(crew: CrewSpec): string {
     ...(crew.members.some((member) => effectiveWorktree(crew, member)) ? [WORKTREE_LEAD] : []),
     ...(crew.members.some((member) => member.paths) ? [FILES_LEAD] : []),
     ...(crew.members.some((member) => member.reviews) ? [REVIEW_LEAD] : []),
+    ...(reportsOf(crew.members, undefined).some((member) => member.approve) ? [APPROVE_LEAD] : []),
+    ...(crew.deliverable ? [deliverableLead(crew.deliverable)] : []),
     'The user sees every session of the team in Forchetta and can also write to the members.',
     ...rulesLines(crew),
   ].join('\n');
@@ -567,7 +752,9 @@ const REVIEW_MEMBER =
   'You review. When you have checked a commit, record your verdict with the tool review of the server "forchetta": the hash of the commit, "approve" or "changes", and a note with what you found or what to fix. An approval covers that commit and those before it: the lead merges only what you approved, and Forchetta asks the user before a merge of anything else. Review the exact commit you approve: one made after it is not covered.';
 
 /** The system prompt of a member: who it is, who its lead is, how requests reach it and whether it answers. */
-export function memberPrompt(crew: CrewSpec, member: CrewMemberSpec): string {
+export function memberPrompt(spec: CrewSpec, given: CrewMemberSpec): string {
+  const crew = filledSpec(spec);
+  const member = crew.members.find((other) => other.name === given.name) ?? given;
   const manager = member.reportsTo !== undefined ? crew.members.find((other) => other.name === member.reportsTo) : undefined;
   const lead = manager
     ? `${manager.name}, another Claude Code session: a member of the team, who reports to ${managerName(crew, manager)}${manager.reportsTo === undefined && crew.lead.kind === 'claude' ? ', the lead of the team' : ''}`
@@ -584,6 +771,9 @@ export function memberPrompt(crew: CrewSpec, member: CrewMemberSpec): string {
     `Your role: ${member.role}`,
     `Your lead is ${lead}.`,
     ...(member.relation ? [`How you work with ${from}: ${member.relation}`] : []),
+    ...(toolsPrompt(member.tools) ? [toolsPrompt(member.tools)] : []),
+    ...valuesLines(crew),
+    ...(crew.deliverable ? [`What the team delivers in the end: ${crew.deliverable}.`] : []),
     '',
     `Requests reach you as prompts that start with "Request #<n> from ${from}:" (or "from the user", when the user writes to you directly). Do what they ask, within your role.`,
     effectiveTalk(crew, member) === 'twoway'
@@ -609,6 +799,7 @@ export function memberPrompt(crew: CrewSpec, member: CrewMemberSpec): string {
           '',
           'You lead members of the team too: they report to you, take requests from you, and their answers come back to you.',
           ...mine.flatMap((report) => [memberLine(crew, report), ...relationLines(report)]),
+          ...(mine.some((report) => report.approve) ? [APPROVE_LEAD] : []),
           'Give them work with the tool send_request of the server "forchetta": one request to one, some or all of them ("all": all of them). Write each request complete: the member sees only that. A member that "answers you" sends you its final message as a new prompt "Answer from <name> to request #<n>:"; its questions reach you as "Question from <name> about request #<n>:", and you answer them with send_request. To get the answers in this same turn, call the tool wait_for_answers (it waits up to 10 minutes).',
           answers
             ? `A request you pass on stays open: your final message goes back to ${from} only when the work you passed to them is done and you have read their answers. So pass the work, wait for the answers or end your turn, check what comes back, and end with your report on the whole request.`
@@ -643,13 +834,18 @@ export type ThreadEntry =
   | { kind: 'question'; at: number; n: number; from: string; to: string; text: string; status: NonNullable<Delivery['questions']>[number]['status'] }
   | { kind: 'answer'; at: number; n: number; from: string; to: string; text?: string; status: 'shown' | 'kept' | 'queued' | 'sent' | 'delivered' | 'failed' | 'held'; byWait?: boolean }
   /** A verdict of a member that reviews (the tool review): the commit, and its note. */
-  | { kind: 'review'; at: number; n: number; from: string; short: string; subject?: string; verdict: ReviewRecord['verdict']; text?: string };
+  | { kind: 'review'; at: number; n: number; from: string; short: string; subject?: string; verdict: ReviewRecord['verdict']; text?: string }
+  /** What you decided on a request that waited for your approval: let go (maybe changed), or sent back with a note. */
+  | { kind: 'approval'; at: number; n: number; from: string; to: string; decision: 'approved' | 'rejected'; text?: string; edited?: boolean }
+  /** The work of the team handed over, as its lead said (the tool deliver). */
+  | { kind: 'delivered'; at: number; n: number; from: string; text: string; where?: string };
 
-const ORDER: Record<ThreadEntry['kind'], number> = { request: 0, question: 1, answer: 2, review: 3 };
+const ORDER: Record<ThreadEntry['kind'], number> = { request: 0, approval: 1, question: 2, answer: 3, review: 4, delivered: 5 };
 
-/** The thread of a team, oldest first, from its requests and the verdicts of its reviewers. */
-export function threadOf(requests: readonly CrewRequest[], reviews: readonly ReviewRecord[] = []): ThreadEntry[] {
-  const entries: ThreadEntry[] = reviews.map((review) => ({
+/** The thread of a team, oldest first, from its requests, the verdicts of its reviewers and what it delivered. */
+export function threadOf(requests: readonly CrewRequest[], reviews: readonly ReviewRecord[] = [], delivered: readonly Delivered[] = []): ThreadEntry[] {
+  const entries: ThreadEntry[] = delivered.map((item) => ({ kind: 'delivered' as const, at: item.at, n: 0, from: item.by, text: item.summary, ...(item.where ? { where: item.where } : {}) }));
+  entries.push(...reviews.map((review) => ({
     kind: 'review' as const,
     at: review.at,
     n: 0,
@@ -658,10 +854,22 @@ export function threadOf(requests: readonly CrewRequest[], reviews: readonly Rev
     ...(review.subject ? { subject: review.subject } : {}),
     verdict: review.verdict,
     ...(review.note ? { text: review.note } : {}),
-  }));
+  })));
   for (const request of requests) {
     entries.push({ kind: 'request', at: request.createdAt, n: request.n, from: request.from, text: request.text, deliveries: request.deliveries, ...(request.parent !== undefined ? { parent: request.parent } : {}) });
     for (const delivery of request.deliveries) {
+      if (delivery.approval) {
+        entries.push({
+          kind: 'approval',
+          at: delivery.approval.at,
+          n: request.n,
+          from: request.from,
+          to: delivery.to,
+          decision: delivery.approval.decision,
+          ...(delivery.approval.note ? { text: delivery.approval.note } : {}),
+          ...(delivery.approval.edited ? { edited: true } : {}),
+        });
+      }
       for (const question of delivery.questions ?? []) {
         entries.push({ kind: 'question', at: question.at, n: request.n, from: delivery.to, to: request.from, text: question.text, status: question.status });
       }
@@ -683,7 +891,7 @@ export function threadOf(requests: readonly CrewRequest[], reviews: readonly Rev
   return entries.sort((a, b) => a.at - b.at || ORDER[a.kind] - ORDER[b.kind] || a.n - b.n);
 }
 
-const OPEN_STATUSES: readonly DeliveryStatus[] = ['queued', 'blocked', 'sent', 'working', 'delegated'];
+const OPEN_STATUSES: readonly DeliveryStatus[] = ['approval', 'queued', 'blocked', 'sent', 'working', 'delegated'];
 
 /**
  * What the box of a session of a team says of its requests: the one it works on ("#3 from lead: write the
@@ -696,13 +904,16 @@ export function crewLineOf(agentId: string, crews: readonly CrewSummary[]): stri
     const me = crew.recipients?.find((recipient) => recipient.agentId === agentId);
     if (!me) continue;
     const requests = crew.requests ?? [];
-    const mine = requests.flatMap((request) => request.deliveries.filter((d) => d.agentId === agentId && OPEN_STATUSES.includes(d.status)).map((d) => ({ request, d })));
+    // What waits for your approval has not reached it yet.
+    const mine = requests.flatMap((request) => request.deliveries.filter((d) => d.agentId === agentId && d.status !== 'approval' && OPEN_STATUSES.includes(d.status)).map((d) => ({ request, d })));
     const working = mine.find((item) => item.d.status === 'working' || item.d.status === 'sent');
     const waiting = mine.filter((item) => item !== working && item.d.status !== 'delegated').length;
     const from = (request: CrewRequest): string => (request.from === 'the user' ? 'you' : request.from);
     const first = (text: string): string => text.split('\n').find((line) => line.trim())?.trim() ?? '';
     if (working) return `#${working.request.n} from ${from(working.request)}: ${first(working.request.text)}${waiting > 0 ? ` · ${waiting} more waiting` : ''}`;
-    const open = requests.filter((request) => request.from === me.name).flatMap((request) => request.deliveries.filter((d) => OPEN_STATUSES.includes(d.status)).map((d) => `#${request.n} ${d.to}`));
+    const open = requests
+      .filter((request) => request.from === me.name)
+      .flatMap((request) => request.deliveries.filter((d) => OPEN_STATUSES.includes(d.status)).map((d) => `#${request.n} ${d.to}${d.status === 'approval' ? ' (your approval)' : ''}`));
     const passed = mine.find((item) => item.d.status === 'delegated');
     if (passed) return `#${passed.request.n} from ${from(passed.request)}: ${first(passed.request.text)} · waits on ${open.join(', ') || 'its members'}`;
     return open.length > 0 ? `waits on ${open.join(', ')}` : undefined;
@@ -730,6 +941,9 @@ export interface CrewTemplate {
   rules?: string;
   /** What the team may cost before you are told (CrewSpec). */
   budgetUsd?: number;
+  /** What the team hands over, and the parameters of its texts (CrewSpec); the values are given when it starts. */
+  deliverable?: string;
+  params?: TeamParam[];
   /** The notes written on its canvas in the studio, where they stand. */
   notes?: { x: number; y: number; text: string }[];
   /** One of the templates that come with Forchetta: it cannot be deleted. */
@@ -743,7 +957,7 @@ export interface CrewTemplate {
  * come with Forchetta; you change them (your version replaces theirs until you restore it), duplicate them, or save
  * a box of the studio as one of yours.
  */
-export interface RolePreset extends Omit<CrewMemberSpec, 'talk' | 'reportsTo' | 'relation' | MemberState> {
+export interface RolePreset extends Omit<CrewMemberSpec, 'talk' | 'reportsTo' | 'relation' | 'approve' | MemberState> {
   builtin?: boolean;
   modified?: boolean;
 }
@@ -751,7 +965,7 @@ export interface RolePreset extends Omit<CrewMemberSpec, 'talk' | 'reportsTo' | 
 /** A preset as the app sends it, checked like a member of a team; or what is wrong with it. */
 export function cleanRolePreset(input: unknown): { preset: RolePreset } | { error: string } {
   const raw = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-  const checked = cleanCrewSpec({ name: 'preset', cwd: '/', lead: { kind: 'claude', name: 'the-lead-of-a-preset', role: '' }, members: [{ ...raw, talk: undefined, reportsTo: undefined, relation: undefined }] });
+  const checked = cleanCrewSpec({ name: 'preset', cwd: '/', lead: { kind: 'claude', name: 'the-lead-of-a-preset', role: '' }, members: [{ ...raw, talk: undefined, reportsTo: undefined, relation: undefined, approve: undefined }] });
   if ('error' in checked) return { error: checked.error.replace(/^member 1: /, '') };
   return { preset: memberOfTemplate(checked.spec.members[0]!) };
 }
@@ -786,9 +1000,10 @@ export const BUILTIN_ROLES: readonly RolePreset[] = [
     model: 'opus',
     reviews: true,
     skills: ['code-review-and-quality', 'differential-review'],
+    tools: { limits: ['read-only', 'no-push'] },
     role: 'Reviews the commits of the others (git log and git diff against the main branch): bugs, risks, missing tests. Does not change the code: approves the commit it checked, or says what to fix.',
   },
-  { name: 'tester', builtin: true, model: 'sonnet', skills: ['webapp-testing', 'property-based-testing'], role: 'Writes and runs the tests of what it is asked, end to end where it matters, and reports what fails with how to reproduce it.' },
+  { name: 'tester', builtin: true, model: 'sonnet', skills: ['webapp-testing', 'property-based-testing'], tools: { mcp: ['playwright'] }, role: 'Writes and runs the tests of what it is asked, end to end where it matters, and reports what fails with how to reproduce it.' },
   { name: 'frontend', builtin: true, model: 'sonnet', skills: ['frontend-design', 'accessibility-engineering'], role: 'Builds the user interface it is asked for, following the conventions of the project.' },
   { name: 'backend', builtin: true, model: 'sonnet', skills: ['test-driven-development', 'security-and-hardening', 'performance-optimization'], role: 'Builds the server side it is asked for: data, logic and API, with tests.' },
   { name: 'researcher', builtin: true, model: 'sonnet', role: 'Finds the facts it is asked for, checks them against the sources, and reports them with where they come from.' },
@@ -812,10 +1027,13 @@ function cleanLayout(raw: unknown, names: readonly string[]): Record<string, [nu
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/** The skills of an agent preset of Forchetta: a template of Forchetta gives the same to the agent of that role. */
-const skillsOfRole = (name: string): { skills?: string[] } => {
-  const skills = BUILTIN_ROLES.find((preset) => preset.name === name)?.skills;
-  return skills ? { skills: [...skills] } : {};
+/** The skills and tools of an agent preset of Forchetta: a template of Forchetta gives the same to the agent of that role. */
+const skillsOfRole = (name: string): { skills?: string[]; tools?: AgentTools } => {
+  const preset = BUILTIN_ROLES.find((candidate) => candidate.name === name);
+  return {
+    ...(preset?.skills ? { skills: [...preset.skills] } : {}),
+    ...(preset?.tools ? { tools: { ...preset.tools, ...(preset.tools.limits ? { limits: [...preset.tools.limits] } : {}), ...(preset.tools.mcp ? { mcp: [...preset.tools.mcp] } : {}) } } : {}),
+  };
 };
 
 /** The templates that come with Forchetta. */
@@ -908,7 +1126,7 @@ function cleanNotes(raw: unknown): { x: number; y: number; text: string }[] | un
 export function cleanTemplate(input: unknown): { template: CrewTemplate } | { error: string } {
   const checked = cleanCrewSpec({ ...((input ?? {}) as object), cwd: '/' });
   if ('error' in checked) return checked;
-  const { cwd: _cwd, ...rest } = checked.spec;
+  const { cwd: _cwd, values: _values, ...rest } = checked.spec;
   const names = ['you', ...(rest.lead.kind === 'claude' ? [rest.lead.name] : []), ...rest.members.map((member) => member.name)];
   const layout = cleanLayout((input as Record<string, unknown> | undefined)?.layout, names);
   const notes = cleanNotes((input as Record<string, unknown> | undefined)?.notes);
@@ -928,6 +1146,8 @@ export function tooLong(input: unknown): string | undefined {
   if (name > CREW_NAME_MAX) return `the name of the team is ${name} characters: ${CREW_NAME_MAX} at most`;
   const rules = blockLength(raw.rules);
   if (rules > RULES_MAX) return `the rules of the team are ${rules} characters: ${RULES_MAX} at most`;
+  const deliverable = blockLength(raw.deliverable);
+  if (deliverable > DELIVERABLE_MAX) return `the deliverable of the team is ${deliverable} characters: ${DELIVERABLE_MAX} at most`;
   const people: [string, unknown][] = [['the lead', raw.lead], ...(Array.isArray(raw.members) ? raw.members.map((member, index): [string, unknown] => [`member ${index + 1}`, member]) : [])];
   for (const [what, item] of people) {
     if (!item || typeof item !== 'object') continue;
@@ -956,4 +1176,6 @@ export const templateOf = (spec: CrewSpec, name = spec.name): CrewTemplate => ({
   members: spec.members.map(memberOfTemplate),
   ...(spec.rules ? { rules: spec.rules } : {}),
   ...(spec.budgetUsd ? { budgetUsd: spec.budgetUsd } : {}),
+  ...(spec.deliverable ? { deliverable: spec.deliverable } : {}),
+  ...(spec.params ? { params: spec.params.map((param) => ({ ...param })) } : {}),
 });

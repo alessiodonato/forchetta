@@ -21,17 +21,23 @@ export interface TeamMcpServer {
  * FORCHETTA_VAR, and its tools by FORCHETTA_TEAM_TOOLS (Claude Code lists them once, when the daemon may be
  * restarting; the daemon still checks every call).
  */
-export function teamMcpConfig(server: TeamMcpServer, agentId: string, varDir: string, tools: readonly string[]): object {
+export function teamMcpConfig(server: TeamMcpServer | undefined, agentId: string, varDir: string, tools: readonly string[], extra: Readonly<Record<string, object>> = {}): object {
   return {
     mcpServers: {
-      [TEAM_MCP]: {
-        type: 'stdio',
-        command: server.command,
-        args: server.args,
-        env: { FORCHETTA_AGENT: agentId, FORCHETTA_VAR: varDir, FORCHETTA_TEAM_TOOLS: tools.join(',') },
-        // wait_for_answers waits up to 10 minutes: more than the default time of a call to a tool.
-        timeout: TEAM_MCP_TIMEOUT_MS,
-      },
+      // The MCP servers of the catalog an agent has (shared/agent-tools.ts), for its session only.
+      ...extra,
+      ...(server && tools.length > 0
+        ? {
+            [TEAM_MCP]: {
+              type: 'stdio',
+              command: server.command,
+              args: server.args,
+              env: { FORCHETTA_AGENT: agentId, FORCHETTA_VAR: varDir, FORCHETTA_TEAM_TOOLS: tools.join(',') },
+              // wait_for_answers waits up to 10 minutes: more than the default time of a call to a tool.
+              timeout: TEAM_MCP_TIMEOUT_MS,
+            },
+          }
+        : {}),
     },
   };
 }
@@ -40,9 +46,9 @@ export function teamMcpConfig(server: TeamMcpServer, agentId: string, varDir: st
 export const mcpConfigFile = (agentId: string): string => join(paths.crewMcp, `${agentId}.json`);
 
 /** Writes the MCP configuration of a session (0600), and gives its path. */
-export function writeMcpConfig(server: TeamMcpServer, agentId: string, tools: readonly string[]): string {
+export function writeMcpConfig(server: TeamMcpServer | undefined, agentId: string, tools: readonly string[], extra: Readonly<Record<string, object>> = {}): string {
   ensurePrivateDir(paths.crewMcp);
   const file = mcpConfigFile(agentId);
-  writeFileSync(file, `${JSON.stringify(teamMcpConfig(server, agentId, paths.varDir, tools), null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(file, `${JSON.stringify(teamMcpConfig(server, agentId, paths.varDir, tools, extra), null, 2)}\n`, { mode: 0o600 });
   return file;
 }

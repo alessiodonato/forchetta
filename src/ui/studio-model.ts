@@ -1,4 +1,5 @@
-import { cleanBudget, cleanCrewSpec, type CrewMemberSpec, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, pathsText, type RolePreset, type Talk } from '../shared/crew.ts';
+import { type AgentTools, hasTools, mcpServerById } from '../shared/agent-tools.ts';
+import { cleanBudget, cleanCrewSpec, type CrewMemberSpec, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, missingParams, paramsText, paramsUsed, pathsText, type RolePreset, type Talk, type TeamParam } from '../shared/crew.ts';
 import { skillById, SKILLS_PER_AGENT_MAX } from '../shared/skills.ts';
 
 // The studio of teams (Studio.tsx draws it): a canvas with "You" on top and a box for each agent, linked by arrows.
@@ -31,6 +32,8 @@ export interface StudioNode {
   reviews?: boolean;
   /** Its skills, from the catalog (shared/skills.ts). */
   skills: string[];
+  /** Its tools: limits, MCP servers of the catalog (shared/agent-tools.ts). */
+  tools?: AgentTools;
 }
 
 /** Where an arrow starts: a box, or You. */
@@ -42,6 +45,8 @@ export interface StudioLink {
   /** Undefined: the default of the team. */
   talk?: Talk;
   relation: string;
+  /** The requests sent along it wait for your approval. */
+  approve?: boolean;
 }
 
 export interface StudioDoc {
@@ -59,6 +64,14 @@ export interface StudioDoc {
   budget?: string;
   /** Notes on the canvas, for whoever opens the team after you. */
   notes: StudioNote[];
+  /** What the team hands over when its work is done (CrewSpec.deliverable). */
+  deliverable?: string;
+  /** What each parameter of its texts is ({ticket}), and its default. */
+  params?: TeamParam[];
+  /** The values of its parameters for the next start: not kept in a template. */
+  values?: Record<string, string>;
+  /** The first request of the next start, to the lead (to every member when you lead): not kept in a template. */
+  goal?: string;
 }
 
 /** A note on the canvas: a text where you put it. */
@@ -126,7 +139,24 @@ export const fieldsOf = (preset: Partial<Omit<RolePreset, 'name'>> & { name: str
   paths: preset.paths ? pathsText(preset.paths) : '',
   ...(preset.reviews ? { reviews: true } : {}),
   skills: [...(preset.skills ?? [])],
+  ...(hasTools(preset.tools) ? { tools: copyTools(preset.tools) } : {}),
 });
+
+/** The tools of an agent, as a copy of its own. */
+export const copyTools = (tools: AgentTools): AgentTools => ({
+  ...(tools.limits ? { limits: [...tools.limits] } : {}),
+  ...(tools.mcp ? { mcp: [...tools.mcp] } : {}),
+  ...(tools.strictMcp ? { strictMcp: true } : {}),
+});
+
+/** An MCP server of the catalog given to a box: once. */
+export function addTool(doc: StudioDoc, key: number, id: string): { doc: StudioDoc } | { error: string } {
+  const node = nodeOf(doc, key);
+  const server = mcpServerById(id);
+  if (!node || !server) return { error: 'Drop the tool on an agent.' };
+  if (node.tools?.mcp?.includes(id)) return { error: `${node.name} has the ${server.label} already.` };
+  return { doc: updateNode(doc, key, { tools: { ...node.tools, mcp: [...(node.tools?.mcp ?? []), id] } }) };
+}
 
 /** A skill given to a box: once, at most 8. */
 export function addSkill(doc: StudioDoc, key: number, id: string): { doc: StudioDoc } | { error: string } {
@@ -156,6 +186,7 @@ export function presetOfNode(node: StudioNode): Omit<RolePreset, 'builtin' | 'mo
     ...(paths.length > 0 ? { paths } : {}),
     ...(node.reviews ? { reviews: true } : {}),
     ...(node.skills.length > 0 ? { skills: [...node.skills] } : {}),
+    ...(hasTools(node.tools) ? { tools: copyTools(node.tools) } : {}),
   };
 }
 
@@ -175,7 +206,7 @@ export function updateNode(doc: StudioDoc, key: number, patch: Partial<Omit<Stud
   return { ...doc, nodes: doc.nodes.map((node) => (node.key === key ? { ...node, ...patch } : node)) };
 }
 
-export function updateLink(doc: StudioDoc, to: number, patch: Partial<Pick<StudioLink, 'talk' | 'relation'>>): StudioDoc {
+export function updateLink(doc: StudioDoc, to: number, patch: Partial<Pick<StudioLink, 'talk' | 'relation' | 'approve'>>): StudioDoc {
   return { ...doc, links: doc.links.map((link) => (link.to === to ? { ...link, ...patch } : link)) };
 }
 
@@ -221,8 +252,8 @@ function reached(doc: StudioDoc): Set<number> {
   return out;
 }
 
-/** What keeps the canvas from being a team, in order; empty when it is one. */
-export function problems(doc: StudioDoc): string[] {
+/** What keeps the canvas from being a team, in order; empty when it is one. `start`: also the values it needs to start. */
+export function problems(doc: StudioDoc, start = false): string[] {
   if (doc.nodes.length === 0) return ['Drag an agent from the left onto the canvas.'];
   const out: string[] = [];
   if (below(doc, 'you').length === 0) out.push('Drag an arrow from You to the lead of the team, or to each member you lead.');
@@ -230,7 +261,32 @@ export function problems(doc: StudioDoc): string[] {
   for (const node of doc.nodes) if (!linked.has(node.key) && below(doc, 'you').length > 0) out.push(`${node.name.trim() || 'A box'} is not connected: drag an arrow to it from the one it reports to.`);
   if (out.length > 0) return out;
   const checked = specOfDoc(doc);
-  return 'error' in checked ? [checked.error] : [];
+  if ('error' in checked) return [checked.error];
+  const missing = start ? missingParams(checked.spec) : [];
+  return missing.length > 0 ? [`Give a value to ${paramsText(missing)}: the team needs ${missing.length === 1 ? 'it' : 'them'} to start.`] : [];
+}
+
+/** The parameters the texts of the canvas use, with what each one is and its default. */
+export function paramsOfDoc(doc: StudioDoc): TeamParam[] {
+  const lead = leadKey(doc);
+  const leadNode = lead !== undefined ? nodeOf(doc, lead) : undefined;
+  const names = paramsUsed({
+    lead: leadNode ? { kind: 'claude', name: leadNode.name, role: leadNode.role } : { kind: 'you' },
+    members: doc.nodes.filter((node) => node.key !== lead).map((node) => ({ name: node.name, role: node.role, relation: incoming(doc, node.key)?.relation ?? '' })),
+    rules: doc.rules,
+    deliverable: doc.deliverable ?? '',
+  });
+  return names.map((name) => doc.params?.find((param) => param.name === name) ?? { name });
+}
+
+/** What a parameter is, or its default, changed on the canvas. */
+export function updateParam(doc: StudioDoc, name: string, patch: Partial<Omit<TeamParam, 'name'>>): StudioDoc {
+  const current = paramsOfDoc(doc).find((param) => param.name === name) ?? { name };
+  const next: TeamParam = { ...current, ...patch };
+  if (!next.hint?.trim()) delete next.hint;
+  if (!next.default?.trim()) delete next.default;
+  const others = (doc.params ?? []).filter((param) => param.name !== name);
+  return { ...doc, params: [...others, next] };
 }
 
 /** The team the canvas makes, as the daemon checks it; or what is wrong with it. */
@@ -254,10 +310,13 @@ export function specOfDoc(doc: StudioDoc): { spec: CrewSpec } | { error: string 
         ...(paths.length > 0 ? { paths } : {}),
         ...(node.reviews ? { reviews: true } : {}),
         ...(node.skills.length > 0 ? { skills: node.skills } : {}),
+        ...(hasTools(node.tools) ? { tools: node.tools } : {}),
         ...(above ? { reportsTo: above } : {}),
         ...(link?.relation.trim() ? { relation: link.relation.trim() } : {}),
+        ...(link?.approve && link.from !== 'you' ? { approve: true } : {}),
       };
     });
+  const params = paramsOfDoc(doc).filter((param) => param.hint || param.default);
   return cleanCrewSpec({
     name: doc.name,
     cwd: doc.folder,
@@ -265,6 +324,9 @@ export function specOfDoc(doc: StudioDoc): { spec: CrewSpec } | { error: string 
     ...(doc.worktrees ? { worktrees: true } : {}),
     ...(doc.rules.trim() ? { rules: doc.rules } : {}),
     ...(cleanBudget(doc.budget) ? { budgetUsd: cleanBudget(doc.budget) } : {}),
+    ...(doc.deliverable?.trim() ? { deliverable: doc.deliverable } : {}),
+    ...(params.length > 0 ? { params } : {}),
+    ...(doc.values && Object.keys(doc.values).length > 0 ? { values: doc.values } : {}),
     lead: leadNode
       ? {
           kind: 'claude',
@@ -273,6 +335,7 @@ export function specOfDoc(doc: StudioDoc): { spec: CrewSpec } | { error: string 
           ...(leadNode.model ? { model: leadNode.model } : {}),
           ...(leadNode.mode ? { mode: leadNode.mode } : {}),
           ...(leadNode.skills.length > 0 ? { skills: leadNode.skills } : {}),
+          ...(hasTools(leadNode.tools) ? { tools: leadNode.tools } : {}),
         }
       : { kind: 'you' },
     members,
@@ -281,9 +344,9 @@ export function specOfDoc(doc: StudioDoc): { spec: CrewSpec } | { error: string 
 
 /** The canvas as a template: the team without its folder, with where each box stands. */
 export function templateOfDoc(doc: StudioDoc): { template: Omit<CrewTemplate, 'builtin' | 'modified'> } | { error: string } {
-  const checked = specOfDoc({ ...doc, folder: doc.folder.trim() || '/' });
+  const checked = specOfDoc({ ...doc, folder: doc.folder.trim() || '/', values: {} });
   if ('error' in checked) return checked;
-  const { cwd: _cwd, ...rest } = checked.spec;
+  const { cwd: _cwd, values: _values, ...rest } = checked.spec;
   const layout: Record<string, [number, number]> = { you: [doc.you.x, doc.you.y] };
   for (const node of doc.nodes) layout[node.name.trim()] = [node.x, node.y];
   const notes = doc.notes.filter((note) => note.text.trim()).map((note) => ({ x: note.x, y: note.y, text: note.text.trim() }));
@@ -311,7 +374,13 @@ export function addTemplate(doc: StudioDoc, template: Pick<CrewTemplate, 'lead' 
   for (const member of template.members) {
     const above = member.reportsTo !== undefined ? keys.get(member.reportsTo.toLowerCase()) : lead;
     // The → / ⇄ of the template stays: a template made with another default keeps each member as it was.
-    links.push({ from: above ?? 'you', to: keys.get(member.name.toLowerCase())!, ...(member.talk || template.talk !== next.talk ? { talk: member.talk ?? template.talk } : {}), relation: member.relation ?? '' });
+    links.push({
+      from: above ?? 'you',
+      to: keys.get(member.name.toLowerCase())!,
+      ...(member.talk || template.talk !== next.talk ? { talk: member.talk ?? template.talk } : {}),
+      relation: member.relation ?? '',
+      ...(member.approve ? { approve: true } : {}),
+    });
   }
   const added = new Set(keys.values());
   next = { ...next, links: [...next.links, ...links] };
@@ -344,6 +413,8 @@ export function docOfTemplate(template: CrewTemplate, folder = ''): StudioDoc {
     worktrees: template.worktrees === true,
     rules: template.rules ?? '',
     ...(template.budgetUsd ? { budget: String(template.budgetUsd) } : {}),
+    ...(template.deliverable ? { deliverable: template.deliverable } : {}),
+    ...(template.params ? { params: template.params.map((param) => ({ ...param })) } : {}),
     notes: (template.notes ?? []).map((note) => ({ ...note, key: newKey() })),
   };
   const you = template.layout?.you;
@@ -479,7 +550,7 @@ export function redoStep(history: StudioHistory, current: StudioDoc): { doc: Stu
 /** Boxes copied: their fields where they stood, and the arrows between them (by their place in `nodes`). */
 export interface StudioClip {
   nodes: Omit<StudioNode, 'key'>[];
-  links: { from: number; to: number; talk?: Talk; relation: string }[];
+  links: { from: number; to: number; talk?: Talk; relation: string; approve?: boolean }[];
 }
 
 /** The boxes of these keys, with the arrows that go from one of them to another. */
@@ -488,10 +559,10 @@ export function clipOf(doc: StudioDoc, keys: readonly number[]): StudioClip | un
   if (chosen.length === 0) return undefined;
   const index = new Map(chosen.map((node, at) => [node.key, at]));
   return {
-    nodes: chosen.map(({ key: _key, ...fields }) => ({ ...fields, skills: [...fields.skills] })),
+    nodes: chosen.map(({ key: _key, ...fields }) => ({ ...fields, skills: [...fields.skills], ...(fields.tools ? { tools: copyTools(fields.tools) } : {}) })),
     links: doc.links
       .filter((link) => link.from !== 'you' && index.has(link.from) && index.has(link.to))
-      .map((link) => ({ from: index.get(link.from as number)!, to: index.get(link.to)!, ...(link.talk ? { talk: link.talk } : {}), relation: link.relation })),
+      .map((link) => ({ from: index.get(link.from as number)!, to: index.get(link.to)!, ...(link.talk ? { talk: link.talk } : {}), relation: link.relation, ...(link.approve ? { approve: true } : {}) })),
   };
 }
 
@@ -500,14 +571,14 @@ export function pasteClip(doc: StudioDoc, clip: StudioClip, dx: number, dy: numb
   let next = doc;
   const keys: number[] = [];
   for (const node of clip.nodes) {
-    const added = addNode(next, { ...node, skills: [...node.skills] }, Math.max(0, node.x + dx), Math.max(0, node.y + dy));
+    const added = addNode(next, { ...node, skills: [...node.skills], ...(node.tools ? { tools: copyTools(node.tools) } : {}) }, Math.max(0, node.x + dx), Math.max(0, node.y + dy));
     next = added.doc;
     keys.push(added.key);
   }
   for (const link of clip.links) {
     const result = connect(next, keys[link.from]!, keys[link.to]!);
     if ('error' in result) continue;
-    next = updateLink(result.doc, keys[link.to]!, { relation: link.relation, ...(link.talk ? { talk: link.talk } : {}) });
+    next = updateLink(result.doc, keys[link.to]!, { relation: link.relation, ...(link.talk ? { talk: link.talk } : {}), ...(link.approve ? { approve: true } : {}) });
   }
   return { doc: next, keys };
 }

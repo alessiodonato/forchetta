@@ -29,6 +29,10 @@ export type LedgerEntry =
   | ({ t: number; kind: 'guard'; decision: 'deny' | 'ask' | 'note'; tool?: string } & LedgerWho)
   | { t: number; kind: 'review'; team: string; by: string; verdict: 'approved' | 'changes'; commit: string }
   | { t: number; kind: 'request'; team: string; n: number; from: string; to: string[] }
+  /** You let a request of a session go (maybe changed), or sent it back: its arrow asked for your approval. */
+  | { t: number; kind: 'approval'; team: string; n: number; to: string; decision: 'approved' | 'rejected' }
+  /** The lead of a team said its work is delivered (the tool deliver). */
+  | { t: number; kind: 'delivered'; team: string; by: string; where?: string }
   | ({ t: number; kind: 'session'; event: 'start' | 'end' } & LedgerWho);
 
 /** The file of a month: 2026-11.jsonl, in local time. */
@@ -221,6 +225,8 @@ export function report(entries: readonly LedgerEntry[], by: ReportBy): ReportRow
   };
   const keyOf = (entry: LedgerEntry): string | undefined => {
     if (by === 'day') return day(entry.t);
+    // Decisions and deliveries are in the ledger for the record (and the replay of a team): no row of their own.
+    if (entry.kind === 'approval' || entry.kind === 'delivered') return undefined;
     if (entry.kind === 'review' || entry.kind === 'request') return by === 'team' ? entry.team : by === 'session' ? `${entry.team} › ${entry.kind === 'review' ? entry.by : entry.from}` : undefined;
     if (by === 'team') return entry.team ?? '(no team)';
     if (by === 'session') return entry.team ? `${entry.team} › ${entry.member ?? entry.project}` : `${entry.project} (${entry.agent.slice(0, 8)})`;
@@ -253,6 +259,8 @@ export function report(entries: readonly LedgerEntry[], by: ReportBy): ReportRow
         target.requests += 1;
         break;
       case 'session':
+      case 'approval':
+      case 'delivered':
         break;
     }
   }

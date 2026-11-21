@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
-import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, PATH_MAX, PATHS_MAX, pathsText, RELATION_MAX, ROLE_MAX, RULES_MAX, type Talk, treeOrder } from '../shared/crew.ts';
+import type { AgentTools } from '../shared/agent-tools.ts';
+import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMBER_NAME_MAX, missingParams, PATH_MAX, PATHS_MAX, paramsUsed, pathsText, RELATION_MAX, ROLE_MAX, RULES_MAX, type Talk, treeOrder, VALUE_MAX } from '../shared/crew.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
@@ -32,6 +33,9 @@ interface MemberDraft {
   relation: string;
   /** Its skills, from a template: the studio changes them, this panel keeps them. */
   skills?: string[];
+  /** Its tools and whether you approve its requests, from a template: the studio changes them, this panel keeps them. */
+  tools?: AgentTools;
+  approve?: boolean;
   more: boolean;
 }
 
@@ -89,6 +93,8 @@ export function draftsOf(template: Pick<CrewTemplate, 'members'>): MemberDraft[]
     paths: spec.paths ? pathsText(spec.paths) : '',
     ...(spec.reviews ? { reviews: true } : {}),
     ...(spec.skills ? { skills: [...spec.skills] } : {}),
+    ...(spec.tools ? { tools: spec.tools } : {}),
+    ...(spec.approve ? { approve: true } : {}),
     relation: spec.relation ?? '',
     more: Boolean(spec.model || spec.mode || spec.worktree !== undefined || spec.paths || spec.reviews || spec.skills),
   }));
@@ -110,10 +116,13 @@ export function specOf(input: {
   leadModel: string;
   leadMode: string;
   leadSkills?: readonly string[];
+  leadTools?: AgentTools;
   talk: Talk;
   worktrees?: boolean;
   rules?: string;
-  members: readonly (Pick<MemberDraft, 'name' | 'role' | 'talk' | 'model' | 'mode' | 'worktree' | 'reviews'> & { paths?: string; key?: number; reportsTo?: number; relation?: string; skills?: readonly string[] })[];
+  /** What a template had and this panel does not show: the deliverable and the parameters, and their values now. */
+  kept?: Pick<CrewSpec, 'deliverable' | 'params' | 'values'>;
+  members: readonly (Pick<MemberDraft, 'name' | 'role' | 'talk' | 'model' | 'mode' | 'worktree' | 'reviews' | 'tools' | 'approve'> & { paths?: string; key?: number; reportsTo?: number; relation?: string; skills?: readonly string[] })[];
 }): CrewSpec {
   const nameOf = new Map(input.members.filter((draft) => draft.key !== undefined).map((draft) => [draft.key!, draft.name.trim()]));
   return {
@@ -129,10 +138,14 @@ export function specOf(input: {
             ...(input.leadModel ? { model: input.leadModel } : {}),
             ...(input.leadMode ? { mode: input.leadMode } : {}),
             ...(input.leadSkills && input.leadSkills.length > 0 ? { skills: [...input.leadSkills] } : {}),
+            ...(input.leadTools ? { tools: input.leadTools } : {}),
           },
     talk: input.talk,
     ...(input.worktrees ? { worktrees: true } : {}),
     ...(input.rules?.trim() ? { rules: input.rules.trim() } : {}),
+    ...(input.kept?.deliverable ? { deliverable: input.kept.deliverable } : {}),
+    ...(input.kept?.params ? { params: input.kept.params } : {}),
+    ...(input.kept?.values && Object.keys(input.kept.values).length > 0 ? { values: input.kept.values } : {}),
     members: input.members.map((draft) => ({
       name: draft.name.trim(),
       role: draft.role.trim(),
@@ -145,6 +158,8 @@ export function specOf(input: {
       ...(draft.reportsTo !== undefined && nameOf.get(draft.reportsTo) ? { reportsTo: nameOf.get(draft.reportsTo) } : {}),
       ...(draft.relation?.trim() ? { relation: draft.relation.trim() } : {}),
       ...(draft.skills && draft.skills.length > 0 ? { skills: [...draft.skills] } : {}),
+      ...(draft.tools ? { tools: draft.tools } : {}),
+      ...(draft.approve ? { approve: true } : {}),
     })),
   };
 }
@@ -175,6 +190,10 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
   const [leadMode, setLeadMode] = useState('');
   // The skills of the lead of a template: the studio changes them, this panel keeps them.
   const [leadSkills, setLeadSkills] = useState<string[]>([]);
+  const [leadTools, setLeadTools] = useState<AgentTools | undefined>(undefined);
+  // The deliverable and the parameters of a template, kept; the values of its parameters, for this start.
+  const [kept, setKept] = useState<Pick<CrewSpec, 'deliverable' | 'params'>>({});
+  const [values, setValues] = useState<Record<string, string>>({});
   const [talk, setTalk] = useState<Talk>('twoway');
   // Each member in a git worktree of its own: on by default, the members do not touch each other's files.
   const [worktrees, setWorktrees] = useState(true);
@@ -213,7 +232,13 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
       setLeadModel(template.lead.model ?? '');
       setLeadMode(template.lead.mode ?? '');
       setLeadSkills(template.lead.skills ?? []);
-    } else setLeadSkills([]);
+      setLeadTools(template.lead.tools);
+    } else {
+      setLeadSkills([]);
+      setLeadTools(undefined);
+    }
+    setKept({ ...(template.deliverable ? { deliverable: template.deliverable } : {}), ...(template.params ? { params: template.params } : {}) });
+    setValues({});
     setTalk(template.talk);
     setWorktrees(template.worktrees === true);
     setMembers(draftsOf(template));
@@ -230,7 +255,11 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
 
   // From the list as it is now, not as it was at the last render: two quick changes must both stay.
   const change = (key: number, patch: Partial<MemberDraft>): void => setMembers((current) => current.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));
-  const ready = name.trim() !== '' && folder.trim() !== '' && members.length > 0 && members.every((draft) => draft.name.trim() !== '');
+  // The parameters its texts use ({ticket}): each one needs a value, or its default, before the team starts.
+  const drafted = specOf({ name, folder: folder || '/', leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, leadTools, talk, worktrees, rules, kept: { ...kept, values }, members });
+  const used = paramsUsed(drafted).map((param) => kept.params?.find((one) => one.name === param) ?? { name: param });
+  const missing = missingParams(drafted);
+  const ready = name.trim() !== '' && folder.trim() !== '' && members.length > 0 && members.every((draft) => draft.name.trim() !== '') && missing.length === 0;
   const leadLabel = leadKind === 'you' ? 'you' : leadName.trim() || 'lead';
   const nameOf = (key: number | undefined): string => {
     if (key === undefined) return leadLabel;
@@ -240,7 +269,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
   const full = members.length >= CREW_MAX_MEMBERS;
   const create = (): void => {
     if (busy || !ready) return;
-    store.createCrew(specOf({ name, folder, leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, talk, worktrees, rules, members }));
+    store.createCrew(specOf({ name, folder, leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, leadTools, talk, worktrees, rules, kept: { ...kept, values }, members }));
   };
   const onKey = (event: KeyboardEvent): void => {
     if (event.key === 'Escape') onClose();
@@ -249,7 +278,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
 
   const saveTemplate = (): void => {
     if (!ready && !(name.trim() && members.every((draft) => draft.name.trim()))) return;
-    const { cwd: _cwd, ...template } = specOf({ name, folder: folder || '/', leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, talk, worktrees, rules, members });
+    const { cwd: _cwd, values: _values, ...template } = specOf({ name, folder: folder || '/', leadKind, leadName, leadRole, leadModel, leadMode, leadSkills, leadTools, talk, worktrees, rules, kept, members });
     store.saveTemplate({ template });
   };
 
@@ -552,6 +581,25 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
           onInput={(event) => setRules((event.target as HTMLTextAreaElement).value)}
         />
       </div>
+
+      {used.length > 0 && (
+        <div class="broadcast-row" role="group" aria-label="Values of the parameters">
+          <span class="broadcast-label">Values</span>
+          {used.map((param) => (
+            <label key={param.name} class="spawn-option" title={param.hint ?? `{${param.name}} in the texts of the team`}>
+              {`{${param.name}}`}
+              <input
+                class="command-input mono"
+                type="text"
+                value={values[param.name] ?? ''}
+                maxLength={VALUE_MAX}
+                placeholder={param.default ?? param.hint ?? 'value'}
+                onInput={(event) => setValues({ ...values, [param.name]: (event.target as HTMLInputElement).value })}
+              />
+            </label>
+          ))}
+        </div>
+      )}
 
       <div class="broadcast-row end">
         <span class={`broadcast-note${state?.error || saving?.error ? ' error' : ''}`}>
