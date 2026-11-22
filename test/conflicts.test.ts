@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Conflicts, writtenFile } from '../src/daemon/conflicts.ts';
+import { Conflicts, shellWrittenFiles, writtenFile } from '../src/daemon/conflicts.ts';
 import { newAgent } from '../src/daemon/state.ts';
 import { conflictText } from '../src/shared/present.ts';
 
@@ -131,5 +131,20 @@ describe('conflicts', () => {
     conflicts.update([a, b, c]);
     expect(a.conflicts!.map((conflict) => `${conflict.kind}:${conflict.withName}`)).toEqual(['file:zeta', 'repo:alfa']);
     expect(conflictText(a.conflicts![0]!)).toBe('same file as zeta: 1.ts and 2 more');
+  });
+});
+
+describe('writes of a shell command', () => {
+  it('are the files its line names, inside the folder of the session, after it went through', () => {
+    expect(shellWrittenFiles(post('Bash', { command: "sed -i '' 's/a/b/' src/a.ts && echo x >> notes.md" }), '/r/app', '/r/app')).toEqual(['/r/app/src/a.ts', '/r/app/notes.md']);
+    expect(shellWrittenFiles(post('Bash', { command: 'cd src && echo x > a.ts; echo y > a.ts' }), '/r/app', '/r/app')).toEqual(['/r/app/src/a.ts']);
+  });
+
+  it('are not a log in /tmp, .git, a pattern, what rm takes away, a call stopped before, or another tool', () => {
+    expect(shellWrittenFiles(post('Bash', { command: 'npm test > /tmp/t.log; echo x > .git/info/exclude' }), '/r/app', '/r/app')).toEqual([]);
+    expect(shellWrittenFiles(post('Bash', { command: "sed -i '' 's/a/b/' src/*.ts; rm -f src/old.ts" }), '/r/app', '/r/app')).toEqual([]);
+    expect(shellWrittenFiles({ ...post('Bash', { command: 'echo x > a.ts' }), hook_event_name: 'PreToolUse' }, '/r/app', '/r/app')).toEqual([]);
+    expect(shellWrittenFiles(post('Edit', { file_path: '/r/app/a.ts' }), '/r/app', '/r/app')).toEqual([]);
+    expect(shellWrittenFiles(post('Bash', { command: 'echo x > a.ts' }), '/r/app', undefined)).toEqual([]);
   });
 });

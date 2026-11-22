@@ -1,12 +1,14 @@
 import { existsSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { Agent, Conflict } from '../shared/agent.ts';
+import { shellWrites } from './shell.ts';
 import type { HookPayload } from './state.ts';
 
 // Two sessions that write the same file, or in the same repository, at the same time. The writes are those the
-// hooks see: Edit, Write, MultiEdit and NotebookEdit that went through (PostToolUse). What a Bash command
-// changes (sed -i, git checkout, a formatter) is invisible to them. A repository is a working tree: the folder
-// with .git in it, so two worktrees of the same repository are two different places.
+// hooks see: Edit, Write, MultiEdit and NotebookEdit that went through (PostToolUse), and the files a Bash command
+// that went through writes as its line tells (shellWrittenFiles). What a program changes by itself (a script, git
+// checkout, a formatter) is invisible to them. A repository is a working tree: the folder with .git in it, so two
+// worktrees of the same repository are two different places.
 
 /** Writes older than this do not count: the two sessions are no longer working on it at the same time. */
 export const CONFLICT_WINDOW_MS = 60 * 60_000;
@@ -24,6 +26,26 @@ export function writtenFile(payload: HookPayload, cwd: string | undefined): stri
   if (isAbsolute(path)) return resolve(path);
   const base = cwd ?? payload.cwd;
   return base ? resolve(base, path) : undefined;
+}
+
+/**
+ * The files a Bash command that went through wrote, absolute, as its line tells (daemon/shell.ts): those named one
+ * by one, inside `within` (the working tree or the folder of the session) and outside .git. A pattern, what rm
+ * took away, and a log in /tmp are left out: they are no file of the work to hold.
+ */
+export function shellWrittenFiles(payload: HookPayload, cwd: string | undefined, within: string | undefined): string[] {
+  if (payload.hook_event_name !== 'PostToolUse' || payload.tool_name !== 'Bash') return [];
+  const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
+  const base = cwd ?? payload.cwd;
+  if (typeof command !== 'string' || !base || !within) return [];
+  const files = shellWrites(command, base)
+    .filter((write) => !write.glob && !write.tree)
+    .map((write) => write.path)
+    .filter((path) => {
+      const rel = relative(within, path);
+      return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && rel.split('/')[0] !== '.git';
+    });
+  return [...new Set(files)];
 }
 
 interface Write {

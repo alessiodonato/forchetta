@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isCheckCommand, isDevServerCommand, killTargets, placedCommands } from '../src/daemon/shell.ts';
+import { globMatches, isCheckCommand, isDevServerCommand, killTargets, placedCommands, shellCommands, shellWrites, withoutHeredocs } from '../src/daemon/shell.ts';
 
 // How the guard tells commands apart: tests and builds, dev servers, kills.
 
@@ -87,5 +87,76 @@ describe('kills', () => {
     expect(killTargets('lsof -i :3000')).toBeUndefined();
     expect(killTargets('echo "kill the bug"')).toBeUndefined();
     expect(killTargets('git commit -m "kill 3 bugs"')).toBeUndefined();
+  });
+});
+
+describe('the files a line writes', () => {
+  const W = '/p/app';
+  const paths = (line: string): string[] => shellWrites(line, W).map((write) => write.path);
+
+  it('are the targets of > and >>, with the folder the line moved to', () => {
+    expect(paths('echo hi > notes.md')).toEqual([`${W}/notes.md`]);
+    expect(paths('echo hi >> notes.md')).toEqual([`${W}/notes.md`]);
+    expect(paths('echo hi >notes.md')).toEqual([`${W}/notes.md`]);
+    expect(paths('npm test 2> err.log')).toEqual([`${W}/err.log`]);
+    expect(paths('npm test &> out.log')).toEqual([`${W}/out.log`]);
+    expect(paths('cd src && echo x > a.ts')).toEqual([`${W}/src/a.ts`]);
+    expect(paths('echo x > /abs/b.ts')).toEqual(['/abs/b.ts']);
+  });
+
+  it('are not a > in quotes, a copy of a descriptor, /dev/null, or a word with $ or ~', () => {
+    expect(paths(`grep '>' notes.md`)).toEqual([]);
+    expect(paths('echo "a > b"')).toEqual([]);
+    expect(paths('npm test > /dev/null 2>&1')).toEqual([]);
+    expect(paths('echo x >&2')).toEqual([]);
+    expect(paths('echo x > "$OUT/a.txt"')).toEqual([]);
+    expect(paths('echo x > ~/a.txt')).toEqual([]);
+    expect(paths('git log --format=%h->%s')).toEqual([]);
+  });
+
+  it('follow a here-document to its file, not the text inside it', () => {
+    const line = "cat > src/config.ts <<'EOF'\nexport const a = b > c ? 'it\\'s' : \"x\";\nconst d = 1; // don't > e.ts\nEOF\necho done > done.txt";
+    expect(paths(line)).toEqual([`${W}/src/config.ts`, `${W}/done.txt`]);
+    expect(withoutHeredocs("cat <<-END > a.md\n\tbody > b.md\n\tEND\nls")).toBe('cat <<-END > a.md\nls');
+    // A script on stdin writes what it writes by itself: not seen.
+    expect(paths("python3 - <<'PY'\nopen('a.py', 'w').write('x')\nPY")).toEqual([]);
+  });
+
+  it('are the files of tee, sed -i and perl -i', () => {
+    expect(paths('echo x | tee -a a.log b.log')).toEqual([`${W}/a.log`, `${W}/b.log`]);
+    expect(paths("sed -i '' 's/a/b/' src/a.ts")).toEqual([`${W}/src/a.ts`]);
+    expect(paths("sed -i 's/a/b/' src/a.ts src/b.ts")).toEqual([`${W}/src/a.ts`, `${W}/src/b.ts`]);
+    expect(paths("sed -i.bak -e 's/a/b/' -e 's/c/d/' a.ts")).toEqual([`${W}/a.ts`]);
+    expect(paths("sed -Ei '' 's/a/b/' a.ts")).toEqual([`${W}/a.ts`]);
+    expect(paths("sed --in-place -f fix.sed a.ts")).toEqual([`${W}/a.ts`]);
+    expect(paths("perl -pi -e 's/a/b/' a.pl")).toEqual([`${W}/a.pl`]);
+    expect(paths("perl -i.orig -pe 's/a/b/' a.pl b.pl")).toEqual([`${W}/a.pl`, `${W}/b.pl`]);
+  });
+
+  it('are not those sed and perl only read', () => {
+    expect(paths("sed -n '1,5p' a.ts")).toEqual([]);
+    expect(paths("sed 's/a/b/' a.ts > b.ts")).toEqual([`${W}/b.ts`]);
+    expect(paths("perl -ne 'print' a.pl")).toEqual([]);
+  });
+
+  it('are the destination of cp and mv, and what rm and mv take away', () => {
+    expect(shellWrites('cp a.ts b.ts', W)).toEqual([{ path: `${W}/b.ts` }]);
+    expect(shellWrites('mv old.ts new.ts', W)).toEqual([{ path: `${W}/old.ts`, tree: true }, { path: `${W}/new.ts` }]);
+    expect(shellWrites('rm -rf build', W)).toEqual([{ path: `${W}/build`, tree: true }]);
+    expect(shellWrites('cp -t dest a b', W)).toEqual([]);
+    expect(shellWrites('truncate -s 0 a.log', W)).toEqual([{ path: `${W}/a.log` }]);
+  });
+
+  it('can be a pattern', () => {
+    expect(shellWrites("sed -i '' 's/a/b/' src/*.ts", W)).toEqual([{ path: `${W}/src/*.ts`, glob: true }]);
+    expect(globMatches(`${W}/src/*.ts`, `${W}/src/a.ts`)).toBe(true);
+    expect(globMatches(`${W}/src/*.ts`, `${W}/src/deep/a.ts`)).toBe(false);
+    expect(globMatches(`${W}/src/**/*.ts`, `${W}/src/deep/a.ts`)).toBe(true);
+    expect(globMatches(`${W}/a?.md`, `${W}/ab.md`)).toBe(true);
+    expect(globMatches(`${W}/a.md`, `${W}/aXmd`)).toBe(false);
+  });
+
+  it('leave the words of shellCommands as they were', () => {
+    expect(shellCommands("echo 'a > b' > c.txt; sed -i '' x f")).toEqual([['echo', 'a > b', '>', 'c.txt'], ['sed', '-i', '', 'x', 'f']]);
   });
 });

@@ -5,7 +5,7 @@ import { pathsText } from '../shared/crew.ts';
 import type { GuardStatKind } from '../shared/guard-stats.ts';
 import type { HookPayload } from './state.ts';
 import { removedLines } from './coherence.ts';
-import { commandStart, isCheckCommand, placedCommands, shellCommands } from './shell.ts';
+import { commandStart, globMatches, isCheckCommand, placedCommands, type ShellWrite, shellCommands, shellWrites } from './shell.ts';
 
 export { shellCommands } from './shell.ts';
 
@@ -15,7 +15,9 @@ export { shellCommands } from './shell.ts';
 // Files. A session holds a file it wrote in the turn it works on now, until that turn ends (Stop, StopFailure, a
 // /clear, the end of the session). Another session that wants to write that file gets "deny", with a reason for
 // Claude: work on something else, or end the turn and wait. Two worktrees are two different folders: nothing in
-// common to hold. You can let a session through from its box.
+// common to hold. You can let a session through from its box. A Bash command counts as a write of the files it
+// writes as a plain reading of its line tells (> and >>, tee, sed -i, perl -i, cp, mv, rm: shell.ts): stopped
+// the same way before, held the same way after (daemon/main.ts). What a script writes by itself is not seen.
 //
 // git. Before a Bash command with a git that changes the files of a working tree (checkout, reset --hard, stash…),
 // if another live session works in that same working tree, the answer is "ask": you decide, with the reason in
@@ -358,6 +360,8 @@ export class Guard {
     if (file) return enabled.files ? (this.decideLane(agent, file) ?? this.decideFile(agent, file) ?? this.decideUndo(agent, payload, file)) : undefined;
     const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
     if (payload.tool_name !== 'Bash' || !cwd || typeof command !== 'string') return undefined;
+    const written = enabled.files ? this.decideShellWrites(agent, command, cwd) : undefined;
+    if (written) return written;
     const git = enabled.git ? this.decideGit(agent, command, cwd) : undefined;
     if (git) return git;
     return enabled.notes !== false ? this.checkNote(agent, command, cwd) : undefined;
@@ -553,7 +557,35 @@ export class Guard {
     };
   }
 
-  private decideFile(agent: Agent, file: string): GuardDecision | undefined {
+  /**
+   * A Bash command that writes a file another session holds, or one outside the files of a member of a team: stopped
+   * as an edit of that file would be. A pattern (src/*.ts) or a folder taken away (rm -r) counts for the held files
+   * it covers; the files of a member are checked for the files named one by one.
+   */
+  private decideShellWrites(agent: Agent, line: string, cwd: string): GuardDecision | undefined {
+    for (const write of shellWrites(line, cwd)) {
+      const named = !write.glob && !write.tree;
+      for (const file of named ? [write.path] : this.heldUnder(write, agent)) {
+        const answer = (named ? this.decideLane(agent, file) : undefined) ?? this.decideFile(agent, file, true);
+        if (answer) return answer;
+      }
+    }
+    return undefined;
+  }
+
+  /** The files other sessions hold that a pattern matches, or that are under a folder (or are it). */
+  private heldUnder(write: ShellWrite, agent: Agent): string[] {
+    const found = new Set<string>();
+    for (const [agentId, files] of this.holds) {
+      if (agentId === agent.id) continue;
+      for (const file of files.keys()) {
+        if (write.glob ? globMatches(write.path, file) : file === write.path || file.startsWith(`${write.path}/`)) found.add(file);
+      }
+    }
+    return [...found];
+  }
+
+  private decideFile(agent: Agent, file: string, byShell = false): GuardDecision | undefined {
     const holder = this.holderOf(file, agent);
     const stops = this.stops.get(agent.id);
     if (!holder) {
@@ -577,8 +609,9 @@ export class Guard {
     return {
       decision: 'deny',
       reason:
-        `Forchetta: "${otherName(holder, agent)}", another Claude Code session on this Mac, is changing ${shown} in the turn it is working on now. ` +
-        `Don't edit this file yet and don't try again now: work on something else first, or end your turn saying that you are waiting for ${shown}. ` +
+        (byShell ? `Forchetta: this command changes ${shown}, and ` : 'Forchetta: ') +
+        `"${otherName(holder, agent)}", another Claude Code session on this Mac, is changing ${shown} in the turn it is working on now. ` +
+        `Don't change this file yet, with an edit or with a command, and don't try again now: work on something else first, or end your turn saying that you are waiting for ${shown}. ` +
         'You will be told when the file is free.',
     };
   }

@@ -52,7 +52,7 @@ Lo studio c'è anche nel browser, come [Studio Maker](https://forchetta.dev/stud
 
 <sub>Due sessioni, un file: <code>rate-limit</code> viene fermata mentre <code>retries</code> cambia <code>src/api.ts</code>, e riparte da sola quando il file è libero. Registrato nella simulazione del repository: app, daemon e vigile sono quelli veri; le due sessioni seguono un copione.</sub>
 
-Agenti nella stessa cartella prima o poi vogliono lo stesso file. Forchetta vede ogni modifica prima che avvenga: il secondo agente viene fermato, gli viene spiegato perché, e riparte da solo quando il file è libero.
+Agenti nella stessa cartella prima o poi vogliono lo stesso file. Forchetta vede la modifica prima che avvenga, anche quando arriva come comando di shell, un `sed -i` o un `>`: il secondo agente viene fermato, gli viene spiegato perché, e riparte da solo quando il file è libero.
 
 Così non c'è nessun worktree da preparare: una cartella, una sola installazione delle dipendenze, un solo server di sviluppo, niente da unire alla fine. Vale per tutte le sessioni, anche per quelle avviate con `claude` normale, e dice a ogni sessione cosa hanno cambiato le altre, proprio quando serve. [Il vigile nel manuale](https://forchetta.dev/manual.html#guard).
 
@@ -75,7 +75,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.12.2. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.12.3. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 

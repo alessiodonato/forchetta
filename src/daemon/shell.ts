@@ -9,13 +9,27 @@ import { resolve } from 'node:path';
  * backslashes taken away. A plain reading: no expansions, no subshells. Undefined when a quote is left open.
  */
 export function shellCommands(line: string): string[][] | undefined {
-  const commands: string[][] = [];
-  let words: string[] = [];
+  return shellTokens(line)?.map((words) => words.map((word) => word.text));
+}
+
+/** A word of a shell line, with where in it a > was written outside quotes: the start of a redirection. */
+interface ShellToken {
+  text: string;
+  /** The positions in `text` of the > written outside quotes and not escaped. */
+  arrows: number[];
+}
+
+/** shellCommands, with the redirections told apart from a > in quotes ("grep '>' file" redirects nothing). */
+function shellTokens(line: string): ShellToken[][] | undefined {
+  const commands: ShellToken[][] = [];
+  let words: ShellToken[] = [];
   let word = '';
+  let arrows: number[] = [];
   let inWord = false;
   const endWord = (): void => {
-    if (inWord) words.push(word);
+    if (inWord) words.push({ text: word, arrows });
     word = '';
+    arrows = [];
     inWord = false;
   };
   const endCommand = (): void => {
@@ -50,12 +64,198 @@ export function shellCommands(line: string): string[][] | undefined {
     } else if (c === ' ' || c === '\t') {
       endWord();
     } else {
+      if (c === '>') arrows.push(word.length);
       word += c;
       inWord = true;
     }
   }
   endCommand();
   return commands;
+}
+
+/**
+ * The line without the bodies of its here-documents (cat > f <<'EOF' … EOF): what they hold is text for a program,
+ * not commands, and an apostrophe in it would leave a quote open. The line that opens one stays.
+ */
+export function withoutHeredocs(line: string): string {
+  const opener = /(?<!<)<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
+  const lines = line.split('\n');
+  const kept: string[] = [];
+  const waiting: Array<{ word: string; tabs: boolean }> = [];
+  for (const text of lines) {
+    const open = waiting[0];
+    if (open) {
+      if ((open.tabs ? text.replace(/^\t+/, '') : text) === open.word) waiting.shift();
+      continue;
+    }
+    kept.push(text);
+    for (const match of text.matchAll(opener)) waiting.push({ word: match[3]!, tabs: match[1] === '-' });
+  }
+  return kept.join('\n');
+}
+
+/** A file a shell line writes, as far as a plain reading tells. */
+export interface ShellWrite {
+  /** Absolute; with `glob`, a pattern of * and ?. */
+  path: string;
+  /** A pattern (sed -i 's/a/b/' src/*.ts): the files it matches. */
+  glob?: boolean;
+  /** Taken away with what is under it (rm -r, mv of a folder): any file under it counts. */
+  tree?: boolean;
+}
+
+/**
+ * The files a shell line writes: redirections (> and >>), tee, sed -i, perl -i, the destination of cp and mv, what
+ * rm and mv take away. Each with the folder it runs in (cd followed). A plain reading: a word with $, a backquote or
+ * ~ is not followed, and what a program writes by itself (a Python or Node script, a formatter) is not seen.
+ */
+export function shellWrites(line: string, cwd: string): ShellWrite[] {
+  const commands = shellTokens(withoutHeredocs(line));
+  if (!commands) return [];
+  const found: ShellWrite[] = [];
+  let dir = cwd;
+  const add = (word: string | undefined, how: Omit<ShellWrite, 'path'> = {}): void => {
+    if (!word || /[$`]/.test(word) || word.startsWith('~') || word.startsWith('/dev/') || word === '-') return;
+    const glob = /[*?[]/.test(word);
+    found.push({ path: resolve(dir, word), ...(glob ? { glob: true } : {}), ...how });
+  };
+  for (const all of commands) {
+    // The redirections first: they can stand anywhere in the command, and are taken out of its words.
+    const words: string[] = [];
+    for (let i = 0; i < all.length; i++) {
+      const token = all[i]!;
+      const arrow = token.arrows[0];
+      const fd = arrow === undefined ? '' : token.text.slice(0, arrow);
+      if (arrow === undefined || !/^\d*$/.test(fd)) {
+        words.push(token.text);
+        continue;
+      }
+      // 2>&1 and >&2 copy a descriptor: the & ended the word, and nothing follows in this command.
+      const rest = token.text.slice(arrow).replace(/^>>?\|?/, '');
+      if (rest) add(rest);
+      else add(all[++i]?.text);
+    }
+    const start = commandStart(words);
+    const name = base(words[start]);
+    const args = words.slice(start + 1);
+    if (name === 'cd') {
+      const to = args[0];
+      if (to && to !== '-' && !to.startsWith('~') && !to.includes('$')) dir = resolve(dir, to);
+      continue;
+    }
+    for (const write of programWrites(name, args)) add(write.word, write.tree ? { tree: true } : {});
+  }
+  return found;
+}
+
+/** The words a program writes or takes away, by how it reads its arguments. */
+function programWrites(name: string, args: readonly string[]): Array<{ word: string; tree?: boolean }> {
+  const plain = (from: readonly string[]): string[] => {
+    const out: string[] = [];
+    let options = true;
+    for (const word of from) {
+      if (options && word === '--') options = false;
+      else if (options && word.startsWith('-') && word !== '-') continue;
+      else out.push(word);
+    }
+    return out;
+  };
+  switch (name) {
+    case 'tee':
+      return plain(args).map((word) => ({ word }));
+    case 'sed':
+      return inPlaceFiles(args, 'sed').map((word) => ({ word }));
+    case 'perl':
+      return inPlaceFiles(args, 'perl').map((word) => ({ word }));
+    case 'rm':
+    case 'unlink':
+      return plain(args).map((word) => ({ word, tree: true }));
+    case 'cp':
+    case 'mv': {
+      // -t names the destination before the sources: not followed.
+      if (args.some((word) => word === '-t' || word.startsWith('--target-directory'))) return [];
+      const files = plain(args);
+      if (files.length < 2) return [];
+      const target = { word: files.at(-1)! };
+      return name === 'mv' ? [...files.slice(0, -1).map((word) => ({ word, tree: true })), target] : [target];
+    }
+    case 'truncate':
+      return plain(args.filter((word, i) => !(args[i - 1] === '-s' || word.startsWith('-s')))).map((word) => ({ word }));
+    default:
+      return [];
+  }
+}
+
+/**
+ * The files sed -i or perl -i change in place: none without -i. For sed the script is the first plain word unless
+ * -e or -f gave it; for perl, unless -e gave it. BSD sed takes the suffix as the next word: -i '' or -i .bak.
+ */
+function inPlaceFiles(args: readonly string[], program: 'sed' | 'perl'): string[] {
+  let inPlace = false;
+  let script = false;
+  const plain: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const word = args[i]!;
+    if (word === '--') {
+      plain.push(...args.slice(i + 1));
+      break;
+    }
+    if (word === '--in-place' || word.startsWith('--in-place=')) {
+      inPlace = true;
+      continue;
+    }
+    if (word === '--expression' || word === '--file') {
+      script = true;
+      i++;
+      continue;
+    }
+    if (word.startsWith('--expression=') || word.startsWith('--file=')) {
+      script = true;
+      continue;
+    }
+    if (!word.startsWith('-') || word === '-') {
+      plain.push(word);
+      continue;
+    }
+    // A cluster of short options: -i, -i.bak, -Ei, -pi, -pe, -ne. What follows i is its suffix.
+    const letters = word.slice(1);
+    for (let j = 0; j < letters.length; j++) {
+      const letter = letters[j]!;
+      if (letter === 'i') {
+        inPlace = true;
+        // sed -i '' and sed -i .bak (BSD): the suffix is the next word.
+        if (program === 'sed' && j === letters.length - 1 && (args[i + 1] === '' || /^\.[\w.-]*$/.test(args[i + 1] ?? ''))) i++;
+        break;
+      }
+      if (letter === 'e' || (program === 'sed' && letter === 'f')) {
+        script = true;
+        if (j === letters.length - 1) i++;
+        break;
+      }
+      // sed -l N (GNU, wrap length) takes a value.
+      if (program === 'sed' && letter === 'l') {
+        if (j === letters.length - 1) i++;
+        break;
+      }
+    }
+  }
+  if (!inPlace) return [];
+  return script ? plain : plain.slice(1);
+}
+
+/** Whether a pattern of * and ? (and ** for any folders) matches a path; both absolute. */
+export function globMatches(pattern: string, path: string): boolean {
+  let source = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i]!;
+    if (c === '*' && pattern[i + 1] === '*') {
+      source += '.*';
+      i++;
+    } else if (c === '*') source += '[^/]*';
+    else if (c === '?') source += '[^/]';
+    else source += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${source}$`).test(path);
 }
 
 /** The words that only run the command after them: VAR=value, command, exec, env, nice, time, nohup. */

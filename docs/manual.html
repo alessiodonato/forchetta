@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.2. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.3. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -592,6 +592,7 @@ forchetta setup</pre>
         <p>Two sessions in the same folder can change the same file at the same time, and each ends up working on the other's half-done changes. The guard stops that before it happens, for every session, also those started with plain <code>claude</code>. And it tells each session what the others did, when it matters: who is halfway through which files when it arrives, a file it read that another one changed, tests that fail on the work in progress of another one, lines of another one it is about to take away, a commit that would take their changes, a dev server already running. In a <a href="#teams">team of agents</a> it also keeps each member in <a href="#team-files">its files</a>, and asks you before a merge of commits the reviewer did not approve.</p>
         <h3>A file held</h3>
         <p>A session holds a file it wrote in the turn it is working on now, until the turn ends. When another session tries to edit that file, the edit does not go, and Claude is told why: another session is changing the file; work on something else, or end the turn and wait. Claude Code shows it as <span class="ui">PreToolUse:Edit hook error</span>, with the reason.</p>
+        <p>A shell command counts too. In auto mode Claude often changes files with Bash (<code>sed -i</code>, <code>cat &gt; file &lt;&lt;'EOF'</code>), and the guard reads the files a command writes from its line: the targets of <code>&gt;</code> and <code>&gt;&gt;</code>, <code>tee</code>, <code>sed -i</code>, <code>perl -i</code>, the destination of <code>cp</code> and <code>mv</code>, and what <code>rm</code> and <code>mv</code> take away. A command that writes a file another session holds is stopped like an edit; a pattern (<code>src/*.ts</code>) or a folder taken away counts for the held files it covers. When the command went through, the files it wrote are held by its session, and appear among its changes.</p>
         <ul>
           <li>The session that waits shows <span class="ui">‖ src/api.ts held by billing-api</span>, and <span class="ui">‖ held</span> in the column on the left; the other one shows <span class="ui">‖ holds src/api.ts · beta waits</span>.</li>
           <li><span class="ui">let it through</span>, in the box of the session that waits, lets it write the file anyway: then both may change it until the turn of the other one ends.</li>
@@ -620,7 +621,7 @@ Read them again before you write code that relies on them.</code></pre>
         <p>Before <code>kill</code>, <code>pkill</code>, <code>killall</code> or the kill of a port (<code>lsof -ti:3000 | xargs kill</code>, <code>kill-port</code>, <code>fuser -k</code>) that would stop a process another Claude Code session started, or that session itself, Claude Code asks you first.</p>
         <h3>Limits</h3>
         <ul>
-          <li>Only the files written with <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code> and <code>NotebookEdit</code> are held; what a Bash command writes is not seen. Two worktrees are two folders: a member of a team in its own worktree is never stopped for a file another session is changing; the files of its team still count.</li>
+          <li>A Bash command is read as a plain shell line, like the git commands below: a word with <code>$</code>, a backquote or <code>~</code> is not followed, and what a program writes by itself (a Python or Node script, a formatter, <code>find -exec</code>) is not seen. A log written outside the folder of the session (<code>/tmp</code>) is not held. Two worktrees are two folders: a member of a team in its own worktree is never stopped for a file another session is changing; the files of its team still count.</li>
           <li>Between turns, a file written by a subagent in the background stays held for two minutes after its last write.</li>
           <li>The git command is read as a plain shell line (<code>&amp;&amp;</code>, <code>;</code>, <code>|</code>, quotes, <code>cd</code>, <code>git -C</code>); what cannot be read goes through.</li>
           <li>The notes come with the result of the next <code>Edit</code>, <code>Write</code>, <code>MultiEdit</code>, <code>NotebookEdit</code> or Bash command, not before it; the files read count for the session itself, not for its subagents.</li>

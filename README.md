@@ -50,7 +50,7 @@ The studio is also in your browser, as the [Studio Maker](https://forchetta.dev/
 
 <sub>Two sessions, one file: <code>rate-limit</code> is stopped while <code>retries</code> changes <code>src/api.ts</code>, and goes on by itself when the file is free. Recorded in the repository's simulation: the app, the daemon and the guard are real; the two sessions are scripted.</sub>
 
-Agents in the same folder sooner or later reach for the same file. Forchetta sees every edit before it happens: the second one is stopped and told why, and goes on by itself when the file is free.
+Agents in the same folder sooner or later reach for the same file. Forchetta sees the edit before it happens, also when it comes as a shell command like `sed -i` or `>`: the second one is stopped and told why, and goes on by itself when the file is free.
 
 So there's no worktree to set up: one folder, one set of dependencies, one dev server, nothing to merge at the end. It works for every session, also one you start with plain `claude`, and it tells each session what the others changed, right when it matters. [The guard in the manual](https://forchetta.dev/manual.html#guard).
 
@@ -73,7 +73,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.12.2. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.12.3. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

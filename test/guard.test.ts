@@ -178,6 +178,74 @@ describe('files', () => {
   });
 });
 
+describe('files written by a shell command', () => {
+  it('stops a command that writes a file another session holds, as an edit would be', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    t.write(alpha, `${REPO}/src/api.ts`);
+    for (const command of ["sed -i '' 's/retry/retries/' src/api.ts", 'echo "export {}" >> src/api.ts', "cat > src/api.ts <<'EOF'\nconst a = 1; // it's > b\nEOF", 'cd src && tee api.ts < /tmp/x']) {
+      const decision = t.bash(beta, command);
+      expect(decision?.decision, command).toBe('deny');
+      expect(decision?.reason).toContain('this command changes src/api.ts, and "shop", another Claude Code session on this Mac, is changing src/api.ts');
+      expect(decision?.reason).toContain('with an edit or with a command');
+    }
+    expect(beta.heldBack).toEqual([expect.objectContaining({ file: 'src/api.ts', with: 'alpha' })]);
+    expect(alpha.holding).toEqual([expect.objectContaining({ file: 'src/api.ts', with: 'beta' })]);
+  });
+
+  it('lets through a command that only reads it, writes another file, or a > in quotes', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    t.write(alpha, `${REPO}/src/api.ts`);
+    for (const command of ['cat src/api.ts', "sed -n '1,9p' src/api.ts", "grep '>' src/api.ts", 'echo x > src/other.ts', 'npm test > /tmp/test.log 2>&1']) {
+      // npm test gets the note before tests, which stops nothing.
+      expect(t.bash(beta, command)?.decision, command).toBeUndefined();
+    }
+  });
+
+  it('a pattern or a folder taken away counts for the held files it covers', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    t.write(alpha, `${REPO}/src/api.ts`);
+    expect(t.bash(beta, "sed -i '' 's/a/b/' src/*.ts")?.decision).toBe('deny');
+    expect(t.bash(beta, 'rm -rf src')?.decision).toBe('deny');
+    expect(t.bash(beta, 'mv src/api.ts src/client.ts')?.decision).toBe('deny');
+    expect(t.bash(beta, "sed -i '' 's/a/b/' test/*.ts")).toBeUndefined();
+    expect(t.bash(beta, 'rm -rf dist')).toBeUndefined();
+  });
+
+  it('frees, lets through and turns off like the edits', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    t.write(alpha, `${REPO}/a.ts`);
+    expect(t.bash(beta, 'echo x > a.ts')?.decision).toBe('deny');
+    expect(t.guard.letThrough('beta', `${REPO}/a.ts`)).toBe(true);
+    expect(t.bash(beta, 'echo x > a.ts')).toBeUndefined();
+    alpha.state = 'idle';
+    t.event(alpha, { hook_event_name: 'Stop' });
+    expect(t.bash(beta, 'echo x > a.ts')).toBeUndefined();
+
+    const off = setup({ files: false });
+    const one = off.add('one');
+    const two = off.add('two');
+    off.write(one, `${REPO}/a.ts`);
+    expect(off.bash(two, 'echo x > a.ts')).toBeUndefined();
+  });
+
+  it('a session that wrote the file with a command holds it, and stops the edits of the others', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    // What the daemon does with the PostToolUse of the Bash command of alpha (daemon/main.ts, shellWrittenFiles).
+    t.write(alpha, `${REPO}/src/api.ts`);
+    expect(t.edit(beta, `${REPO}/src/api.ts`)?.decision).toBe('deny');
+  });
+});
+
 describe('reading a shell line', () => {
   it('splits it into simple commands, with quotes taken away', () => {
     expect(shellCommands(`cd "my dir" && git commit -m 'a; b' | cat; echo x\\ y`)).toEqual([['cd', 'my dir'], ['git', 'commit', '-m', 'a; b'], ['cat'], ['echo', 'x y']]);

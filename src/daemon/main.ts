@@ -15,7 +15,7 @@ import { QuickPrompts } from './prompts.ts';
 import { SelectionReader } from './selection.ts';
 import { Commander } from './commands.ts';
 import { Attention } from './attention.ts';
-import { Conflicts, writtenFile } from './conflicts.ts';
+import { Conflicts, shellWrittenFiles, writtenFile } from './conflicts.ts';
 import { type GuardDecision, Guard, hookOutput, otherName, parseStatus } from './guard.ts';
 import { GuardStats } from './guard-stats.ts';
 import { Loops } from './loops.ts';
@@ -951,16 +951,18 @@ function main(): void {
         const base = agent.cwd ?? payload.cwd;
         if (typeof raw === 'string' && (isAbsolute(raw) || base)) coherence.read(agent.id, isAbsolute(raw) ? resolve(raw) : resolve(base!, raw));
       }
-      const file = writtenFile(payload, agent.cwd);
-      if (file) {
-        const base = rootOf(agent.cwd ?? payload.cwd);
+      // The file of a write tool, or those a Bash command that went through wrote as its line tells (> f, sed -i f).
+      const base = rootOf(agent.cwd ?? payload.cwd);
+      const tool = writtenFile(payload, agent.cwd);
+      const files = tool ? [tool] : shellWrittenFiles(payload, agent.cwd, base);
+      for (const file of files) {
         const shown = base ? relative(base, file) : file;
         ledger.wrote(agent.id, shown && !shown.startsWith('..') ? shown : file);
       }
       if (!payload.agent_id && (payload.hook_event_name === 'Stop' || payload.hook_event_name === 'StopFailure')) {
         ledger.turn(agent, who(agent), { failed: payload.hook_event_name === 'StopFailure' });
       }
-      if (file) {
+      for (const file of files) {
         coherence.wrote(agent.id, file, edit && edit.file === file ? edit : undefined);
         guard?.wrote(agent, file);
         const notice = notices.get(agent.id);
@@ -970,8 +972,8 @@ function main(): void {
         }
       }
       guard?.hook(agent, payload);
-      if (file) {
-        conflicts.wrote(agent.id, file);
+      for (const file of files) conflicts.wrote(agent.id, file);
+      if (files.length > 0) {
         updateConflicts();
         const count = conflicts.count(agent.id);
         if (agent.filesChanged !== count) {
