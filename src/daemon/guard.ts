@@ -3,8 +3,9 @@ import type { Agent, GuardHold } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
 import { pathsText } from '../shared/crew.ts';
 import type { GuardStatKind } from '../shared/guard-stats.ts';
-import type { HookPayload } from './state.ts';
+import { type HookPayload, keyOf } from './state.ts';
 import { removedLines } from './coherence.ts';
+import { shellFiles } from './conflicts.ts';
 import { commandStart, globMatches, isCheckCommand, placedCommands, type ShellWrite, shellCommands, shellWrites } from './shell.ts';
 
 export { shellCommands } from './shell.ts';
@@ -12,12 +13,15 @@ export { shellCommands } from './shell.ts';
 // The guard: sessions that do not step on each other. bin/forchetta-guard asks the daemon before every Edit, Write,
 // MultiEdit, NotebookEdit and Bash of every session, and Claude waits for the answer (daemon/server.ts).
 //
-// Files. A session holds a file it wrote in the turn it works on now, until that turn ends (Stop, StopFailure, a
-// /clear, the end of the session). Another session that wants to write that file gets "deny", with a reason for
-// Claude: work on something else, or end the turn and wait. Two worktrees are two different folders: nothing in
-// common to hold. You can let a session through from its box. A Bash command counts as a write of the files it
-// writes as a plain reading of its line tells (> and >>, tee, sed -i, perl -i, cp, mv, rm: shell.ts): stopped
-// the same way before, held the same way after (daemon/main.ts). What a script writes by itself is not seen.
+// Files. A session holds a file from the moment its write is let through, before the tool runs: of two sessions that
+// try the same file at the same moment, the first answered goes and the other is stopped (the daemon answers one
+// call at a time). It keeps the file in the turn it works on now, until that turn ends (Stop, StopFailure, a /clear,
+// the end of the session); a call that fails, or that another check stops, lets go what it claimed and did not
+// write. Another session that wants to write that file gets "deny", with a reason for Claude: work on something
+// else, or end the turn and wait. Two worktrees are two different folders: nothing in common to hold. You can let a
+// session through from its box. A Bash command counts as a write of the files it writes as a plain reading of its
+// line tells (> and >>, tee, sed -i, perl -i, cp, mv, rm: shell.ts): stopped the same way before, held the same way
+// after (daemon/main.ts). What a script writes by itself is not seen.
 //
 // git. Before a Bash command with a git that changes the files of a working tree (checkout, reset --hard, stash…),
 // if another live session works in that same working tree, the answer is "ask": you decide, with the reason in
@@ -246,9 +250,20 @@ interface Stop {
   letThrough?: boolean;
 }
 
+/** A write let through that has not run yet: the call (callKey), and when it was let through. */
+interface Claim {
+  call: string;
+  at: number;
+}
+
+/** A tool call, the same in its PreToolUse and in its PostToolUse or PostToolUseFailure. */
+const callKey = (payload: HookPayload): string => payload.tool_use_id ?? keyOf(payload.tool_name, payload.tool_input);
+
 export class Guard {
   /** For each agent: the files it holds, with its last write. */
   private readonly holds = new Map<string, Map<string, number>>();
+  /** For each agent: the files of its writes let through that have not run yet. They hold the file too. */
+  private readonly claims = new Map<string, Map<string, Claim>>();
   /** For each agent that was stopped: the files, and who held each. */
   private readonly stops = new Map<string, Map<string, Stop>>();
   /** The warnings that stop once, by agent and call: when they were said. */
@@ -287,9 +302,10 @@ export class Guard {
     this.refresh(holder ? [agent, holder] : [agent]);
   }
 
-  /** After every hook: the end of a turn lets the files of the agent go. */
+  /** After every hook: a call that ran lets go what it claimed, the end of a turn all the files of the agent. */
   hook(agent: Agent, payload: HookPayload): void {
     const event = payload.hook_event_name;
+    if ((event === 'PostToolUse' || event === 'PostToolUseFailure') && payload.tool_name) this.settle(agent, callKey(payload));
     const turnEnded =
       (event === 'Stop' && !payload.agent_id) ||
       event === 'StopFailure' ||
@@ -323,7 +339,7 @@ export class Guard {
     this.arrived.delete(agent.id);
     this.checkNotes.delete(agent.id);
     const lanes = this.laneStops.delete(agent.id);
-    if (!lanes && !this.holds.has(agent.id) && !this.stops.has(agent.id) && !agent.heldBack && !agent.holding) return;
+    if (!lanes && !this.holds.has(agent.id) && !this.claims.has(agent.id) && !this.stops.has(agent.id) && !agent.heldBack && !agent.holding) return;
     this.release(agent);
     const stops = this.stops.get(agent.id);
     this.stops.delete(agent.id);
@@ -357,14 +373,59 @@ export class Guard {
     const enabled = this.options.enabled(agent);
     const cwd = agent.cwd ?? payload.cwd;
     const file = targetFile(payload.tool_name, payload.tool_input, cwd);
-    if (file) return enabled.files ? (this.decideLane(agent, file) ?? this.decideFile(agent, file) ?? this.decideUndo(agent, payload, file)) : undefined;
+    if (file) {
+      if (!enabled.files) return undefined;
+      const answer = this.decideLane(agent, file) ?? this.decideFile(agent, file) ?? this.decideUndo(agent, payload, file);
+      if (answer?.decision !== 'deny') this.claim(agent, payload, [file]);
+      return answer;
+    }
     const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
     if (payload.tool_name !== 'Bash' || !cwd || typeof command !== 'string') return undefined;
     const written = enabled.files ? this.decideShellWrites(agent, command, cwd) : undefined;
     if (written) return written;
+    if (enabled.files) this.claim(agent, payload, shellFiles(command, cwd, this.options.repoOf(cwd) ?? cwd));
     const git = enabled.git ? this.decideGit(agent, command, cwd) : undefined;
     if (git) return git;
     return enabled.notes !== false ? this.checkNote(agent, command, cwd) : undefined;
+  }
+
+  /**
+   * A write that decide let through and something after it stopped (a commit, a merge, a dev server: daemon/main.ts):
+   * it will not run, and what it claimed goes.
+   */
+  stopped(agent: Agent, payload: HookPayload): void {
+    if (payload.hook_event_name === 'PreToolUse') this.settle(agent, callKey(payload));
+  }
+
+  /** A write let through: its files are held from now, before it runs, so that no one else goes on them meanwhile. */
+  private claim(agent: Agent, payload: HookPayload, files: string[]): void {
+    if (files.length === 0) return;
+    let claimed = this.claims.get(agent.id);
+    if (!claimed) {
+      claimed = new Map();
+      this.claims.set(agent.id, claimed);
+    }
+    const call = callKey(payload);
+    for (const file of files) claimed.set(file, { call, at: this.now() });
+  }
+
+  /**
+   * A call ran, failed or was stopped: its claims go. What it wrote is held by wrote, as any write; a file it claimed
+   * and the agent does not hold is free, and the sessions stopped on it are told.
+   */
+  private settle(agent: Agent, call: string): void {
+    const claimed = this.claims.get(agent.id);
+    if (!claimed) return;
+    const gone = new Set<string>();
+    for (const [file, claim] of claimed) {
+      if (claim.call !== call) continue;
+      claimed.delete(file);
+      if (!this.holds.get(agent.id)?.has(file)) gone.add(file);
+    }
+    if (claimed.size === 0) this.claims.delete(agent.id);
+    if (gone.size === 0) return;
+    const touched = this.free(agent, gone);
+    if (touched.length > 0) this.refresh([agent, ...touched]);
   }
 
   /**
@@ -576,10 +637,12 @@ export class Guard {
   /** The files other sessions hold that a pattern matches, or that are under a folder (or are it). */
   private heldUnder(write: ShellWrite, agent: Agent): string[] {
     const found = new Set<string>();
-    for (const [agentId, files] of this.holds) {
-      if (agentId === agent.id) continue;
-      for (const file of files.keys()) {
-        if (write.glob ? globMatches(write.path, file) : file === write.path || file.startsWith(`${write.path}/`)) found.add(file);
+    for (const map of [this.holds, this.claims]) {
+      for (const [agentId, files] of map) {
+        if (agentId === agent.id) continue;
+        for (const file of files.keys()) {
+          if (write.glob ? globMatches(write.path, file) : file === write.path || file.startsWith(`${write.path}/`)) found.add(file);
+        }
       }
     }
     return [...found];
@@ -641,13 +704,15 @@ export class Guard {
     return undefined;
   }
 
-  /** The live session, other than this one, that holds a file now: the one that wrote it last. */
+  /** The live session, other than this one, that holds a file now: the one that wrote it (or was let through) last. */
   private holderOf(file: string, agent: Agent): Agent | undefined {
     const now = this.now();
     let found: { agent: Agent; at: number } | undefined;
     for (const other of this.options.agents()) {
       if (other.id === agent.id || other.state === 'ended') continue;
-      const at = this.holds.get(other.id)?.get(file);
+      const wrote = this.holds.get(other.id)?.get(file);
+      const claimed = this.claims.get(other.id)?.get(file)?.at;
+      const at = wrote === undefined ? claimed : claimed === undefined ? wrote : Math.max(wrote, claimed);
       if (at === undefined) continue;
       if (!inTurn(other) && now - at >= HOLD_AFTER_TURN_MS) continue;
       if (!found || at > found.at) found = { agent: other, at };
@@ -658,11 +723,17 @@ export class Guard {
   /** The end of a turn of an agent: its files go free, and the sessions that waited for them are told. */
   private release(holder: Agent): void {
     this.holds.delete(holder.id);
+    this.claims.delete(holder.id);
+    this.refresh([holder, ...this.free(holder)]);
+  }
+
+  /** The sessions stopped on files of a holder (all, or those in `only`) wait no more, and are told. */
+  private free(holder: Agent, only?: Set<string>): Agent[] {
     const touched: Agent[] = [];
     for (const [waiterId, stops] of this.stops) {
       const freed: GuardHold[] = [];
       for (const [path, stop] of stops) {
-        if (stop.holder !== holder.id) continue;
+        if (stop.holder !== holder.id || (only && !only.has(path))) continue;
         stops.delete(path);
         const waiter = this.byId(waiterId);
         if (waiter) freed.push(this.line(path, stop, holder, waiter));
@@ -675,7 +746,7 @@ export class Guard {
         this.options.onFree?.(waiter, freed, holder);
       }
     }
-    this.refresh([holder, ...touched]);
+    return touched;
   }
 
   private holdersOf(stops: Map<string, Stop>): Agent[] {

@@ -43,7 +43,7 @@ export interface SubagentScript {
 /** What the daemon of the demo does for a fake Claude. */
 export interface ClaudeHost {
   hook(claude: FakeClaude, event: string, extra?: Record<string, unknown>): void;
-  guard(claude: FakeClaude, tool: string, input: Record<string, unknown>): GuardAnswer | undefined;
+  guard(claude: FakeClaude, tool: string, input: Record<string, unknown>, toolUseId: string): GuardAnswer | undefined;
   permission(claude: FakeClaude, payload: Record<string, unknown>): PermissionHandle;
   /** The status line: cost and context. */
   status(claude: FakeClaude): void;
@@ -528,7 +528,7 @@ export class FakeClaude {
     this.entries.push(entry);
     this.draw();
     const toolUseId = `toolu_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
-    const guard = GUARDED.has(name) ? this.host.guard(this, name, input) : undefined;
+    const guard = GUARDED.has(name) ? this.host.guard(this, name, input, toolUseId) : undefined;
     this.hook('PreToolUse', { tool_name: name, tool_input: input, tool_use_id: toolUseId });
     if (guard?.decision === 'deny') {
       await wait(500);

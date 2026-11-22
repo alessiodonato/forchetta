@@ -892,6 +892,8 @@ function main(): void {
         const merge = await mergeCheck(agent, payload);
         if (merge?.reason) stop = { decision: 'ask', reason: `${first.reason}\n${merge.reason}` };
       }
+      // A write the guard let through, and stopped after: what it claimed goes (daemon/guard.ts).
+      if (stop?.decision === 'deny' && stop !== first) guard?.stopped(agent, payload);
       if (stop?.decision) {
         log(`guard: ${stop.decision} for ${name} (${payload.tool_name})`);
         if (stop.decision === 'deny' || stop.decision === 'ask') ledger.append({ t: Date.now(), kind: 'guard', decision: stop.decision, ...(payload.tool_name ? { tool: payload.tool_name } : {}), ...who(agent) });

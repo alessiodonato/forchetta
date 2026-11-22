@@ -405,10 +405,10 @@ export class DemoDaemon {
   /** What the fake sessions ask of the daemon. */
   private readonly host: ClaudeHost = {
     hook: (claude, event, extra = {}) => this.hook(claude, event, extra),
-    guard: (claude, tool, input) => {
+    guard: (claude, tool, input, toolUseId) => {
       const agent = this.registry.agents.get(claude.id);
       if (!agent) return undefined;
-      const decision = this.guard.decide(agent, { hook_event_name: 'PreToolUse', session_id: claude.sessionId, cwd: claude.cwd, tool_name: tool, tool_input: input });
+      const decision = this.guard.decide(agent, { hook_event_name: 'PreToolUse', session_id: claude.sessionId, cwd: claude.cwd, tool_name: tool, tool_input: input, tool_use_id: toolUseId });
       return decision?.decision ? { decision: decision.decision, reason: decision.reason ?? '' } : undefined;
     },
     permission: (claude, payload) => this.permission(claude, payload),

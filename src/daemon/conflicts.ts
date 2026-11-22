@@ -38,6 +38,11 @@ export function shellWrittenFiles(payload: HookPayload, cwd: string | undefined,
   const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
   const base = cwd ?? payload.cwd;
   if (typeof command !== 'string' || !base || !within) return [];
+  return shellFiles(command, base, within);
+}
+
+/** The files a command line writes, as shellWrittenFiles keeps them: also before it runs, for the guard. */
+export function shellFiles(command: string, base: string, within: string): string[] {
   const files = shellWrites(command, base)
     .filter((write) => !write.glob && !write.tree)
     .map((write) => write.path)

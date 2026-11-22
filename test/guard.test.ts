@@ -34,9 +34,10 @@ function setup(options: { files?: boolean; git?: boolean } = {}) {
     guard.wrote(agent, path);
     writes.set(agent.id, [...(writes.get(agent.id) ?? []), { path, at: now, repo: path.startsWith(REPO) ? REPO : undefined }]);
   };
-  const edit = (agent: Agent, file: string) =>
-    guard.decide(agent, { hook_event_name: 'PreToolUse', session_id: agent.id, tool_name: 'Edit', tool_input: { file_path: file, old_string: 'a', new_string: 'b' } });
-  const bash = (agent: Agent, command: string) => guard.decide(agent, { hook_event_name: 'PreToolUse', session_id: agent.id, tool_name: 'Bash', tool_input: { command } });
+  const edit = (agent: Agent, file: string, id?: string) =>
+    guard.decide(agent, { hook_event_name: 'PreToolUse', session_id: agent.id, tool_name: 'Edit', tool_input: { file_path: file, old_string: 'a', new_string: 'b' }, ...(id ? { tool_use_id: id } : {}) });
+  const bash = (agent: Agent, command: string, id?: string) =>
+    guard.decide(agent, { hook_event_name: 'PreToolUse', session_id: agent.id, tool_name: 'Bash', tool_input: { command }, ...(id ? { tool_use_id: id } : {}) });
   const event = (agent: Agent, payload: Partial<HookPayload> & { hook_event_name: string }): void => guard.hook(agent, { session_id: agent.id, ...payload });
   return { guard, add, write, edit, bash, event, touched, freed, agents, advance: (ms: number) => (now += ms) };
 }
@@ -79,6 +80,87 @@ describe('files', () => {
     expect(t.edit(alpha, `${REPO}/src/api.ts`)).toBeUndefined();
     expect(t.edit(gamma, `${OTHER_REPO}/src/api.ts`)).toBeUndefined();
     expect(beta.heldBack).toBeUndefined();
+  });
+
+  it('holds the file from the moment the write is let through: of two at the same moment, the second is stopped', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    // Both ask before either has written: alpha is answered first.
+    expect(t.edit(alpha, `${REPO}/src/api.ts`, 'a1')).toBeUndefined();
+    const decision = t.edit(beta, `${REPO}/src/api.ts`, 'b1');
+    expect(decision?.decision).toBe('deny');
+    expect(decision?.reason).toContain('"shop", another Claude Code session on this Mac, is changing src/api.ts');
+    expect(beta.heldBack).toEqual([expect.objectContaining({ file: 'src/api.ts', with: 'alpha' })]);
+    // The write of alpha goes through: it holds the file as any write, until its turn ends.
+    t.write(alpha, `${REPO}/src/api.ts`);
+    t.event(alpha, { hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_use_id: 'a1' });
+    expect(t.freed).toEqual([]);
+    expect(t.edit(beta, `${REPO}/src/api.ts`, 'b2')?.decision).toBe('deny');
+    alpha.state = 'idle';
+    t.event(alpha, { hook_event_name: 'Stop' });
+    expect(t.freed).toEqual([{ waiter: 'beta', by: 'alpha', files: [expect.objectContaining({ file: 'src/api.ts' })] }]);
+    expect(t.edit(beta, `${REPO}/src/api.ts`, 'b3')).toBeUndefined();
+  });
+
+  it('a write that fails lets go the file it claimed, and the session that waited is told', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    t.edit(alpha, `${REPO}/a.ts`, 'a1');
+    expect(t.edit(beta, `${REPO}/a.ts`, 'b1')?.decision).toBe('deny');
+    // Another call of alpha that ends changes nothing.
+    t.event(alpha, { hook_event_name: 'PostToolUse', tool_name: 'Read', tool_use_id: 'a0' });
+    expect(t.edit(beta, `${REPO}/a.ts`, 'b2')?.decision).toBe('deny');
+    t.event(alpha, { hook_event_name: 'PostToolUseFailure', tool_name: 'Edit', tool_use_id: 'a1' });
+    expect(t.freed).toEqual([{ waiter: 'beta', by: 'alpha', files: [expect.objectContaining({ file: 'a.ts' })] }]);
+    expect(beta.heldBack).toBeUndefined();
+    expect(t.edit(beta, `${REPO}/a.ts`, 'b3')).toBeUndefined();
+  });
+
+  it('a write that fails keeps a file the session already wrote in its turn', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    t.write(alpha, `${REPO}/a.ts`);
+    t.edit(alpha, `${REPO}/a.ts`, 'a2');
+    t.event(alpha, { hook_event_name: 'PostToolUseFailure', tool_name: 'Edit', tool_use_id: 'a2' });
+    expect(t.edit(beta, `${REPO}/a.ts`, 'b1')?.decision).toBe('deny');
+  });
+
+  it('a write stopped claims nothing; one stopped by a later check lets go what it claimed', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    t.write(alpha, `${REPO}/a.ts`);
+    expect(t.edit(beta, `${REPO}/a.ts`, 'b1')?.decision).toBe('deny');
+    alpha.state = 'idle';
+    t.event(alpha, { hook_event_name: 'Stop' });
+    // beta was stopped: alpha, in a new turn, is not stopped by it.
+    alpha.state = 'working';
+    expect(t.edit(alpha, `${REPO}/a.ts`, 'a1')).toBeUndefined();
+    // A command of beta let through, then stopped by a check after (a commit: daemon/main.ts).
+    const payload = { hook_event_name: 'PreToolUse', session_id: 'beta', tool_name: 'Bash', tool_input: { command: 'echo x > notes.md' }, tool_use_id: 'b2' };
+    expect(t.guard.decide(beta, payload)).toBeUndefined();
+    expect(t.edit(alpha, `${REPO}/notes.md`, 'a2')?.decision).toBe('deny');
+    t.guard.stopped(beta, payload);
+    expect(t.edit(alpha, `${REPO}/notes.md`, 'a3')).toBeUndefined();
+  });
+
+  it('a claim lasts as a write does: to the end of the turn, two minutes after it between turns', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    t.edit(alpha, `${REPO}/a.ts`, 'a1');
+    t.edit(alpha, `${REPO}/b.ts`, 'a2');
+    alpha.state = 'idle';
+    t.event(alpha, { hook_event_name: 'Stop' });
+    expect(t.edit(beta, `${REPO}/a.ts`, 'b1')).toBeUndefined();
+    // A subagent in the background, between turns.
+    t.edit(alpha, `${REPO}/c.ts`, 'a3');
+    expect(t.edit(beta, `${REPO}/c.ts`, 'b2')?.decision).toBe('deny');
+    t.advance(HOLD_AFTER_TURN_MS);
+    expect(t.edit(beta, `${REPO}/c.ts`, 'b3')).toBeUndefined();
   });
 
   it('frees the file at the end of the turn, and tells the session that waited', () => {
@@ -234,6 +316,22 @@ describe('files written by a shell command', () => {
     const two = off.add('two');
     off.write(one, `${REPO}/a.ts`);
     expect(off.bash(two, 'echo x > a.ts')).toBeUndefined();
+  });
+
+  it('a command claims the files it writes before it runs; not those outside the folder, nor a pattern', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    expect(t.bash(alpha, 'npm run gen > src/types.ts 2> /tmp/gen.log', 'a1')).toBeUndefined();
+    expect(t.edit(beta, `${REPO}/src/types.ts`, 'b1')?.decision).toBe('deny');
+    expect(t.bash(beta, 'echo x >> src/types.ts', 'b2')?.decision).toBe('deny');
+    expect(t.bash(beta, 'echo x > /tmp/gen.log', 'b3')).toBeUndefined();
+    t.bash(alpha, "sed -i '' 's/a/b/' test/*.ts", 'a2');
+    expect(t.edit(beta, `${REPO}/test/a.ts`, 'b4')).toBeUndefined();
+    // The command ran: what it wrote is held as any write.
+    t.write(alpha, `${REPO}/src/types.ts`);
+    t.event(alpha, { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 'a1' });
+    expect(t.edit(beta, `${REPO}/src/types.ts`, 'b5')?.decision).toBe('deny');
   });
 
   it('a session that wrote the file with a command holds it, and stops the edits of the others', () => {
