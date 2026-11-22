@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In auto mode, more than a quarter of Claude Code's edits go through Bash</title>
+<meta name="description" content="I counted how my Claude Code sessions changed files in 30 days: 72% with Edit and Write, 23% with shell commands like sed -i and here-documents, 4% inside scripts. Hooks on Edit|Write don't see the rest.">
+<meta property="og:title" content="In auto mode, more than a quarter of Claude Code's edits go through Bash">
+<meta property="og:description" content="Your hooks on Edit and Write don't see them. The numbers, what a hook can do about it, and a command to measure yours.">
+<meta property="og:image" content="https://forchetta.dev/img/social.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:url" content="https://forchetta.dev/bash-edits/">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2026-11-22">
+<link rel="canonical" href="https://forchetta.dev/bash-edits/">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+  /* The manual's palette and type, in one reading column. */
+  :root {
+    color-scheme: dark;
+    --bg: #1f1e1c;
+    --surface: #292825;
+    --line: #3a3834;
+    --line-strong: #4c4944;
+    --text: #f3f1ec;
+    --text-2: #bdb8ae;
+    --text-3: #8b867d;
+    --claude: #d97757;
+    --claude-soft: rgba(217, 119, 87, 0.14);
+    --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 24px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.7 var(--ui); -webkit-font-smoothing: antialiased; }
+
+  a { color: var(--text); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--claude); }
+  a:focus-visible { outline: 2px solid var(--claude); outline-offset: 3px; border-radius: 4px; }
+  code, pre { font-family: var(--mono); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .top { display: flex; align-items: center; justify-content: space-between; padding-top: 28px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: 0.01em; text-decoration: none; color: var(--claude); }
+  .brand svg { width: 22px; height: 22px; }
+  .top nav { display: flex; gap: 22px; font-size: 15px; }
+  .top nav a { color: var(--text-2); text-decoration: none; }
+  .top nav a:hover { color: var(--text); }
+
+  article { max-width: 700px; margin: 0 auto; padding: 64px 24px 24px; }
+  h1 { margin: 0; font-size: clamp(32px, 5vw, 46px); line-height: 1.1; font-weight: 650; letter-spacing: -0.03em; text-wrap: balance; }
+  .sub { margin: 14px 0 0; font-size: 21px; line-height: 1.4; color: var(--text-2); text-wrap: balance; }
+  .meta { margin: 18px 0 40px; font-size: 14px; color: var(--text-3); }
+  h2 { margin: 44px 0 14px; font-size: clamp(23px, 3vw, 27px); line-height: 1.25; font-weight: 650; letter-spacing: -0.02em; }
+  p { margin: 0 0 16px; color: var(--text-2); }
+  p strong, li strong { color: var(--text); font-weight: 600; }
+  ul { margin: 0 0 18px; padding-left: 22px; color: var(--text-2); }
+  li { margin-bottom: 6px; }
+  pre { margin: 0 0 18px; padding: 14px 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 14.5px; line-height: 1.55; color: var(--text); }
+  :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--surface); font-size: 0.86em; color: var(--text); }
+  .table { margin: 0 0 18px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; color: var(--text-2); }
+  th { background: var(--surface); font-weight: 600; color: var(--text); }
+  td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.n { color: var(--text); }
+  tr:last-child td { border-bottom: 0; }
+  .note { margin: 0 0 18px; padding: 12px 16px; border-left: 2px solid var(--claude); border-radius: 0 8px 8px 0; background: var(--claude-soft); color: var(--text-2); }
+
+  footer.end { margin-top: 48px; padding: 28px 0 48px; border-top: 1px solid var(--line); font-size: 14px; color: var(--text-3); }
+  footer.end .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
+  footer.end a { color: var(--text-2); }
+
+  @media (max-width: 600px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 16px; }
+    article { padding: 40px 16px 16px; }
+    .sub { font-size: 18px; }
+    .top nav { gap: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap top">
+  <a class="brand" href="../" aria-label="Forchetta, home">
+    <svg viewBox="0 0 18 18" aria-hidden="true"><g fill="#d97757"><rect x="5.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="7.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="10.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="12.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="5.1" y="6.4" width="8.8" height="2.6" rx="1.3"/><path d="M7.4 8.6h4.2l-1.5 2.8H8.9z"/><rect x="8.6" y="10.8" width="1.8" height="6.4" rx=".9"/></g></svg>
+    Forchetta
+  </a>
+  <nav aria-label="Site">
+    <a href="../manual.html">Manual</a>
+    <a href="../#install">Install</a>
+    <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
+  </nav>
+</div>
+
+<main>
+<article>
+  <h1>In auto mode, more than a quarter of Claude Code's edits go through Bash</h1>
+  <p class="sub">Your hooks don't see them.</p>
+  <p class="meta">22 November 2026. Numbers from my own transcripts; run the command at the end to get yours.</p>
+
+  <p>I build <a href="../">Forchetta</a>, a Mac app that runs several Claude Code sessions in one folder. Its guard is a <code>PreToolUse</code> hook: when one session is changing <code>src/api.ts</code> in its turn, another session that tries to edit it is stopped, told why, and resumes when the file is free.</p>
+  <p>This week I measured how my sessions actually change files. The guard was blind to more than a quarter of the edits.</p>
+
+  <h2 id="what-changed">What changed</h2>
+  <p>Since August, Claude Code's auto mode tells Claude to do much of its work through the Bash tool: read files with <code>cat</code> and <code>sed -n</code>, and make "small, mechanical file changes with sed, heredocs, or short scripts instead of the dedicated Read, Edit, or Write tools". People noticed:</p>
+  <ul>
+    <li><a href="https://github.com/anthropics/claude-code/issues/87971">#87971</a>, <em>Claude abuses bash tools for reads, writes, and edits when running in Auto Mode</em> (103 👍, open)</li>
+    <li><a href="https://github.com/anthropics/claude-code/issues/90450">#90450</a>, <em>Auto Mode's Bash-first instruction silently disables nested CLAUDE.md and path-scoped rules</em> (51 👍, open)</li>
+    <li><a href="https://github.com/anthropics/claude-code/issues/87575">#87575</a>, <em>Auto mode system prompt causes /rewind to silently fail on Bash-edited files</em> (43 👍, open)</li>
+  </ul>
+  <p>(Counts as of 22 November.)</p>
+  <p>Any tool that watches <code>Edit|Write</code> sees only part of the work. That includes file guards, format-on-edit hooks, review steps and audit logs.</p>
+
+  <h2 id="numbers">The numbers</h2>
+  <p>I counted the edits in my Claude Code transcripts of the last 30 days: 137 sessions, 82 of them in auto mode. I counted only files inside the folder each session ran in, outside <code>.git</code> and <code>node_modules</code>.</p>
+  <div class="table">
+    <table>
+      <thead><tr><th>How the file was changed</th><th class="n">Edits</th><th class="n">Share</th></tr></thead>
+      <tbody>
+        <tr><td><code>Edit</code>, <code>Write</code>, <code>MultiEdit</code>, <code>NotebookEdit</code></td><td class="n">1,678</td><td class="n">72%</td></tr>
+        <tr><td>A shell command whose line names the file</td><td class="n">539</td><td class="n">23%</td></tr>
+        <tr><td>A script that names the file in its code</td><td class="n">104</td><td class="n">4%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The shell commands were mostly here-documents (262: <code>cat &gt; src/config.ts &lt;&lt;'EOF'</code>), then <code>sed -i</code> (158), then <code>cp</code>, <code>mv</code> and <code>rm</code> (54), plain redirects (41) and <code>tee</code> (3).</p>
+  <p>Two more groups I could not place, so they are not in the table:</p>
+  <ul>
+    <li>1,791 scripts write a file through a variable (<code>open(path, 'w')</code>), so the code doesn't say which file.</li>
+    <li>1,390 commands can't be read without running them (<code>$(…)</code>, subshells).</li>
+  </ul>
+  <p>The true share outside the edit tools is somewhere above 27%.</p>
+  <p>By week, the edits outside the edit tools were 7% in the last week of October, then 43%, 34% and 26% in the three weeks after. The jump is mine, not Claude Code's: I started using auto mode in November. In October my sessions ran without it, and Claude made almost every edit with the edit tools.</p>
+  <p>This is one person's usage, and mine is heavy on scripted work, so your share will differ. That's why the command below exists.</p>
+
+  <h2 id="hooks">What a hook can do about it</h2>
+  <p><strong>Read the command line.</strong> A <code>PreToolUse</code> hook on Bash gets the command before it runs. For most of these edits the line says which file is written:</p>
+  <ul>
+    <li>the target of <code>&gt;</code> and <code>&gt;&gt;</code>;</li>
+    <li><code>tee FILE</code>;</li>
+    <li><code>sed -i '' 's/a/b/' FILE</code> (and BSD's empty suffix);</li>
+    <li><code>perl -pi -e … FILE</code>;</li>
+    <li>the destination of <code>cp</code> and <code>mv</code>;</li>
+    <li>what <code>rm</code> takes away.</li>
+  </ul>
+  <p>Three details mattered more than I expected:</p>
+  <ul>
+    <li><strong>Here-documents first.</strong> Strip their bodies before parsing. A body is text for a program, and one apostrophe in it leaves a quote open, which makes the whole line unreadable. Mine became readable, and <code>cat &gt; f &lt;&lt;'EOF'</code> turned out to be the most common form of all.</li>
+    <li><strong>Quoted <code>&gt;</code> is not a redirect.</strong> Track which <code>&gt;</code> are outside quotes. <code>grep '&gt;' file</code> writes nothing.</li>
+    <li><strong>Count after, too.</strong> After the command succeeds (<code>PostToolUse</code>), treat the files it wrote as written by that session. Otherwise the next <code>Edit</code> from another session isn't stopped either.</li>
+  </ul>
+  <p>Forchetta 0.12.3 does this. I wasn't first: <a href="https://github.com/v2matosevic/agent-coord">agent-coord</a>, a file guard for Claude Code, Codex and other agents, has read write targets from the command line since June, with the same two tricks for here-documents and quotes, and PowerShell's file cmdlets as well. In Forchetta, a <code>sed -i</code> on a file another session holds is now stopped like an <code>Edit</code>. The reason Claude reads says not to change the file "with an edit or with a command", so it doesn't route around the stop with Python.</p>
+  <p><strong>What a line can't tell.</strong> A script that computes its path, <code>find -exec</code>, <code>xargs</code>, a formatter: the command line doesn't name the file. Two ways to go further:</p>
+  <ul>
+    <li><strong>A sandbox per command.</strong> On macOS, <code>sandbox-exec</code> with a profile that denies writes to a single file stops redirects, <code>sed -i</code> and Python alike ("Operation not permitted"), with no root. Each launch took about 19 ms on my old MacBook Air. A hook could wrap each command with <code>updatedInput</code>. But a sandbox inside a sandbox fails: if you use Claude Code's own sandbox, this doesn't stack. And in auto mode Claude Code may refuse a call whose input a hook changed after review; the hooks documentation describes when. I haven't shipped this.</li>
+    <li><strong>Compare before and after.</strong> Snapshot what changed in the working tree around each command and attribute it to the session. It's precise only when sessions don't run commands at the same time, which is exactly when you need it.</li>
+  </ul>
+
+  <h2 id="measure">Measure yours</h2>
+  <pre>npx arricurdai edits</pre>
+  <p><a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a> is a small CLI that reads only your local transcripts. This command prints only counts: no text of a session, no file name, no project name. I'd like to know whether my numbers are unusual. If you post yours, say whether you use auto mode.</p>
+</article>
+</main>
+
+<footer class="end">
+  <div class="wrap">
+    <span>Forchetta is Italian for fork. Apache 2.0.</span>
+    <span><a href="../">Home</a>&nbsp;&nbsp;&nbsp;<a href="../manual.html">Manual</a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/alessiodonato/forchetta">Source on GitHub</a></span>
+  </div>
+</footer>
+</body>
+</html>
