@@ -89,12 +89,14 @@ The second session is stopped, says it will wait for `src/api.ts`, and goes on w
 
 | | What it is | How Forchetta differs |
 |---|---|---|
-| **Agent View** (`claude agents`) | Anthropic's full-screen list of your background sessions, in the terminal | A window that stays open next to your work, with terminals side by side, and the guard. |
-| **Claude Desktop** | Anthropic's app, with parallel sessions in its sidebar | It works with the `claude` CLI you already run in your terminals, with your hooks and settings. |
-| **Agent teams** (experimental in Claude Code) | A lead session that spawns teammates and shares a task list with them | Teams are set up in a panel or drawn in a studio, on as many levels as you need, and saved as templates: role, model, permissions, worktree and skills for each member. The lead can be you. |
+| **Agent View** (`claude agents`) | Anthropic's full-screen list of your background sessions, in the terminal | It also shows the sessions open in your other terminals, which Agent View lists only once you send them to the background, with terminals side by side and the guard. |
+| **Claude Desktop** | Anthropic's app, with parallel sessions in its sidebar | It shows the `claude` sessions you run in your terminals: Desktop keeps a list of its own, and a terminal session moves there only once you close it. |
+| **Agent teams** (experimental in Claude Code) | A lead session that spawns teammates and shares a task list with them | Teams are set up in a panel or drawn in a studio, on as many levels as you need, and saved as templates: role, model, permissions, worktree and skills for each member. The lead can be you. Agent teams leave it to you to keep teammates off each other's files; in Forchetta the guard does it. |
 | **Conductor** and similar Mac apps | Apps that run several coding agents, each in an isolated workspace | Forchetta doesn't host your sessions: it sees the ones you start anywhere, and lets them share a folder safely. |
 | **Orca**, **Paseo** | Open-source desktop and phone apps that run many kinds of coding agents, each in its own git worktree | No worktree to set up: sessions share one folder, and the guard keeps them off each other's files. It works with the `claude` you already run, in any terminal. |
-| **cmux**, **Claude Squad** | Terminals and session managers for many kinds of coding agents | Built for Claude Code only, through its hooks: the guard, permissions from the box, context and cost per session, subagents. |
+| **cmux** | A macOS terminal for coding agents, with notifications, a feed to answer permissions, session restore, and Claude Code teams as splits | Your sessions don't have to run inside it: Forchetta sees them in any terminal, keeps them off each other's files, and draws teams on as many levels as you need. |
+| **Claude Squad** | A terminal app that runs several coding agents in tmux, each in its own git worktree | No worktree to set up, and it sees the sessions you start anywhere. |
+| **Open Island**, **Vibe Island** | Menu-bar and notch apps that watch the sessions of many coding agents in any terminal, answer permissions, and take you back to the right one | Forchetta adds the guard, the teams, and terminals side by side for the sessions it starts. |
 
 They don't rule each other out: sessions started in any terminal show up in Forchetta.
 

@@ -91,12 +91,14 @@ La seconda sessione viene fermata, dice che aspetterà `src/api.ts`, e riparte q
 
 | | Cos'è | In cosa Forchetta è diversa |
 |---|---|---|
-| **Agent View** (`claude agents`) | La lista a schermo intero delle sessioni in background, di Anthropic, nel terminale | Una finestra che resta aperta accanto al tuo lavoro, con i terminali affiancati, e il vigile. |
-| **Claude Desktop** | L'app di Anthropic, con le sessioni in parallelo nella barra laterale | Lavora con la CLI `claude` che usi già nei tuoi terminali, con i tuoi hook e le tue impostazioni. |
-| **Agent teams** (sperimentali in Claude Code) | Una sessione capo che avvia i compagni e divide con loro una lista di compiti | I team si preparano in un pannello o si disegnano in uno studio, su quanti livelli servono, e si salvano come modelli: ruolo, modello, permessi, worktree e skill per ogni membro. Il capo puoi essere tu. |
+| **Agent View** (`claude agents`) | La lista a schermo intero delle sessioni in background, di Anthropic, nel terminale | Mostra anche le sessioni aperte negli altri tuoi terminali, che Agent View elenca solo dopo che le hai mandate in background, con i terminali affiancati e il vigile. |
+| **Claude Desktop** | L'app di Anthropic, con le sessioni in parallelo nella barra laterale | Mostra le sessioni `claude` che usi nei tuoi terminali: Desktop tiene una lista sua, e una sessione del terminale ci passa solo dopo che l'hai chiusa. |
+| **Agent teams** (sperimentali in Claude Code) | Una sessione capo che avvia i compagni e divide con loro una lista di compiti | I team si preparano in un pannello o si disegnano in uno studio, su quanti livelli servono, e si salvano come modelli: ruolo, modello, permessi, worktree e skill per ogni membro. Il capo puoi essere tu. Con gli agent teams tenere i compagni lontani dai file degli altri tocca a te; in Forchetta lo fa il vigile. |
 | **Conductor** e app per Mac simili | App che fanno girare più agenti, ognuno in uno spazio di lavoro isolato | Forchetta non ospita le tue sessioni: vede quelle che avvii ovunque, e le lascia lavorare nella stessa cartella senza danni. |
 | **Orca**, **Paseo** | App open source per desktop e telefono che fanno girare molti tipi di agenti, ognuno nel suo worktree git | Nessun worktree da preparare: le sessioni lavorano nella stessa cartella, e il vigile le tiene lontane dai file delle altre. Funziona con il `claude` che già usi, in qualsiasi terminale. |
-| **cmux**, **Claude Squad** | Terminali e gestori di sessioni per molti tipi di agenti | Fatta solo per Claude Code, attraverso i suoi hook: il vigile, permessi dal box, contesto e costo per sessione, subagenti. |
+| **cmux** | Un terminale per macOS pensato per gli agenti, con notifiche, un pannello per rispondere ai permessi, il ripristino delle sessioni e i team di Claude Code affiancati | Le tue sessioni non devono girarci dentro: Forchetta le vede in qualsiasi terminale, le tiene lontane dai file delle altre, e disegna team su quanti livelli servono. |
+| **Claude Squad** | Un'app da terminale che fa girare più agenti in tmux, ognuno nel suo worktree git | Nessun worktree da preparare, e vede le sessioni che avvii ovunque. |
+| **Open Island**, **Vibe Island** | App nella barra dei menu e nel notch che seguono le sessioni di molti agenti in qualsiasi terminale, rispondono ai permessi e ti riportano a quella giusta | Forchetta aggiunge il vigile, i team, e i terminali affiancati per le sessioni che avvia lei. |
 
 Non si escludono a vicenda: le sessioni avviate in qualsiasi terminale compaiono in Forchetta.
 
