@@ -215,11 +215,9 @@ forchetta setup</pre>
           <li>Claude Code inside WSL, if it is not there: <code>curl -fsSL https://claude.ai/install.sh | bash</code>.</li>
           <li>tmux 3.2 or later (Ubuntu 22.04 and later have it) and Forchetta:</li>
         </ol>
-        <pre>sudo apt install tmux
-curl -fsSL https://forchetta.dev/install.sh | sh
-forchetta open</pre>
-        <p>The installer needs no root: Forchetta goes in <code>~/.local/lib/forchetta</code>, and without Node.js 22 one from nodejs.org goes next to it, only for Forchetta. Then it runs <code>forchetta setup</code>, which checks what is missing and adds the hooks, showing you every change to <code>~/.claude/settings.json</code> first. To update, run the installer again.</p>
-        <p><code>forchetta open</code> starts the daemon when it is off and opens the page with a code that is good once, for two minutes. After a restart of the daemon, open the page with it again. In Settings, <span class="ui">allow them</span> turns on the notifications of the browser, which come while the page is open.</p>
+        <pre>sudo apt install -y tmux curl &amp;&amp; curl -fsSL https://forchetta.dev/install.sh | sh</pre>
+        <p>The installer needs no root: Forchetta goes in <code>~/.local/lib/forchetta</code>, and without Node.js 22 one from nodejs.org goes next to it, only for Forchetta. Then it runs <code>forchetta setup</code>, which checks what is missing and adds the hooks, showing you every change to <code>~/.claude/settings.json</code> first, and asking. To update, run the installer again.</p>
+        <p>Then, in a new terminal (which has <code>~/.local/bin</code> in its PATH), <code>forchetta open</code> starts the daemon when it is off and opens the page with a code that is good once, for two minutes. After a restart of the daemon, open the page with it again. In Settings, <span class="ui">allow them</span> turns on the notifications of the browser, which come while the page is open.</p>
         <h3>What differs from a Mac</h3>
         <ul>
           <li><strong>The sessions are those inside WSL.</strong> Claude Code started in PowerShell, or Claude Code for Windows, has its own settings and does not reach Forchetta. When both are installed, start the one of WSL.</li>
