@@ -25,6 +25,10 @@
   --radius: 12px;
   /* A neutral drawn over the surfaces, as r, g, b: light on the dark theme, dark on the light one. */
   --tint: 232, 233, 235;
+  /* The marks of the top line: the quiet ones, and what is still empty. */
+  --mark: rgba(232, 233, 235, 0.46);
+  --mark-track: rgba(232, 233, 235, 0.16);
+  --mark-amber: #f0a43c;
   --overlay: rgba(38, 38, 36, 0.92);
   --diff-add: rgba(255, 255, 255, 0.06);
   --diff-del: rgba(0, 0, 0, 0.3);
@@ -59,6 +63,10 @@
   --green: #1a7d51;
   --red: #d13b3b;
   --tint: 40, 38, 34;
+  --mark: rgba(40, 38, 34, 0.5);
+  --mark-track: rgba(40, 38, 34, 0.13);
+  /* Lighter than the amber of the texts: beside the red it has to be another color for every eye. */
+  --mark-amber: #d08400;
   --overlay: rgba(255, 255, 255, 0.94);
   --diff-add: rgba(40, 38, 34, 0.07);
   --diff-del: rgba(40, 38, 34, 0.03);
@@ -136,8 +144,9 @@ input[type='checkbox']:focus-visible,
 /* Top line: the name, and how many sessions wait for you. */
 header.top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
+  gap: 24px;
   padding: 22px 32px 6px;
 }
 
@@ -150,29 +159,146 @@ header.top {
 }
 
 .counts {
-  margin: 0;
-  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 22px;
+  min-width: 0;
+  margin-right: 10px;
+}
+
+/* A count: its name and its number, and under them a band of marks on one baseline (Counts.tsx). As tall as a
+   button of the top line. */
+.count {
+  display: grid;
+  grid-template-rows: 14px 8px;
+  row-gap: 4px;
+  min-width: 68px;
+  white-space: nowrap;
+}
+
+.count-line {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 14px;
   color: var(--text-3);
 }
 
-.counts .waiting {
-  color: var(--accent);
+.count-value {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 
-.counts .today,
-.counts .limit,
-.counts .guard-count {
-  font-family: var(--mono);
-  font-size: 11.5px;
+.count-note {
+  font-variant-numeric: tabular-nums;
+}
+
+.count-band {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+}
+
+.count-caption {
+  font-size: 10.5px;
+  line-height: 8px;
+  color: var(--text-3);
+}
+
+/* The days of the guard, today the brightest; a day with nothing is a stub. */
+.count-days i {
+  flex: 1;
+  background: var(--mark);
+}
+
+.count-days i[data-today] {
+  background: var(--text);
+}
+
+.count-days i[data-none] {
+  background: var(--mark-track);
 }
 
 /* A limit of the Claude plan: amber when at this pace it runs out before the reset, red when it is used up. */
-.counts .limit.warn {
+.count-meter {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--mark-track);
+}
+
+.count-meter i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--text-2);
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.count[data-level='warn'] :is(.count-value, .count-note) {
   color: var(--accent);
 }
 
-.counts .limit.out {
+.count[data-level='warn'] .count-meter {
+  background: rgba(240, 164, 60, 0.22);
+}
+
+.count[data-level='warn'] .count-meter i {
+  background: var(--mark-amber);
+}
+
+.count[data-level='out'] .count-value {
   color: var(--red);
+}
+
+.count[data-level='out'] .count-meter i {
+  background: var(--red);
+}
+
+/* A mark for each session: bright at work, dim when idle; the ones that need you in the color of their state, and as
+   tall as the band. */
+.count-mark {
+  flex: none;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--mark);
+}
+
+.count-mark[data-kind='busy'] {
+  background: var(--text);
+}
+
+.count-mark[data-kind='waiting'] {
+  height: 8px;
+  background: var(--mark-amber);
+}
+
+.count-mark[data-kind='error'] {
+  height: 8px;
+  background: var(--red);
+}
+
+/* A narrow window: closer together, then without when a limit runs out (its tooltip says it). */
+@media (max-width: 1080px) {
+  .counts {
+    gap: 8px 14px;
+    margin-right: 2px;
+  }
+}
+
+@media (max-width: 900px) {
+  .count-line .count-note {
+    display: none;
+  }
 }
 
 /* A failed automatic update of Claude Code: one line for every session, with "update". The dot is red, the
@@ -4685,13 +4811,22 @@ header.top .view-switch button:not(.on):hover {
 }
 
 .waiting-button {
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  margin: 0;
+  padding: 4px 11px;
+  border: 1px solid rgba(240, 164, 60, 0.45);
+  border-radius: 7px;
+  background: var(--surface-waiting);
+  font: 600 12px/16px var(--ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
   cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
+}
+
+.waiting-button:hover {
+  border-color: var(--accent);
 }
 
 .over-budget {

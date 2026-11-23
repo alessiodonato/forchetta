@@ -21,6 +21,7 @@ Trascina gli agenti su una tela, disegna chi guida chi, e avvia il team nel tuo 
 [Disegna un team nel browser](https://forchetta.dev/studio/) ·
 [Prova tutta l'app](https://forchetta.dev/demo/) ·
 [Manuale (in inglese)](https://forchetta.dev/manual.html) ·
+[Changelog (in inglese)](https://forchetta.dev/changelog/) ·
 [🇬🇧 English](README.md)
 
 <br>
@@ -76,7 +77,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.12.6. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.12.7. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 

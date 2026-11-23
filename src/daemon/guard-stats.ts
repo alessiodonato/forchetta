@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { writeDataJson } from '../shared/data-file.ts';
-import { dayOf, type GuardCounts, type GuardStatKind, type GuardStatsInfo } from '../shared/guard-stats.ts';
+import { dayOf, type GuardCounts, type GuardStatKind, type GuardStatsInfo, guardTotal } from '../shared/guard-stats.ts';
 
 // What the guard did, by day (shared/guard-stats.ts): kept in var/guard-stats.json, on this Mac only. Nothing of a
 // session goes in: no file, no command, no name; only how many times each kind happened on a day. Written a little
@@ -39,9 +39,10 @@ export class GuardStats {
     this.options.onChange?.();
   }
 
-  /** The counts of the last `days` days, today included, and of today. */
+  /** The counts of the last `days` days, today included, of today, and how many each day, for the top line. */
   info(days = 7): GuardStatsInfo {
-    return statsOver(this.days, days, this.now());
+    const now = this.now();
+    return { ...statsOver(this.days, days, now), byDay: lastDays(days, now).map((day) => guardTotal(this.days[day] ?? {})) };
   }
 
   /** Writes what is pending now: at the end of the daemon. */
@@ -94,21 +95,26 @@ export function readStats(file: string): Record<string, GuardCounts> | undefined
   }
 }
 
-/** The counts of the last `days` days up to `now`, today included. */
-export function statsOver(byDay: Record<string, GuardCounts>, days: number, now: number): GuardStatsInfo {
+/** The last `days` days up to `now`, the oldest first, today last. */
+function lastDays(days: number, now: number): string[] {
   const span = Math.max(1, Math.round(days));
-  const wanted = new Set<string>();
   // Day by day back from today, at noon: a change of daylight saving time does not skip or repeat a day.
   const noon = new Date(now);
   noon.setHours(12, 0, 0, 0);
-  for (let i = 0; i < span; i++) wanted.add(dayOf(noon.getTime() - i * 86_400_000));
+  return Array.from({ length: span }, (_, index) => dayOf(noon.getTime() - (span - 1 - index) * 86_400_000));
+}
+
+/** The counts of the last `days` days up to `now`, today included. */
+export function statsOver(byDay: Record<string, GuardCounts>, days: number, now: number): GuardStatsInfo {
+  const listed = lastDays(days, now);
+  const wanted = new Set(listed);
   const counts: GuardCounts = {};
   for (const [day, dayCounts] of Object.entries(byDay)) {
     if (!wanted.has(day)) continue;
     for (const [kind, value] of Object.entries(dayCounts)) counts[kind as GuardStatKind] = (counts[kind as GuardStatKind] ?? 0) + (value ?? 0);
   }
   // "Counted since" only when the counts started within these days: a week of history needs no date.
-  const oldest = [...wanted].sort()[0]!;
+  const oldest = listed[0]!;
   const earliest = Object.keys(byDay).sort()[0];
-  return { days: span, counts, today: { ...(byDay[dayOf(now)] ?? {}) }, ...(earliest && earliest > oldest ? { since: earliest } : {}) };
+  return { days: listed.length, counts, today: { ...(byDay[dayOf(now)] ?? {}) }, ...(earliest && earliest > oldest ? { since: earliest } : {}) };
 }

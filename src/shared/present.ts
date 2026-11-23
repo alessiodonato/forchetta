@@ -182,9 +182,16 @@ export function usdText(usd: number): string {
   return `$${usd.toLocaleString('en-US', { minimumFractionDigits: usd >= 1000 ? 0 : 2, maximumFractionDigits: usd >= 1000 ? 0 : 2 })}`;
 }
 
-/** A limit of the Claude plan in the top line: its words, how loud, and the whole story for the tooltip. */
+/** A limit of the Claude plan in the top line: its words, how much is used, how loud, and the whole story for the tooltip. */
 export interface LimitPart {
-  text: string;
+  /** "5h", "week". */
+  name: string;
+  /** "62%", "used up". */
+  value: string;
+  /** When it runs out at this pace, or when it is back: "out ≈3:20 PM", "back 4:40 PM". */
+  note?: string;
+  /** 0-100: how full its bar is. */
+  percent: number;
   level: 'calm' | 'warn' | 'out';
   title: string;
 }
@@ -196,8 +203,8 @@ const hourText = (at: number): string => new Date(at).toLocaleTimeString('en-US'
 const dayText = (at: number): string => new Date(at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 
 /**
- * The limits for the top line: "5h 62%", "5h 62% · out ≈3:20 PM" when at this pace it runs out before the reset,
- * "5h used up · back 4:40 PM"; then "week 31%". A window whose reset has passed says nothing: a new one began.
+ * The limits for the top line: 5h 62%, with "out ≈3:20 PM" when at this pace it runs out before the reset, or used up,
+ * with "back 4:40 PM"; then week 31%. A window whose reset has passed says nothing: a new one began.
  */
 export function limitParts(limits: UsageLimits | undefined, now: number, nameOf: (agentId: string) => string | undefined = () => undefined): LimitPart[] {
   const parts: LimitPart[] = [];
@@ -207,13 +214,16 @@ export function limitParts(limits: UsageLimits | undefined, now: number, nameOf:
     const fresh = now - limits.at < LIMITS_PACE_FRESH_MS;
     const runsOut = fresh && five.runsOutAt !== undefined && five.runsOutAt > now ? five.runsOutAt : undefined;
     if (five.percent >= 100) {
-      parts.push({ text: `5h used up · back ${reset}`, level: 'out', title: `The 5-hour limit of your Claude plan is used up: sessions stop until ${reset}.` });
+      parts.push({ name: '5h', value: 'used up', note: `back ${reset}`, percent: 100, level: 'out', title: `The 5-hour limit of your Claude plan is used up: sessions stop until ${reset}.` });
     } else {
       const pace = runsOut === undefined ? '' : ` At the pace of the last half hour it runs out at about ${hourText(runsOut)}, ${ago(five.resetsAt - runsOut)} before the reset.`;
       const named = (five.sessions ?? []).map((session) => ({ name: nameOf(session.agentId), percent: session.percent })).filter((session) => session.name);
       const who = named.length >= 2 ? `\nWhat the sessions spent in this window, an estimate from their cost: ${named.map((session) => `${session.name} ${session.percent}%`).join(', ')}.` : '';
       parts.push({
-        text: runsOut === undefined ? `5h ${five.percent}%` : `5h ${five.percent}% · out ≈${hourText(runsOut)}`,
+        name: '5h',
+        value: `${five.percent}%`,
+        ...(runsOut === undefined ? {} : { note: `out ≈${hourText(runsOut)}` }),
+        percent: five.percent,
         level: runsOut !== undefined || five.percent >= 90 ? 'warn' : 'calm',
         title: `5-hour limit of your Claude plan: ${five.percent}% used, it resets at ${reset}.${pace}${who}`,
       });
@@ -223,9 +233,9 @@ export function limitParts(limits: UsageLimits | undefined, now: number, nameOf:
   if (week && week.resetsAt > now) {
     const reset = dayText(week.resetsAt);
     if (week.percent >= 100) {
-      parts.push({ text: `week used up · back ${reset}`, level: 'out', title: `The weekly limit of your Claude plan is used up: sessions stop until ${reset}.` });
+      parts.push({ name: 'week', value: 'used up', note: `back ${reset}`, percent: 100, level: 'out', title: `The weekly limit of your Claude plan is used up: sessions stop until ${reset}.` });
     } else {
-      parts.push({ text: `week ${week.percent}%`, level: week.percent >= 90 ? 'warn' : 'calm', title: `Weekly limit of your Claude plan: ${week.percent}% used, it resets ${reset}.` });
+      parts.push({ name: 'week', value: `${week.percent}%`, percent: week.percent, level: week.percent >= 90 ? 'warn' : 'calm', title: `Weekly limit of your Claude plan: ${week.percent}% used, it resets ${reset}.` });
     }
   }
   return parts;

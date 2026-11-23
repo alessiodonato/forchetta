@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forchetta changelog</title>
+<meta name="description" content="The versions that changed what Forchetta does, newest first, with the commits that did it.">
+<meta property="og:title" content="Forchetta changelog">
+<meta property="og:description" content="The versions that changed what Forchetta does, newest first, with the commits that did it.">
+<meta property="og:image" content="https://forchetta.dev/img/social.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:url" content="https://forchetta.dev/changelog/">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:type" content="website">
+<link rel="canonical" href="https://forchetta.dev/changelog/">
+<link rel="alternate" type="application/atom+xml" title="Forchetta releases" href="https://github.com/alessiodonato/forchetta/releases.atom">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+  /* The manual's palette and type. The history is drawn as git has it: main is a line, the beta for Windows leaves it. */
+  :root {
+    color-scheme: dark;
+    --bg: #1f1e1c;
+    --surface: #292825;
+    --line: #3a3834;
+    --line-strong: #4c4944;
+    --text: #f3f1ec;
+    --text-2: #bdb8ae;
+    --text-3: #9a958b;
+    --claude: #d97757;
+    --trunk: #7d4c3b;
+    --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    /* Where the two lines run, and how far down an entry its node is. */
+    --main: 10px;
+    --lane: 36px;
+    --node: 17px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 24px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.65 var(--ui); -webkit-font-smoothing: antialiased; }
+
+  a { color: var(--text); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--claude); }
+  a:focus-visible { outline: 2px solid var(--claude); outline-offset: 3px; border-radius: 4px; }
+  code { font-family: var(--mono); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .top { display: flex; align-items: center; justify-content: space-between; padding-top: 28px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: 0.01em; text-decoration: none; color: var(--claude); }
+  .brand svg { width: 22px; height: 22px; }
+  .top nav { display: flex; gap: 22px; font-size: 15px; }
+  .top nav a { color: var(--text-2); text-decoration: none; }
+  .top nav a:hover, .top nav a[aria-current] { color: var(--text); }
+
+  main { max-width: 926px; margin: 0 auto; padding: 64px 24px 24px; }
+  h1 { margin: 0; font-size: clamp(32px, 5vw, 46px); line-height: 1.1; font-weight: 650; letter-spacing: -0.03em; }
+  .sub { max-width: 620px; margin: 14px 0 0; font-size: 21px; line-height: 1.4; color: var(--text-2); text-wrap: balance; }
+
+  .log { margin: 64px 0 0; padding: 0; list-style: none; }
+  .log > li { position: relative; display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: baseline; padding: 0 0 58px 62px; }
+
+  /* main, from the first commit to the last. */
+  .log > li::before { position: absolute; top: 0; bottom: 0; left: calc(var(--main) - 1px); width: 2px; background: var(--trunk); content: ''; }
+  .log > li:first-child::before { top: var(--node); }
+  .log > li:last-child { padding-bottom: 0; }
+  .log > li:last-child::before { bottom: auto; height: var(--node); }
+
+  .node { position: absolute; top: var(--node); left: var(--main); width: 10px; height: 10px; border: 2px solid var(--claude); border-radius: 50%; background: var(--bg); transform: translate(-50%, -50%); }
+  .big { --node: 21px; }
+  .big > .node { width: 16px; height: 16px; background: var(--claude); }
+
+  /* The branch: its line goes down from its node, and bends into main at the version it left. */
+  .branch > .node { left: var(--lane); background: var(--bg); }
+  .branch::after { position: absolute; top: var(--node); bottom: 28px; left: calc(var(--lane) - 1px); width: 2px; background: var(--trunk); content: ''; }
+  .join::after { position: absolute; top: -28px; left: var(--main); width: calc(var(--lane) - var(--main) + 1px); height: calc(var(--node) + 29px); border: solid var(--trunk); border-width: 0 2px 2px 0; border-bottom-right-radius: 26px; content: ''; }
+  .branch > .node, .join > .node { z-index: 1; }
+
+  .version { margin: 0; font-variant-numeric: tabular-nums; line-height: 1.4; }
+  .version strong { display: block; font-size: 16px; font-weight: 600; color: var(--text-2); }
+  .version a { color: var(--text); text-decoration: none; }
+  .version a:hover { text-decoration: underline; text-decoration-color: var(--claude); }
+  .version .to { font-weight: 400; color: var(--text-3); }
+  .version time, .version .on { display: block; font-size: 14px; color: var(--text-3); }
+  .version .on code { font-size: 12.5px; }
+
+  .what { min-width: 0; }
+  h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.35; font-weight: 650; letter-spacing: -0.015em; text-wrap: balance; }
+  .big h2 { font-size: clamp(24px, 3.2vw, 29px); line-height: 1.2; letter-spacing: -0.025em; }
+  .what p { margin: 0 0 14px; color: var(--text-2); }
+  .what p code { padding: 1px 5px; border-radius: 5px; background: var(--surface); font-size: 0.86em; color: var(--text); }
+  .more { font-size: 15.5px; }
+  .shot { display: block; width: 100%; height: auto; margin: 4px 0 18px; border: 1px solid var(--line); border-radius: 10px; }
+  /* The counts at their own size: on a phone they scroll by themselves. */
+  .strip { margin: 2px 0 16px -8px; overflow-x: auto; }
+  .strip img { display: block; }
+
+  .commits { margin: 0; padding: 0; list-style: none; font-size: 14.5px; line-height: 1.5; color: var(--text-3); }
+  .commits li { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 14px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); }
+  .commits a { color: var(--text-2); text-decoration: none; }
+  .commits a:hover { color: var(--text); text-decoration: underline; text-decoration-color: var(--claude); }
+  .commits code { font-size: 13px; }
+
+  .rest { margin: 64px 0 0 62px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 15.5px; color: var(--text-2); }
+
+  footer.end { margin-top: 64px; padding: 28px 0 48px; border-top: 1px solid var(--line); font-size: 14px; color: var(--text-3); }
+  footer.end .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
+  footer.end a { color: var(--text-2); }
+
+  @media (max-width: 720px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 16px; }
+    .top nav { gap: 16px; }
+    main { padding: 40px 16px 16px; }
+    .sub { font-size: 18px; }
+    .log { margin-top: 44px; }
+    :root { --main: 7px; --lane: 24px; --node: 12px; }
+    .big { --node: 12px; }
+    .log > li { grid-template-columns: minmax(0, 1fr); padding: 0 0 46px 42px; }
+    .version { margin-bottom: 8px; }
+    .version strong, .version time, .version .on { display: inline-block; margin-right: 10px; }
+    .commits li { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .rest { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap top">
+  <a class="brand" href="../" aria-label="Forchetta, home">
+    <svg viewBox="0 0 18 18" aria-hidden="true"><g fill="#d97757"><rect x="5.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="7.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="10.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="12.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="5.1" y="6.4" width="8.8" height="2.6" rx="1.3"/><path d="M7.4 8.6h4.2l-1.5 2.8H8.9z"/><rect x="8.6" y="10.8" width="1.8" height="6.4" rx=".9"/></g></svg>
+    Forchetta
+  </a>
+  <nav aria-label="Site">
+    <a href="../manual.html">Manual</a>
+    <a href="../#install">Install</a>
+    <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
+  </nav>
+</div>
+
+<main>
+<h1>Changelog</h1>
+<p class="sub">The versions that changed what Forchetta does, newest first, with the commits that did it.</p>
+
+<ol class="log">
+  <li id="v0.12.7">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.12.7">0.12.7</a></strong><time datetime="2026-11-23">23 Nov 2026</time></p>
+    <div class="what">
+      <h2>The counts at the top, as small instruments</h2>
+      <p>The line at the top of the window was text. Now each count is a number over its marks: a column for each day of the guard, a bar for each limit of your plan, a mark for each session. The sessions that need you stand taller than the others.</p>
+      <div class="strip"><img src="../img/top-line.png"width="551" height="42" alt="The top of the window: guard 40 with seven columns, 5h 62% with an amber bar that says when it runs out, week 25%, 13 sessions with a mark each, and a button that says 2 wait for you." loading="lazy"></div>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/14a5f14d61edfcc9f657fa180647a06260e3996e"><code>14a5f14</code></a><span>0.12.7: the counts of the top line as small instruments</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big branch" id="v0.13.0-beta.1">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.13.0-beta.1">0.13.0-beta.1</a></strong><time datetime="2026-11-23">23 Nov 2026</time> <span class="on">branch <code>windows</code></span></p>
+    <div class="what">
+      <h2>Windows and Linux, to try</h2>
+      <p>Forchetta runs on Linux, and on Windows inside WSL 2, where it opens in a window of Edge or Chrome. GitHub builds the archive from the source and signs it, and the installer takes no other. It has not been tried on a Windows PC yet: that is what the beta is for.</p>
+      <p class="more"><a href="../windows/">How to install the beta</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/23d138e324d9b5615371585cb1d20f5ecc54a3b1"><code>23d138e</code></a><span>The archive for Linux and Windows is made by GitHub, from a commit, and says so</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/97caddf8c38f986a530dcd72c8ab97a139aba9e0"><code>97caddf</code></a><span>On Linux and Windows, what was less safe than on a Mac</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/5ea9e343c373e80175936b89da3b6bf67f459786"><code>5ea9e34</code></a><span>What is of Linux and WSL stays off a Mac, and what is of a Mac off Linux</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/d5326fa2b99b570a5df8779c6a5656b5486c1c09"><code>d5326fa</code></a><span>Windows, inside WSL 2, and Linux (beta)</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="join" id="v0.12.6">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.12.3">0.12.3</a> <span class="to">to</span> <a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.12.6">0.12.6</a></strong><time datetime="2026-11-23">22–23 Nov 2026</time></p>
+    <div class="what">
+      <h2>The guard reads the shell</h2>
+      <p>In auto mode Claude often changes files with Bash. The guard now reads the files a command writes from its line, holds a file from the moment a write is let through, stops a formatter that would rewrite a file another session is changing, and takes a here-document as text unless a shell reads it.</p>
+      <p class="more"><a href="../bash-edits/">What Claude Code changes with Bash, in numbers</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/ad3eb20302701bd859b316c2b38b21e548efbbb5"><code>ad3eb20</code></a><span>0.12.6: the guard reads a here-document as text, unless it is for a shell</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/f5eae108a79b510313dbc7cf2f9821dd3ddc2fe6"><code>f5eae10</code></a><span>0.12.5: the guard stops the formatters that would rewrite a held file</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/5bf5160574faa057d09b0f1c82d2422f1521a424"><code>5bf5160</code></a><span>0.12.4: two sessions that try the same file at the same moment, only one goes</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/072c285f276dd521c8e41476adfbd9711947001b"><code>072c285</code></a><span>0.12.3: the guard sees the changes made with a command too</span></li>
+      </ul>
+    </div>
+  </li>
+  <li id="v0.12.1">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.12.1">0.12.1</a></strong><time datetime="2026-11-21">21 Nov 2026</time></p>
+    <div class="what">
+      <h2>Your sessions, back after a restart of the Mac</h2>
+      <p>A restart closes every session; their conversations stay. Forchetta finds the sessions that ended with the Mac and reopens them, each in its folder, with its name, color and model. A member of a team goes back into its team.</p>
+      <p class="more"><a href="../manual.html#reopen">After a restart, in the manual</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/7d7d672b6abeb64c88b0df4e6bb244ab41c05d8d"><code>7d7d672</code></a><span>0.12.1: the sessions come back after a restart of the Mac</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big" id="v0.12.0">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.12.0">0.12.0</a></strong><time datetime="2026-11-21">21 Nov 2026</time></p>
+    <div class="what">
+      <h2>A team that starts by itself</h2>
+      <p>From a queue, at a time, or from GitHub: the open issues with a label, or the pull requests. Each run is a new team, with what it may cost and how long it may take. It is over when its lead delivers; a run that fails pauses the automation until you resume it.</p>
+      <p class="more"><a href="../manual.html#auto">A team that starts by itself, in the manual</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/141fd26a0c86c5ffe5e7a7d0bcfd80aa7258dcd7"><code>141fd26</code></a><span>0.12.0: a team that starts by itself</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big" id="v0.11.0">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.11.0">0.11.0</a> <span class="to">to</span> <a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.11.1">0.11.1</a></strong><time datetime="2026-11-21">21 Nov 2026</time></p>
+    <div class="what">
+      <h2>What each agent may use, and where you say yes</h2>
+      <p>Limits on the tools of one agent, MCP servers for it alone, and arrows that wait for your approval. A team takes parameters and a first goal, says when it delivers, and its run can be replayed. Before it starts, the studio points out what in it works against itself.</p>
+      <p class="more"><a href="../manual.html#studio">The studio, in the manual</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/0f6863774712b3e0fbfa6e9405cb72286a275c63"><code>0f68637</code></a><span>0.11.1: checks before a team starts</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/3a444d22cca608eada13d1f734d826590411b6ff"><code>3a444d2</code></a><span>0.11.0: tools for each agent, approval on the arrows, parameters and delivery, replay, a team described and drawn</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big" id="v0.10.0">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.10.0">0.10.0</a></strong><time datetime="2026-11-20">20 Nov 2026</time></p>
+    <div class="what">
+      <h2>Teams in the repository, a ledger, and ⌘K</h2>
+      <p>A team is a file, reviewed with the code, that also starts from a terminal or a script. A local ledger keeps what each turn did and cost, and <code>forchetta report</code> reads it. Settings in the app, a palette of commands, shortcuts, keyboard and screen reader, a light theme, and <code>forchetta doctor</code>.</p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/eb3da6bc2994e85c17ba980a7c3e7446639c6bd1"><code>eb3da6b</code></a><span>0.10.0: teams in the repository, ledger and report, Settings, ⌘K and shortcuts, accessibility and the light theme, doctor</span></li>
+      </ul>
+    </div>
+  </li>
+  <li id="v0.9.13">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.9.13">0.9.13</a></strong><time datetime="2026-11-20">20 Nov 2026</time></p>
+    <div class="what">
+      <h2>The hooks on a private socket</h2>
+      <p>The hooks of Claude Code reach the daemon on a socket only your user can open: with the daemon stopped, no other program can answer the guard or the permissions in its place. The skills that come with a team file are shown before they are fetched.</p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/a4eff4bbb41de6b7c27c12a802437bd4f6cb52b4"><code>a4eff4b</code></a><span>0.9.13: the hooks on a private socket, the skills of a team file seen before they are fetched, no data lost</span></li>
+      </ul>
+    </div>
+  </li>
+  <li id="v0.9.12">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.9.12">0.9.12</a></strong><time datetime="2026-11-20">20 Nov 2026</time></p>
+    <div class="what">
+      <h2>The studio, live and in your browser</h2>
+      <p>Opened while a team works, the studio says what each agent does and what goes along each arrow. A team can be saved as a file, with the rules every agent follows. Studio Maker draws one in the browser, with nothing to install.</p>
+      <p class="more"><a href="../studio/">Draw a team in your browser</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/42788c9070ff0d5ca97d00f2607cd2468c3c8f9c"><code>42788c9</code></a><span>0.9.12: “+ new”, teams grouped in the column, the studio live, rules, team files, Studio Maker</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big" id="v0.9.9">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.9.9">0.9.9</a> <span class="to">to</span> <a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.9.11">0.9.11</a></strong><time datetime="2026-11-19">19 Nov 2026</time></p>
+    <div class="what">
+      <h2>Draw a team: the studio</h2>
+      <p>A canvas where each agent is a box, and an arrow says who leads whom and who answers. Teams have as many levels as they need. Skills come from open-source repositories, each pinned to a commit. Then undo, and what a team costs, agent by agent.</p>
+      <img class="shot" src="../img/studio.png" width="2400" height="1520" alt="The studio, with a manager that leads a senior, who leads a junior, and the presets of agents on the left." loading="lazy">
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/ae03af42b8ae23391efe90fd76da48109053e810"><code>ae03af4</code></a><span>0.9.11: undo in the studio, the waits of a team survive a restart, skills of your own</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/a5f8408cc1fcfd6d43602253b6486d714a4feccb"><code>a5f8408</code></a><span>0.9.10: what a team costs, agent by agent; no limit of members</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/b9df640deceb80bff21ff4bbd80540b6c0223556"><code>b9df640</code></a><span>0.9.9: the org chart on more levels, the studio of the teams, open-source skills for each agent</span></li>
+      </ul>
+    </div>
+  </li>
+  <li id="v0.9.7">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.9.7">0.9.7</a> <span class="to">to</span> <a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.9.8">0.9.8</a></strong><time datetime="2026-11-17">17 Nov 2026</time></p>
+    <div class="what">
+      <h2>Files of its own for each agent, and a review that counts</h2>
+      <p>The guard keeps a member in its files and the others out of them, and asks you before a merge of commits the reviewer did not approve. A session that fails the same way three times in a row is pointed out. A team can be set up from a document that describes it.</p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/6ab68d1ec014de2722330160e13ef354e7c0614f"><code>6ab68d1</code></a><span>0.9.8: teams from a document, who works and who talks with whom in the org chart, the column that hides</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/373379d6452c30e524773cb5a6e37a1d42d5b17f"><code>373379d</code></a><span>0.9.7: the files of each member, the review that counts, the session that goes in circles</span></li>
+      </ul>
+    </div>
+  </li>
+  <li id="v0.9.5">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.9.5">0.9.5</a></strong><time datetime="2026-11-14">14 Nov 2026</time></p>
+    <div class="what">
+      <h2>The guard says what the others did</h2>
+      <p>A session is told when a file it read was changed by another one, and which lines. Before tests it learns who is halfway through what. A <code>git add -A</code> that would take another session’s changes is stopped once.</p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/bc6092c7a6dab8c4088d2193bd50202354e81bca"><code>bc6092c</code></a><span>0.9.5: the guard tells each session what the others did</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big" id="v0.9.0">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.9.0">0.9.0</a></strong><time datetime="2026-11-13">13 Nov 2026</time></p>
+    <div class="what">
+      <h2>The guard</h2>
+      <p>A session holds the file it is changing until its turn ends. Another one that tries to edit it is stopped, is told why, and goes on by itself when the file is free. A git command that would change the files under another session asks you first.</p>
+      <img class="shot" src="../img/guard.png" width="2800" height="1572" alt="Two sessions side by side: one holds src/api.ts, the other waits for it, and both say so." loading="lazy">
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/b53a47f925de27abff8a5a7626198908ab8e16e2"><code>b53a47f</code></a><span>0.9.0: the guard</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/c15ef09032e535a3c3fffd5490d4a27c5f9e2ea1"><code>c15ef09</code></a><span>The guard: sessions that don’t step on each other</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/d2f395c0a3e3662b0edbf2b409362bbf292b4611"><code>d2f395c</code></a><span>CI on GitHub, a guide for who contributes, tests that hold on a busy Mac</span></li>
+      </ul>
+    </div>
+  </li>
+  <li id="v0.8.5">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.8.1">0.8.1</a> <span class="to">to</span> <a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.8.5">0.8.5</a></strong><time datetime="2026-11-12">12 Nov 2026</time></p>
+    <div class="what">
+      <h2>Closer to each session</h2>
+      <p>The artifacts a session publishes open from its box. Text selected in a terminal becomes a question, to that session or to another one. The subagents of a session are listed as they work, each with its transcript.</p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/affb9c3eb768daade5529dbfda04ecbc8b8a6496"><code>affb9c3</code></a><span>0.8.5: the subagents of the sessions</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/b1a159af503a543b22b1fff50d045632b56d706b"><code>b1a159a</code></a><span>0.8.3: the menu of the selection, and quick prompts</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/9fd9e054e985f81c03853de06e70ea972613a371"><code>9fd9e05</code></a><span>0.8.1: artifacts of claude.ai from the box, links to click</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big" id="v0.8.0">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.8.0">0.8.0</a></strong><time datetime="2026-11-11">11 Nov 2026</time></p>
+    <div class="what">
+      <h2>Teams of agents</h2>
+      <p>A lead and its members, each a Claude Code session with a name and a role. An arrow says what comes back: ⇄ its answer goes to the lead, → it does the work and sends nothing. Requests are numbered and wait until a session is free, and a member can work in a git worktree of its own.</p>
+      <p class="more"><a href="../manual.html#teams">Teams of agents, in the manual</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/a585eddad13a2078af1eaa19d4eaeb28dd060f66"><code>a585edd</code></a><span>0.8.0: teams of agents, and the manual on the site</span></li>
+      </ul>
+    </div>
+  </li>
+  <li id="v0.7.0">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.7.0">0.7.0</a></strong><time datetime="2026-11-11">11 Nov 2026</time></p>
+    <div class="what">
+      <h2>Installed with Homebrew</h2>
+      <p>No clone to make: <code>brew install</code>, then <code>forchetta setup</code>, which builds the app on your Mac and shows every change to your settings first. The app speaks English, in the colors it has today.</p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/ba7d6276fda270dd050dc7a1b6e0d22db5d88ff6"><code>ba7d627</code></a><span>Forchetta can be installed: forchetta setup, and a data folder outside the repository</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/78d4c76b72b8936aebeffe7fb36996521f9ef595"><code>78d4c76</code></a><span>The app in English, with Claude orange</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big" id="v0.6.0">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/commit/fee81f22964da82b97564e0c790d1a272ae4d531">0.6.0</a></strong><time datetime="2026-11-11">11 Nov 2026</time></p>
+    <div class="what">
+      <h2>The first public version</h2>
+      <p>Every Claude Code session on the Mac as a box in one window: what it is doing, its context, its cost. Up to four open side by side in real terminals. Permissions answered from the box, and a notification when a session waits, stalls or fails.</p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/fee81f22964da82b97564e0c790d1a272ae4d531"><code>fee81f2</code></a><span>0.6.0: first public version</span></li>
+      </ul>
+    </div>
+  </li>
+</ol>
+
+<p class="rest">These are the versions that matter most. <a href="https://github.com/alessiodonato/forchetta/releases">Every release</a>, with its full notes, is on GitHub, also <a href="https://github.com/alessiodonato/forchetta/releases.atom">as a feed</a>. Before 0.12.4 the messages of the commits are in Italian: here they are in English.</p>
+</main>
+
+<footer class="end">
+  <div class="wrap">
+    <span>Forchetta is Italian for fork. Apache 2.0.</span>
+    <span><a href="../">Home</a>&nbsp;&nbsp;&nbsp;<a href="../manual.html">Manual</a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/alessiodonato/forchetta">Source on GitHub</a></span>
+  </div>
+</footer>
+</body>
+</html>
