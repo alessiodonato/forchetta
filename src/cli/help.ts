@@ -28,12 +28,17 @@ const COMMANDS: Record<string, CommandHelp> = {
   setup: {
     summary: PLATFORM === 'macos' ? 'Get Forchetta ready: build the app and install the hooks' : 'Get Forchetta ready: check what it needs and install the hooks',
     usage: 'forchetta setup [options]',
-    about: [
-      'Checks tmux, Claude Code and the Command Line Tools, builds the app in ~/Applications, then adds',
-      'the hooks to ~/.claude/settings.json: it shows what it changes and asks first (d shows the whole diff).',
-      'Run it again after every upgrade: it builds the app again only when it changed. On Linux, and in WSL, there is no',
-      'app to build: it checks Node.js, tmux, curl, the terminals and Claude Code, then adds the hooks.',
-    ],
+    about:
+      PLATFORM === 'macos'
+        ? [
+            'Checks tmux, Claude Code and the Command Line Tools, builds the app in ~/Applications, then adds',
+            'the hooks to ~/.claude/settings.json: it shows what it changes and asks first (d shows the whole diff).',
+            'Run it again after every `brew upgrade forchetta`: it builds the app again only when it changed.',
+          ]
+        : [
+            'Checks Node.js, tmux, curl, the terminals and Claude Code, then adds the hooks to ~/.claude/settings.json: it',
+            'shows what it changes and asks first (d shows the whole diff). Run it again after every upgrade.',
+          ],
     options: [
       { name: '--yes', text: 'Install the hooks without asking' },
       { name: '--force', text: 'Build the app again, even when it is up to date' },
@@ -44,17 +49,17 @@ const COMMANDS: Record<string, CommandHelp> = {
     examples: ['forchetta setup', 'forchetta setup --yes --app-dir /Applications'],
   },
   open: {
-    summary: PLATFORM === 'macos' ? 'Open the app, or the page in a browser' : 'Open Forchetta in a browser',
-    usage: 'forchetta open [--browser] [--print]',
-    about: [
-      'On a Mac it opens the app; on Linux, and in WSL, the page in a browser (in WSL, one of Windows: Edge or Chrome, in',
-      'a window of its own). It starts the daemon when it is off. The address has a code good once, for two minutes.',
-    ],
-    options: [
-      { name: '--browser', text: 'The browser, also on a Mac with the app' },
-      { name: '--print', text: 'Only print the address, to open by hand' },
-    ],
-    examples: ['forchetta open', 'forchetta open --print'],
+    summary: PLATFORM === 'macos' ? 'Open the app' : 'Open Forchetta in a browser',
+    usage: PLATFORM === 'macos' ? 'forchetta open' : 'forchetta open [--print]',
+    about:
+      PLATFORM === 'macos'
+        ? ['Opens the app `forchetta setup` built.']
+        : [
+            'Opens the page in a browser (in WSL, one of Windows: Edge or Chrome, in a window of its own). It starts the',
+            'daemon when it is off. The address has a code good once, for two minutes.',
+          ],
+    ...(PLATFORM === 'macos' ? {} : { options: [{ name: '--print', text: 'Only print the address, to open by hand' }] }),
+    examples: PLATFORM === 'macos' ? ['forchetta open'] : ['forchetta open', 'forchetta open --print'],
   },
   run: {
     summary: 'Start Claude Code in tmux, where Forchetta shows it and sends it commands',
@@ -126,7 +131,7 @@ const COMMANDS: Record<string, CommandHelp> = {
       { name: 'start', text: 'Start the daemon, unless it is running' },
       { name: 'stop', text: 'Stop it: the Claude and tmux sessions go on' },
       { name: 'status', text: 'Whether it runs, for how long and with how many sessions (exit code 1 when not)' },
-      { name: 'keepalive', args: 'on|off', text: 'On a Mac: macOS starts it at login and again if it stops by mistake (a LaunchAgent)' },
+      { name: 'keepalive', args: 'on|off', text: PLATFORM === 'macos' ? 'Let macOS start it at login and again if it stops by mistake (a LaunchAgent)' : 'Only on a Mac, where macOS starts it at login and again if it stops by mistake' },
     ],
   },
   team: {

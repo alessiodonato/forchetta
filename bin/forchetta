@@ -10,7 +10,8 @@ while [ -L "$self" ]; do
 done
 root=$(dirname "$self")/..
 # docs/install.sh puts a Node.js here on a Linux without one (or with an old one): not in the PATH, only for Forchetta.
-if [ -x "$root/../forchetta-node/bin/node" ]; then
+# Never on a Mac.
+if [ ! -d /System/Library/CoreServices ] && [ -x "$root/../forchetta-node/bin/node" ]; then
   exec "$root/../forchetta-node/bin/node" "$root/dist/cli.js" "$@"
 fi
 exec node "$root/dist/cli.js" "$@"

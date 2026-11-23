@@ -133,8 +133,8 @@ async function main(argv: string[]): Promise<number> {
     case 'run':
       return runClaude(rest, io);
     case 'open':
-      checkOptions('open', rest, ['--browser', '--print']);
-      return openCommand({ browser: rest.includes('--browser'), print: rest.includes('--print') }, io);
+      checkOptions('open', rest, ['--print']);
+      return openCommand({ print: rest.includes('--print') }, io);
     case 'ls':
       checkOptions('ls', rest, ['--json']);
       return listSessions(io, { json: rest.includes('--json') });

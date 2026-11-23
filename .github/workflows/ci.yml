@@ -78,3 +78,38 @@ jobs:
       # No hook is written: without --yes, and with no terminal, the setup only checks and shows.
       - name: The setup finds everything
         run: bin/forchetta setup --no-restart
+
+      - name: The page opens with a code, good once, only at its own address
+        run: |
+          url=$(bin/forchetta open --print)
+          code=${url##*#open=}
+          trade() { curl -fsS -H "Origin: $1" -H 'Content-Type: application/json' -d "{\"code\":\"$code\"}" http://127.0.0.1:47821/open; }
+          if trade http://localhost:47821; then echo "localhost is for WSL only"; exit 1; fi
+          trade http://127.0.0.1:47821 | grep -q token
+          if trade http://127.0.0.1:47821; then echo "the code was good twice"; exit 1; fi
+          bin/forchetta doctor | grep -v 'Claude Code'
+          bin/forchetta daemon stop
+
+      # The archive of Linux, installed as a person would. The binary of arm64 is not compiled here: the other one, only to pack.
+      - name: The archive of Linux installs, with nothing of a Mac in it
+        run: |
+          for arch in x64 arm64; do
+            mkdir -p "build/node-pty-linux/linux-$arch"
+            cp node_modules/node-pty/build/Release/pty.node "build/node-pty-linux/linux-$arch/"
+          done
+          sh scripts/package-linux.sh
+          version=$(node -p "require('./package.json').version")
+          archive="forchetta-$version-linux.tar.gz"
+          if tar -tzf "build/release/$archive" | grep -E 'darwin|native/|\.swift|build-app'; then exit 1; fi
+          mkdir -p "$RUNNER_TEMP/releases/download/v$version" "$RUNNER_TEMP/home"
+          cp "build/release/$archive" "build/release/$archive.sha256" "$RUNNER_TEMP/releases/download/v$version/"
+          export HOME="$RUNNER_TEMP/home" FORCHETTA_RELEASES="file://$RUNNER_TEMP/releases" FORCHETTA_PROTO==file FORCHETTA_VERSION="$version" FORCHETTA_NO_SETUP=1
+          sh docs/install.sh
+          forchetta="$HOME/.local/bin/forchetta"
+          test "$("$forchetta" --version)" = "$version"
+          "$forchetta" setup --yes
+          grep -q "$HOME/.local/lib/forchetta/bin/forchetta-hook" "$HOME/.claude/settings.json"
+          "$forchetta" open --print | grep -q '^http://127.0.0.1:47821/#open='
+          test -S "$HOME/.local/share/forchetta/hooks.sock"
+          test ! -e "$HOME/Library"
+          "$forchetta" daemon stop

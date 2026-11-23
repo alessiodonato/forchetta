@@ -12,7 +12,7 @@ import { openLink } from './Artifacts.tsx';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { TALK_TEXT } from './NewTeam.tsx';
 import { useReturnFocus } from './focus.ts';
-import { keyText } from './platform.ts';
+import { CHOOSE_FOLDER, keyText } from './platform.ts';
 import { canOpen, type Store } from './store.ts';
 import {
   addNode,
@@ -754,7 +754,7 @@ function ImportTeam({ store }: { store: Store }) {
     <>
       <p class="studio-title">Open a team from its file</p>
       <p class="studio-hint">
-        Drop the file of a team (<code>.forchetta-team.json</code>) anywhere on the studio, or paste its text here. It opens on the canvas, in place of what is there; {keyText('⌘Z')} brings that back. Skills of GitHub it needs are added; skills that were a folder of the other computer are left out.
+        Drop the file of a team (<code>.forchetta-team.json</code>) anywhere on the studio, or paste its text here. It opens on the canvas, in place of what is there; {keyText('⌘Z')} brings that back. Skills of GitHub it needs are added; skills that were a folder of the other {MACHINE} are left out.
       </p>
       <Text label="Its text" area value={text} max={512 * 1024} placeholder='{ "kind": "forchetta-team", … }' onInput={setText} mono />
       <div class="studio-actions">
@@ -799,7 +799,7 @@ function AddSkill({ store, onChoose, onAdded }: { store: Store; onChoose?: (curr
             onKeyDown={(event) => event.key === 'Enter' && add()}
           />
           {onChoose && (
-            <button type="button" title="Choose the folder of a skill" onClick={() => onChoose(source.startsWith('/') || source.startsWith('~') ? source : '', setSource)}>
+            <button type="button" title={CHOOSE_FOLDER.replace('folder', 'folder of a skill')} onClick={() => onChoose(source.startsWith('/') || source.startsWith('~') ? source : '', setSource)}>
               Choose…
             </button>
           )}
@@ -2418,7 +2418,7 @@ export function Studio({
                   spellcheck={false}
                   onInput={(event) => setDoc({ ...doc, folder: (event.target as HTMLInputElement).value })}
                 />
-                <button type="button" title="Choose the folder" onClick={() => chooseFolder(doc.folder)}>
+                <button type="button" title={CHOOSE_FOLDER} onClick={() => chooseFolder(doc.folder)}>
                   Choose…
                 </button>
               </div>

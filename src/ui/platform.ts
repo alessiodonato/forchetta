@@ -5,6 +5,9 @@ const name = typeof navigator === 'undefined' ? 'Mac' : navigator.platform || ''
 
 export const IS_MAC = /^(?:Mac|iPhone|iPad)/i.test(name);
 
+/** The title of the buttons that choose a folder: the panel of macOS, or the one of the page. */
+export const CHOOSE_FOLDER = IS_MAC ? 'Choose the folder in the panel of macOS' : 'Choose the folder';
+
 /** The key of the shortcuts and of the clicks on links: ⌘ on a Mac, Ctrl elsewhere. */
 export const commandKey = (event: { metaKey: boolean; ctrlKey: boolean }, mac = IS_MAC): boolean => (mac ? event.metaKey : event.ctrlKey);
 

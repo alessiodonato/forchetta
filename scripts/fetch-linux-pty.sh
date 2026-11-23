@@ -1,6 +1,6 @@
 #!/bin/sh
 # Downloads the binaries of node-pty for Linux that CI compiled (the workflow "node-pty for Linux"), for
-# package-release.sh: node-pty comes with those for a Mac and for Windows, not for Linux. Needed again only when the
+# package-linux.sh: node-pty comes with those for a Mac and for Windows, not for Linux. Needed again only when the
 # version of node-pty in package.json changes.
 set -eu
 SRC=$(cd "$(dirname "$0")/.." && pwd)

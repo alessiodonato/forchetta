@@ -5,8 +5,12 @@ import { connectAttention } from './attention.ts';
 import { browserShell } from './browser-shell.ts';
 import { Connection, shell } from './connection.ts';
 import { setHidden } from './motion.ts';
+import { IS_MAC } from './platform.ts';
 import { Store } from './store.ts';
 import { applyTheme, savedTheme } from './theme.ts';
+
+// The fonts of Windows and Linux, only there (styles.css).
+if (!IS_MAC) document.documentElement.dataset.os = 'other';
 
 // The theme before the first render: no flash of the dark one on a light choice.
 applyTheme(savedTheme(), false);
@@ -26,8 +30,8 @@ if (!shell()) {
   document.addEventListener('visibilitychange', () => window.forchettaVisibility?.(document.visibilityState === 'visible'));
 }
 
-// The demo has notices of its own (it sets __FORCHETTA__, and no app is around it).
-connectAttention(store, shell() ? (message) => shell()?.postMessage(message) : window.__FORCHETTA__ ? undefined : browserShell());
+// On a Mac the app shows them; the demo has notices of its own (it sets __FORCHETTA__, and no app is around it).
+connectAttention(store, shell() ? (message) => shell()?.postMessage(message) : IS_MAC || window.__FORCHETTA__ ? undefined : browserShell());
 
 render(<App store={store} />, document.getElementById('app')!);
 connection.start();

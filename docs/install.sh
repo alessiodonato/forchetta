@@ -89,13 +89,13 @@ main() {
     '' | *[!0-9.]*) fail "the last version of Forchetta was not found" "see $RELEASES" ;;
   esac
   say "Forchetta $version, for linux-$ARCH…"
-  get "$RELEASES/download/v$version/forchetta-$version.tar.gz" "$WORK/forchetta.tar.gz" || fail "Forchetta $version could not be downloaded" "see $RELEASES"
-  get "$RELEASES/download/v$version/forchetta-$version.tar.gz.sha256" "$WORK/forchetta.sha256" || fail "the checksum of Forchetta $version could not be downloaded"
+  get "$RELEASES/download/v$version/forchetta-$version-linux.tar.gz" "$WORK/forchetta.tar.gz" || fail "Forchetta $version for Linux could not be downloaded" "see $RELEASES"
+  get "$RELEASES/download/v$version/forchetta-$version-linux.tar.gz.sha256" "$WORK/forchetta.sha256" || fail "the checksum of Forchetta $version could not be downloaded"
   want=$(cut -d' ' -f1 "$WORK/forchetta.sha256")
   [ "$(sha256 "$WORK/forchetta.tar.gz")" = "$want" ] || fail "the download is not the one of the release: nothing was installed"
   mkdir -p "$WORK/app"
   tar -xzf "$WORK/forchetta.tar.gz" -C "$WORK/app" --strip-components 1
-  [ -f "$WORK/app/node_modules/node-pty/prebuilds/linux-$ARCH/pty.node" ] || fail "Forchetta $version runs only on a Mac" "the next versions run on linux-$ARCH too: see $RELEASES"
+  [ -f "$WORK/app/node_modules/node-pty/prebuilds/linux-$ARCH/pty.node" ] || fail "Forchetta $version has no terminals for linux-$ARCH" "see $RELEASES"
 
   install_node
   mkdir -p "$(dirname "$LIB")" "$BIN"

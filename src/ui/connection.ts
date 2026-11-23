@@ -1,3 +1,4 @@
+import { IS_MAC } from './platform.ts';
 import type { Store } from './store.ts';
 
 // The WebSocket to the daemon. The token comes from the app (it reads var/daemon.json and puts it in the page
@@ -80,6 +81,8 @@ export class Connection {
     this.use(window.__FORCHETTA__?.token ?? tokenFromHash());
     if (this.token) return this.open();
     if (shell()) return this.askShell();
+    // On a Mac there are no codes, and nothing is kept: the app gives the token, or the address for development.
+    if (IS_MAC) return;
     const code = openCodeIn(location.hash);
     if (!code) {
       this.use(keptToken());
@@ -153,7 +156,7 @@ export class Connection {
     socket.onclose = () => {
       this.store.setConnected(false);
       // Refused, or nobody there: in a browser, only `forchetta open` can help.
-      if (!opened && !shell()) this.store.setNeedsOpen(true);
+      if (!opened && !shell() && !IS_MAC) this.store.setNeedsOpen(true);
       if (!opened) this.askShell();
       const delay = Math.min(10_000, 1000 * 2 ** this.attempts++);
       this.retry = setTimeout(() => this.open(), delay);

@@ -7,7 +7,7 @@ import { Palette, type PaletteCommand, ShortcutsSheet } from './Palette.tsx';
 import { CopyCommand, MANUAL, SettingsPanel, SetupChecks } from './Settings.tsx';
 import { openLink } from './Artifacts.tsx';
 import { applyTheme, resolvedTheme } from './theme.ts';
-import { IS_MAC, keyText } from './platform.ts';
+import { keyText } from './platform.ts';
 import { FolderPicker } from './FolderPicker.tsx';
 import { setTerminalFontSize, terminalFontSize } from './prefs.ts';
 import { PROTOCOL } from '../shared/system.ts';
@@ -563,7 +563,7 @@ export function App({ store }: { store: Store }) {
         <div class="empty">
           <p>This page is not connected to Forchetta.</p>
           <p class="hint">
-            Open it from a terminal{IS_MAC ? '' : ' (of Linux, or of WSL)'}: <CopyCommand command="forchetta open" />
+            Open it from a terminal (of Linux, or of WSL): <CopyCommand command="forchetta open" />
           </p>
         </div>
       ) : !state.ready ? (

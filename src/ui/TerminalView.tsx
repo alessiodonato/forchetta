@@ -20,7 +20,7 @@ import { onTerminalFontSize, terminalFontSize } from './prefs.ts';
 
 // Apple Symbols draws ⏺ and the other symbols of Claude Code as text, one cell wide: without it WebKit falls back
 // to the color emoji, two cells wide over the next letter.
-const FALLBACK_FONTS = 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", "Cascadia Mono", Consolas, "Segoe UI Symbol", monospace';
+const FALLBACK_FONTS = IS_MAC ? 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", monospace' : '"Cascadia Mono", Consolas, "Segoe UI Symbol", ui-monospace, monospace';
 const FONTS = `"JetBrains Mono", ${FALLBACK_FONTS}`;
 
 /**

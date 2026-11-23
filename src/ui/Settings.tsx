@@ -150,7 +150,7 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
   return (
     <section ref={panel} class="broadcast settings-panel" aria-label="Settings" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
       {!system ? (
-        <p class="broadcast-note">This daemon is older than the page: restart it to change the settings here (forchetta daemon stop, then forchetta open).</p>
+        <p class="broadcast-note">This daemon is older than the page: restart it to change the settings here (forchetta daemon stop, then {IS_MAC ? 'open the app' : 'forchetta open'}).</p>
       ) : (
         <>
           {system.checks.some((check) => !check.ok) && (
@@ -249,7 +249,7 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
             </button>
           ))}
         </div>
-        {!shell() && notifications !== 'unsupported' && (
+        {!IS_MAC && !shell() && notifications !== 'unsupported' && (
           <div class="setting-row">
             <span>Notifications when a session waits for you</span>
             {notifications === 'default' ? (

@@ -16,7 +16,7 @@ import { MACHINE } from '../shared/machine.ts';
 import { crewUsage, usdText } from '../shared/present.ts';
 import { lastPart, recentFolders } from './NewSession.tsx';
 import { useReturnFocus } from './focus.ts';
-import { keyText } from './platform.ts';
+import { CHOOSE_FOLDER, keyText } from './platform.ts';
 import type { Store } from './store.ts';
 
 // The panel "auto": the teams that start by themselves (shared/automation.ts). On top, one chip for each and "+ new";
@@ -187,7 +187,7 @@ function AutoForm({ auto, agents, store, onDone }: { auto?: AutomationView; agen
           Folder
         </label>
         <input id="auto-folder" class="command-input mono" type="text" value={draft.cwd} placeholder="~/projects/app" spellcheck={false} onInput={(event) => put({ cwd: (event.target as HTMLInputElement).value })} />
-        <button type="button" title="Choose the folder" onClick={() => store.chooseFolder(draft.cwd)}>
+        <button type="button" title={CHOOSE_FOLDER} onClick={() => store.chooseFolder(draft.cwd)}>
           Choose…
         </button>
       </div>

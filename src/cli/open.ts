@@ -11,15 +11,12 @@ import { code } from './help.ts';
 import type { RunIO } from './run.ts';
 import { tildify } from './style.ts';
 
-// `forchetta open`: the window of Forchetta. On a Mac the app, when it is installed; on Linux, and in WSL, the page
-// in a browser, which gets the token of the daemon for a code good once (daemon/open-codes.ts). In WSL the browser is
+// `forchetta open`: the window of Forchetta. On a Mac the app; on Linux, and in WSL, the page in a browser, which gets the token of the daemon for a code good once (daemon/open-codes.ts). In WSL the browser is
 // one of Windows: Edge or Chrome as a window of its own (--app), where the shortcuts are not those of the browser;
 // else the default one. It reaches the daemon on localhost, which WSL2 forwards.
 
 export interface OpenOptions {
-  /** The browser, also on a Mac with the app. */
-  browser: boolean;
-  /** Only print the address. */
+  /** Only print the address (not on a Mac, where the app has no need of one). */
   print: boolean;
 }
 
@@ -50,7 +47,6 @@ export function openerOf(
   exists: (path: string) => boolean = existsSync,
   find: (name: string) => string | undefined = (name) => which(name),
 ): { file: string; args: string[] } | undefined {
-  if (platform === 'macos') return { file: '/usr/bin/open', args: [url] };
   if (platform === 'wsl') {
     const browser = WINDOWS_BROWSERS.find(exists);
     if (browser) return { file: browser, args: [`--app=${url}`] };
@@ -81,8 +77,10 @@ function start(file: string, args: readonly string[]): Promise<boolean> {
 
 export async function openCommand(options: OpenOptions, io: RunIO): Promise<number> {
   const s = io.style;
-  const app = PLATFORM === 'macos' && !options.browser && !options.print ? macApp() : undefined;
-  if (app) {
+  if (PLATFORM === 'macos') {
+    if (options.print) throw new UserError('--print is for Linux and WSL, where the page opens in a browser', 'on a Mac `forchetta open` opens the app');
+    const app = macApp();
+    if (!app) throw new UserError('the app is not there', 'build it with `forchetta setup`');
     if (!(await start('/usr/bin/open', [app]))) throw new UserError(`${tildify(app)} did not open`);
     io.stdout(`${s.mark('✓', 'green', `Forchetta opens ${s.dim(`· ${tildify(app)}`)}`)}\n`);
     return 0;

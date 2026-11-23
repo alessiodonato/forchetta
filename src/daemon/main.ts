@@ -540,6 +540,7 @@ function main(): void {
   hub = new Hub({
     token,
     port: () => config.port,
+    localhost: PLATFORM === 'wsl',
     snapshot: () => registry.list(),
     settings: () => ({ replace: config.panes.replace, arricurdaiNotes: notesSupported, stallMin: config.stallMin }),
     system: () =>
@@ -654,8 +655,8 @@ function main(): void {
     },
     roles: () => roles.list(),
     onRole: (message) => (message.type === 'deleteRolePreset' ? roles.delete(message.name) : roles.save(message.preset, message.previous)),
-    onChooseFolder: (folder) => folderChooser.choose(folder),
-    onListFolders: (folder) => listFolders(folder),
+    // The panel of macOS on a Mac; elsewhere the page has its own (ui/FolderPicker.tsx).
+    ...(PLATFORM === 'macos' ? { onChooseFolder: (folder?: string) => folderChooser.choose(folder) } : { onListFolders: (folder?: string) => listFolders(folder) }),
     customSkills: () => yourSkills.list(),
     crewTemplate: (crewId) => {
       const crew = crews.get(crewId);
@@ -822,7 +823,7 @@ function main(): void {
     // A run of an automation is over: the next one need not wait for the next tick.
     if (crew.auto) setTimeout(() => void automations?.tick(), 1000);
   };
-  const terminals = new Terminals({ token, port: () => config.port, registry, tmux, log });
+  const terminals = new Terminals({ token, port: () => config.port, localhost: PLATFORM === 'wsl', registry, tmux, log });
   commander = new Commander({ registry, tmux, log, notes, onRequest: (_agent, command) => crews.commandChanged(command) });
   const queue = commander;
   crews.enqueue = (agentId, text, link) => queue.enqueueRequest(agentId, text, link);
@@ -877,7 +878,8 @@ function main(): void {
   const server = createDaemonServer({
     registry,
     token,
-    openCodes: new OpenCodes(),
+    // On a Mac the app has the token: no codes, no page at localhost.
+    ...(PLATFORM === 'macos' ? {} : { browser: { codes: new OpenCodes(), localhost: PLATFORM === 'wsl' } }),
     uiDir: join(ROOT, 'dist', 'ui'),
     hub,
     terminals,

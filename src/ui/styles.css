@@ -20,8 +20,8 @@
   --claude-soft: rgba(217, 119, 87, 0.16);
   --green: #46c48a;
   --red: #ef5b5b;
-  --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, 'Helvetica Neue', sans-serif;
-  --mono: ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', Consolas, monospace;
+  --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
   --radius: 12px;
   /* A neutral drawn over the surfaces, as r, g, b: light on the dark theme, dark on the light one. */
   --tint: 232, 233, 235;
@@ -30,6 +30,12 @@
   --diff-del: rgba(0, 0, 0, 0.3);
   --shadow: rgba(0, 0, 0, 0.45);
   --backdrop: rgba(0, 0, 0, 0.45);
+}
+
+/* Off a Mac (main.tsx says so): the fonts of Windows, and of Linux. */
+:root[data-os='other'] {
+  --ui: 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
 }
 
 /* The light theme (Settings, or the system with "system"): the same warm colors on paper. Amber, Claude orange and
@@ -1602,8 +1608,8 @@ html[data-hidden] *::after {
   color: var(--text-3);
 }
 
-/* The buttons of the panels; also those of the folder picker, of the checklist and of the commands to copy. */
-:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button {
+/* The buttons of the panels, and those of the folder picker. */
+:is(.broadcast, .folder-picker) button {
   -webkit-appearance: none;
   appearance: none;
   padding: 3px 10px;
@@ -1615,11 +1621,11 @@ html[data-hidden] *::after {
   cursor: pointer;
 }
 
-:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button:hover:not(:disabled) {
+:is(.broadcast, .folder-picker) button:hover:not(:disabled) {
   color: var(--text);
 }
 
-:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button:disabled {
+:is(.broadcast, .folder-picker) button:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -1630,14 +1636,14 @@ html[data-hidden] *::after {
   color: var(--text);
 }
 
-:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button.primary {
+:is(.broadcast, .folder-picker) button.primary {
   border-color: var(--claude-strong);
   background: var(--claude-strong);
   font-weight: 600;
   color: #fff;
 }
 
-:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button.primary:hover:not(:disabled) {
+:is(.broadcast, .folder-picker) button.primary:hover:not(:disabled) {
   border-color: var(--claude);
   background: var(--claude);
   color: #fff;
@@ -1648,7 +1654,7 @@ html[data-hidden] *::after {
   color: var(--red);
 }
 
-:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button.quiet {
+:is(.broadcast, .folder-picker) button.quiet {
   border-color: transparent;
   background: transparent;
   color: var(--text-3);

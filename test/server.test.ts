@@ -24,7 +24,7 @@ beforeAll(async () => {
     log: () => {},
     info: () => ({ pid: 1 }),
     onShutdown: () => shutdowns++,
-    openCodes: new OpenCodes(),
+    browser: { codes: new OpenCodes(), localhost: true },
     guard: (agent, payload) => (payload.tool_name === 'Edit' ? { decided: agent.sessionId } : undefined),
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -123,7 +123,7 @@ describe('api', () => {
     expect((await http(port, { path: '/api/agents', headers: auth })).status).toBe(200);
   });
 
-  it('accepts its own origin only', async () => {
+  it('accepts its own origin only, at localhost too in WSL', async () => {
     expect((await http(port, { path: '/api/health', headers: { ...auth, origin: 'https://evil.example' } })).status).toBe(403);
     expect((await http(port, { path: '/api/health', headers: { ...auth, origin: `http://127.0.0.1:${port}` } })).status).toBe(200);
     // localhost too: how a browser of Windows reaches a daemon inside WSL2. Not another port of it.

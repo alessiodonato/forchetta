@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import { shell } from './connection.ts';
 import { useReturnFocus } from './focus.ts';
-import { keyText } from './platform.ts';
+import { CHOOSE_FOLDER, keyText } from './platform.ts';
 import type { Store } from './store.ts';
 
 // A new session from the app: a folder and, if you want, a first prompt, a model, a permission mode and a new git
@@ -92,7 +92,7 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
           onInput={(event) => setFolder((event.target as HTMLInputElement).value)}
           onKeyDown={(event) => event.key === 'Enter' && start()}
         />
-        <button type="button" title="Choose the folder" onClick={() => store.chooseFolder(folder)}>
+        <button type="button" title={CHOOSE_FOLDER} onClick={() => store.chooseFolder(folder)}>
           Choose…
         </button>
       </div>

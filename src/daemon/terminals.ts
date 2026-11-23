@@ -18,6 +18,8 @@ import type { Registry } from './registry.ts';
 export interface TerminalsOptions {
   token: string;
   port: () => number;
+  /** The page may be at localhost too: in WSL (daemon/origin.ts). */
+  localhost?: boolean;
   registry: Registry;
   tmux: Tmux;
   log: (message: string, level?: 'info' | 'warn' | 'error') => void;
@@ -77,7 +79,7 @@ export class Terminals {
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
     const port = this.options.port();
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    if (!isLocalHost(req.headers.host, port) || !isOwnOrigin(req.headers.origin, port) || !sameToken(url.searchParams.get('token'), this.options.token)) {
+    if (!isLocalHost(req.headers.host, port) || !isOwnOrigin(req.headers.origin, port, this.options.localhost) || !sameToken(url.searchParams.get('token'), this.options.token)) {
       return this.refuse(socket, '403 Forbidden');
     }
     const agent = this.options.registry.agents.get(url.searchParams.get('agent') ?? '');

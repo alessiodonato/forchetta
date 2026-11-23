@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { ROOT } from '../src/shared/paths.ts';
@@ -30,9 +30,9 @@ function scene(options: { arch?: string; node?: string; tmux?: boolean; prebuild
   program('node', `echo ${options.node ?? '22'}`);
   writeFileSync(join(app, 'bin', 'forchetta'), '#!/bin/sh\necho forchetta "$@"\n', { mode: 0o755 });
   if (options.prebuild !== false) writeFileSync(join(app, 'node_modules', 'node-pty', 'prebuilds', 'linux-x64', 'pty.node'), 'binary');
-  const tar = join(release, 'forchetta-9.9.9.tar.gz');
+  const tar = join(release, 'forchetta-9.9.9-linux.tar.gz');
   execFileSync('tar', ['-czf', tar, '-C', dir, 'forchetta-9.9.9'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
-  writeFileSync(`${tar}.sha256`, `${options.checksum ?? sha(tar)}  forchetta-9.9.9.tar.gz\n`);
+  writeFileSync(`${tar}.sha256`, `${options.checksum ?? sha(tar)}  forchetta-9.9.9-linux.tar.gz\n`);
   const run = (extra: NodeJS.ProcessEnv = {}) => {
     const result = spawnSync('/bin/sh', [SCRIPT], {
       encoding: 'utf8',
@@ -83,8 +83,13 @@ describe('docs/install.sh', () => {
     const changed = scene({ checksum: 'f'.repeat(64) });
     expect(changed.run()).toMatchObject({ code: 1, err: expect.stringContaining('not the one of the release') });
     expect(existsSync(join(changed.home, '.local'))).toBe(false);
-    const macOnly = scene({ prebuild: false });
-    expect(macOnly.run()).toMatchObject({ code: 1, err: expect.stringContaining('runs only on a Mac') });
+    const without = scene({ prebuild: false });
+    expect(without.run()).toMatchObject({ code: 1, err: expect.stringContaining('no terminals for linux-x64') });
+    expect(existsSync(join(without.home, '.local'))).toBe(false);
+    // A release of a Mac alone, as those before Linux: its archive is not taken for this one.
+    const macOnly = scene();
+    renameSync(macOnly.tar, join(macOnly.release, 'forchetta-9.9.9.tar.gz'));
+    expect(macOnly.run()).toMatchObject({ code: 1, err: expect.stringContaining('for Linux could not be downloaded') });
     expect(existsSync(join(macOnly.home, '.local'))).toBe(false);
     expect(scene({ arch: 'riscv64' }).run()).toMatchObject({ code: 1, err: expect.stringContaining('riscv64') });
     expect(scene().run({ FORCHETTA_VERSION: '9.9.9/../evil' })).toMatchObject({ code: 1, err: expect.stringContaining('was not found') });

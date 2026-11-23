@@ -5,7 +5,7 @@ import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMB
 import { teamChecks } from '../shared/team-checks.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { useReturnFocus } from './focus.ts';
-import { keyText } from './platform.ts';
+import { CHOOSE_FOLDER, keyText } from './platform.ts';
 import type { Store } from './store.ts';
 
 // A new team of agents (shared/crew.ts): a name, a folder, a lead (Claude or you) and its members. For each member
@@ -351,7 +351,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
           Folder
         </label>
         <input id="new-team-folder" class="command-input mono" type="text" value={folder} placeholder="~/projects/app" spellcheck={false} onInput={(event) => setFolder((event.target as HTMLInputElement).value)} />
-        <button type="button" title="Choose the folder" onClick={() => store.chooseFolder(folder)}>
+        <button type="button" title={CHOOSE_FOLDER} onClick={() => store.chooseFolder(folder)}>
           Choose…
         </button>
       </div>

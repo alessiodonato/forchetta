@@ -762,7 +762,7 @@ Read them again before you write code that relies on them.</code></pre>
           <thead><tr><th>Command</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td><code>forchetta setup</code></td><td>Builds the app and installs the hooks; a daemon of an older version starts again on this one (<code>--no-restart</code> leaves it). <code>--yes</code> without asking, <code>--diff</code> shows the whole diff, <code>--force</code> builds again, <code>--app-dir &lt;folder&gt;</code> puts the app elsewhere.</td></tr>
-            <tr><td><code>forchetta open</code></td><td>Opens the app; on Linux and in WSL, the page in a browser (see <a href="#windows">Windows and Linux</a>). <code>--browser</code> the page on a Mac too, <code>--print</code> only its address.</td></tr>
+            <tr><td><code>forchetta open</code></td><td>Opens the app; on Linux and in WSL, the page in a browser (see <a href="#windows">Windows and Linux</a>), and there <code>--print</code> gives only its address.</td></tr>
             <tr><td><code>forchetta run claude [args]</code></td><td>Starts Claude Code in the tmux of Forchetta and attaches this terminal.</td></tr>
             <tr><td><code>forchetta ls</code></td><td>One line per session: state, what it does, context and cache, <code>tmux</code> or read only.</td></tr>
             <tr><td><code>forchetta ls --json</code></td><td>The same as JSON, for scripts: <code>forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'</code></td></tr>

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cleanTemplate, type CrewTemplate } from '../shared/crew.ts';
+import { MACHINE } from '../shared/machine.ts';
 import { skillById } from '../shared/skills.ts';
 import { parseTeamFile, skillsOfTemplate, TEAM_FILE_MAX, teamFileName, withoutSkills } from '../shared/team-file.ts';
 
@@ -54,7 +55,7 @@ export async function importTeam(
     const source = toFetch.find((skill) => skill.id === id);
     if (!source) {
       gone.add(id);
-      notes.push(`${id} is left out: it was a skill from a folder of the computer the team comes from`);
+      notes.push(`${id} is left out: it was a skill from a folder of the ${MACHINE} the team comes from`);
       continue;
     }
     if (choice === 'skip') {

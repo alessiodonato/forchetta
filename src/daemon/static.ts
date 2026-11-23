@@ -14,7 +14,8 @@ const TYPES: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
-export function contentSecurityPolicy(port: number): string {
+/** With `browser` (Linux, WSL) the page also trades its code at /open, and in WSL it may be at localhost. */
+export function contentSecurityPolicy(port: number, browser?: { localhost: boolean }): string {
   return [
     "default-src 'none'",
     "script-src 'self'",
@@ -23,8 +24,7 @@ export function contentSecurityPolicy(port: number): string {
     "img-src 'self' data:",
     // The font of the terminals, from dist/ui/fonts.
     "font-src 'self'",
-    // This daemon: its WebSockets (at localhost too, as a browser of Windows reaches one inside WSL2) and /open.
-    `connect-src 'self' ws://127.0.0.1:${port} ws://localhost:${port}`,
+    `connect-src ${browser ? "'self' " : ''}ws://127.0.0.1:${port}${browser?.localhost ? ` ws://localhost:${port}` : ''}`,
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
@@ -32,7 +32,7 @@ export function contentSecurityPolicy(port: number): string {
 }
 
 /** Serves a file of the page. Returns false when the path is not one of them. */
-export function serveStatic(uiDir: string, pathname: string, port: number, res: ServerResponse): boolean {
+export function serveStatic(uiDir: string, pathname: string, port: number, res: ServerResponse, browser?: { localhost: boolean }): boolean {
   const name = pathname === '/' ? 'index.html' : pathname.slice(1);
   if (!name || name.includes('\0')) return false;
   const root = resolve(uiDir);
@@ -46,7 +46,7 @@ export function serveStatic(uiDir: string, pathname: string, port: number, res: 
     'Content-Length': body.length,
     'Cache-Control': 'no-cache',
     'X-Content-Type-Options': 'nosniff',
-    ...(type.startsWith('text/html') ? { 'Content-Security-Policy': contentSecurityPolicy(port), 'Referrer-Policy': 'no-referrer' } : {}),
+    ...(type.startsWith('text/html') ? { 'Content-Security-Policy': contentSecurityPolicy(port, browser), 'Referrer-Policy': 'no-referrer' } : {}),
   });
   res.end(body);
   return true;

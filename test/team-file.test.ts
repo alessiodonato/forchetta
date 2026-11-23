@@ -4,6 +4,7 @@ import { importTeam, saveTeamFile } from '../src/daemon/team-files.ts';
 import { BUILTIN_TEMPLATES, type CrewTemplate } from '../src/shared/crew.ts';
 import { setCustomSkills, type SkillInfo } from '../src/shared/skills.ts';
 import { parseTeamFile, teamFileName, teamFileOf, withoutSkills } from '../src/shared/team-file.ts';
+import { MACHINE } from '../src/shared/machine.ts';
 import { tempDir } from './helpers.ts';
 
 // A team as a file, to give to someone else, and opened again on another Mac.
@@ -79,7 +80,7 @@ describe('a team as a file', () => {
     expect(opened).toMatchObject({
       ok: true,
       template: { name: 'Docs crew', rules: 'Plain English.', notes: [{ x: 10, y: 10, text: 'For the release notes.' }], lead: { skills: ['brainstorming', 'release-notes'] }, members: [{ name: 'writer', skills: ['pdf'] }] },
-      notes: [`added the skill release-notes, from someone/skills at aaaaaaa`, 'house-style is left out: it was a skill from a folder of the computer the team comes from'],
+      notes: [`added the skill release-notes, from someone/skills at aaaaaaa`, `house-style is left out: it was a skill from a folder of the ${MACHINE} the team comes from`],
     });
     expect((opened as { template: CrewTemplate }).template.builtin).toBeUndefined();
     // A fetch that fails leaves the skill out too, and says why.

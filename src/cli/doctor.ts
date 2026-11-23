@@ -85,9 +85,8 @@ function toolVersion(file: string | undefined, args: string[]): string | undefin
   return result.status === 0 ? `${result.stdout}${result.stderr}`.trim().split('\n')[0] : undefined;
 }
 
-/** "macOS 14.6", "Ubuntu 24.04.1 LTS (WSL, 5.15.153.1-microsoft-standard-WSL2)". */
+/** The Linux this is: "Ubuntu 24.04.1 LTS (WSL, 5.15.153.1-microsoft-standard-WSL2)". */
 export function osName(platform = PLATFORM, kernel = release()): string {
-  if (platform === 'macos') return `macOS ${toolVersion('/usr/bin/sw_vers', ['-productVersion']) ?? kernel}`;
   let name = 'Linux';
   try {
     name = /^PRETTY_NAME="?([^"\n]+)"?$/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1] ?? name;
@@ -198,7 +197,7 @@ export async function doctorCommand(args: readonly string[], io: RunIO): Promise
     const folder = join(dir, `forchetta-doctor-${stamp}`);
     try {
       mkdirSync(folder, { recursive: true });
-      const report = { forchetta: VERSION, node, os: osName(), tmux: toolVersion(system.checks.find((check) => check.id === 'tmux')?.ok ? (loadConfig().paths.tmux ?? which('tmux')) : undefined, ['-V']), findings, features: system.features, claude: system.claude };
+      const report = { forchetta: VERSION, node, ...(PLATFORM === 'macos' ? { macos: toolVersion('/usr/bin/sw_vers', ['-productVersion']) ?? release() } : { os: osName() }), tmux: toolVersion(system.checks.find((check) => check.id === 'tmux')?.ok ? (loadConfig().paths.tmux ?? which('tmux')) : undefined, ['-V']), findings, features: system.features, claude: system.claude };
       writeFileSync(join(folder, 'doctor.json'), scrub(`${JSON.stringify(report, null, 2)}\n`));
       writeFileSync(join(folder, 'daemon.log'), scrub(readLog().split('\n').slice(-3000).join('\n')));
       writeFileSync(join(folder, 'config.json'), scrub(`${JSON.stringify(loadConfig(), null, 2)}\n`));

@@ -172,6 +172,8 @@ export type ClientMessage =
 export interface HubOptions {
   token: string;
   port: () => number;
+  /** The page may be at localhost too: in WSL (daemon/origin.ts). */
+  localhost?: boolean;
   snapshot: () => Agent[];
   settings?: () => UiSettings;
   /** A drag in a pane: its start, and at its end the text tmux copied, if any. */
@@ -287,7 +289,7 @@ export class Hub {
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
     const port = this.options.port();
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    if (url.pathname !== '/ws' || !isLocalHost(req.headers.host, port) || !isOwnOrigin(req.headers.origin, port) || !sameToken(url.searchParams.get('token'), this.options.token)) {
+    if (url.pathname !== '/ws' || !isLocalHost(req.headers.host, port) || !isOwnOrigin(req.headers.origin, port, this.options.localhost) || !sameToken(url.searchParams.get('token'), this.options.token)) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
       socket.destroy();
       return;

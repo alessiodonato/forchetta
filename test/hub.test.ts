@@ -88,7 +88,7 @@ describe('the page', () => {
     const page = await http(port, { path: '/' });
     expect(page.status).toBe(200);
     expect(page.headers['content-security-policy']).toContain("default-src 'none'");
-    expect(page.headers['content-security-policy']).toContain(`connect-src 'self' ws://127.0.0.1:${port} ws://localhost:${port};`);
+    expect(page.headers['content-security-policy']).toContain(`connect-src ws://127.0.0.1:${port};`);
     expect((await http(port, { path: '/app.js' })).headers['content-type']).toContain('text/javascript');
     expect((await http(port, { path: '/../secret.txt' })).status).toBe(404);
     expect((await http(port, { path: '/%2e%2e/secret.txt' })).status).toBe(404);
@@ -100,8 +100,8 @@ describe('websocket', () => {
   it('refuses a wrong token or another origin', async () => {
     await expect(connect('d'.repeat(64), `http://127.0.0.1:${port}`)).rejects.toThrow(/403/);
     await expect(connect(TOKEN, 'https://evil.example')).rejects.toThrow(/403/);
-    await expect(connect(TOKEN, `http://localhost:${port + 1}`)).rejects.toThrow(/403/);
-    (await connect(TOKEN, `http://localhost:${port}`)).socket.close();
+    // localhost is an origin of its own only in WSL.
+    await expect(connect(TOKEN, `http://localhost:${port}`)).rejects.toThrow(/403/);
   });
 
   it('sends every agent, then the changes of a tick together, then what went away', async () => {
