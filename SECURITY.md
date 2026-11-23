@@ -32,6 +32,19 @@ On Windows, Forchetta runs inside WSL 2, which forwards `localhost` of Windows t
 
 Skills: Forchetta fetches the skills of its catalog at a commit fixed in the catalog. A skill of yours, or one that a team file brings, comes only when you ask for it, at the commit it names; a skill whose folder leaves the repository, or holds symbolic links, is refused.
 
+## What you install on Linux and Windows
+
+The archive for Linux, and for Windows inside WSL 2, is made by GitHub from a commit of this repository (`.github/workflows/linux-archive.yml`), and no file in it comes from the computer of a person. The actions that make it are at a fixed commit, and the packages are those of `pnpm-lock.yaml`, each checked against its hash there; the versions of Node.js 22, of pnpm and of the compiler are those GitHub gives that day. The page and the daemon are built and packed twice, and must come out the same.
+
+Its attestation, signed by GitHub and in a public log, says which commit, tag and workflow it comes from. With the [GitHub CLI](https://cli.github.com) signed in you can check it, and the installer does too:
+
+```sh
+gh attestation verify forchetta-<version>-linux.tar.gz --repo alessiodonato/forchetta \
+  --signer-workflow alessiodonato/forchetta/.github/workflows/linux-release.yml --source-ref refs/tags/v<version>
+```
+
+The `install.sh` of a release has an attestation as well, and holds the checksum of its archive: it takes no other, unless you ask it for another version (`FORCHETTA_VERSION`). The one at forchetta.dev holds none, and takes the checksum from the release. A Node.js it downloads comes from nodejs.org and must be the one its list says.
+
 ## Versions
 
 Fixes go into the latest release. Update with `brew upgrade forchetta`, then `forchetta setup`; on Linux and in WSL, with the installer again.

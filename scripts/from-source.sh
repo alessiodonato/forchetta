@@ -12,7 +12,9 @@ for tool in make c++ python3; do
     exit 1
   fi
 done
-FORCHETTA_NODE_ONLY=1 FORCHETTA_NODE_LIB="$NODE_LIB" sh "$SRC/docs/install.sh"
+# The nodejs of Ubuntu comes without npx.
+if command -v npx >/dev/null 2>&1; then ALWAYS=; else ALWAYS=1; fi
+FORCHETTA_NODE_ONLY=1 FORCHETTA_NODE_ALWAYS=$ALWAYS FORCHETTA_NODE_LIB="$NODE_LIB" sh "$SRC/docs/install.sh"
 if [ -x "$NODE_LIB/bin/node" ]; then
   PATH="$NODE_LIB/bin:$PATH"
   export PATH

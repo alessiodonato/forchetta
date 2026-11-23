@@ -1,0 +1,136 @@
+name: Release for Linux and Windows
+
+# A tag of a version publishes the archive of linux-archive.yml, made from that commit, with an attestation: a statement
+# signed by GitHub, in a public log, of which commit, tag and workflow the files come from (how to check it: SECURITY.md).
+#
+# When there is a release of that tag already (the one of a Mac), the files go in it, never over others; else in a draft,
+# which a person looks at and publishes.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: linux-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Against mistakes: who can push a tag can also push another version of this file. What keeps the tags is a rule of the
+  # repository, and the environment "release" of the last job.
+  check:
+    name: The tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: It is of this version, on a branch that publishes it
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "$GITHUB_REF_NAME" = "v$version"
+          printf '%s\n' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?'
+          branches=origin/main
+          case $version in *-beta.*) branches='origin/main origin/windows' ;; esac
+          for branch in $branches; do
+            if git rev-parse -q --verify "$branch" >/dev/null && git merge-base --is-ancestor "$GITHUB_SHA" "$branch"; then exit 0; fi
+          done
+          echo "$GITHUB_SHA is not in: $branches"
+          exit 1
+
+  test:
+    name: Tests
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install tmux and lsof
+        run: sudo apt-get update && sudo apt-get install -y tmux lsof
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck and tests
+        run: pnpm test
+
+  build:
+    name: Build
+    needs: check
+    uses: ./.github/workflows/linux-archive.yml
+
+  # The only job that can sign and publish. It runs no code of the repository, nor of its packages; it looks at the files
+  # as at something that others may have changed, and runs nothing where they are: gh asks git about the folder it is in,
+  # unless it is told the repository (-R).
+  publish:
+    name: Publish
+    needs: [test, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-archive
+          path: release
+
+      - name: They are the three files that were made, and nothing else
+        env:
+          ARCHIVE: ${{ needs.build.outputs.archive }}
+          INSTALLER: ${{ needs.build.outputs.installer }}
+        run: |
+          name="forchetta-${GITHUB_REF_NAME#v}-linux.tar.gz"
+          test "$(ls -A release)" = "$(printf '%s\n' "$name" "$name.sha256" install.sh)"
+          for file in "release/$name" "release/$name.sha256" release/install.sh; do
+            if [ ! -f "$file" ] || [ -L "$file" ]; then echo "$file is not a file"; exit 1; fi
+          done
+          echo "$ARCHIVE  release/$name" | sha256sum -c
+          echo "$INSTALLER  release/install.sh" | sha256sum -c
+          test "$(cat "release/$name.sha256")" = "$ARCHIVE  $name"
+          grep -qx "PINNED_VERSION=${GITHUB_REF_NAME#v}" release/install.sh
+          grep -qx "PINNED_SHA256=$ARCHIVE" release/install.sh
+
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            release/forchetta-*-linux.tar.gz
+            release/install.sh
+
+      - name: Put them in the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          files=("release/forchetta-$version-linux.tar.gz" "release/forchetta-$version-linux.tar.gz.sha256" release/install.sh)
+          if found=$(gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>&1); then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" -R "$GITHUB_REPOSITORY"
+          elif [ "$found" = 'release not found' ]; then
+            kind=--draft
+            case $version in *-beta.*) kind='--draft --prerelease' ;; esac
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" -R "$GITHUB_REPOSITORY" --verify-tag $kind --title "Forchetta $version" --notes ''
+          else
+            echo "$found"
+            exit 1
+          fi

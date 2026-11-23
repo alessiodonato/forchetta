@@ -1,0 +1,200 @@
+name: Archive for Linux and Windows
+
+# Makes the archive that docs/install.sh installs on Linux, and on Windows inside WSL 2, and tries it. Here and nowhere
+# else: no binary of it comes from the computer of a person. It only reads the repository: linux-release.yml calls it and
+# publishes what it makes, CI calls it to try it. The actions are at a fixed commit, and no cache is used: what comes out
+# runs on the computers of others.
+on:
+  workflow_call:
+    outputs:
+      archive:
+        description: The sha256 of the archive, as the job that packed it read it
+        value: ${{ jobs.archive.outputs.archive }}
+      installer:
+        description: The sha256 of its install.sh
+        value: ${{ jobs.archive.outputs.installer }}
+
+permissions:
+  contents: read
+
+# Said by name, bash stops also when the first command of a pipe fails.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # node-pty ships no binaries for Linux: these are compiled from the version in pnpm-lock.yaml, on the oldest Ubuntu
+  # Forchetta supports (its tmux is 3.2).
+  terminals:
+    name: Terminals for linux-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: x64
+          - os: ubuntu-22.04-arm
+            arch: arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # Compiles node-pty, the only package whose scripts run (pnpm.onlyBuiltDependencies in package.json).
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: It opens a terminal
+        run: |
+          node -e '
+            const pty = require("node-pty").spawn("/bin/echo", ["it works"], {});
+            let out = "";
+            pty.onData((data) => (out += data));
+            pty.onExit(() => process.exit(out.includes("it works") ? 0 : 1));
+          '
+
+      - name: Collect the binary
+        run: |
+          mkdir out
+          cp node_modules/node-pty/build/Release/pty.node out/
+          strip --strip-unneeded out/pty.node
+          # Ubuntu 22.04 has glibc 2.35: nothing newer may be asked for.
+          objdump -T out/pty.node | grep -o 'GLIBC_[0-9.]*' | sort -uV | tee glibc.txt
+          test "$(printf '%s\nGLIBC_2.35\n' "$(tail -n 1 glibc.txt)" | sort -V | tail -n 1)" = GLIBC_2.35
+          sha256sum out/pty.node
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: node-pty-linux-${{ matrix.arch }}
+          path: out/pty.node
+          if-no-files-found: error
+          retention-days: 7
+
+  archive:
+    name: Archive
+    needs: terminals
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      archive: ${{ steps.sums.outputs.archive }}
+      installer: ${{ steps.sums.outputs.installer }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: node-pty-linux-x64
+          path: build/node-pty-linux/linux-x64
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: node-pty-linux-arm64
+          path: build/node-pty-linux/linux-arm64
+
+      - name: Pack
+        run: |
+          pnpm build
+          sh scripts/package-linux.sh
+          cp -R build/release first
+
+      # The page and the daemon built again, and packed: the same bytes. The terminals are those of the job before.
+      - name: Pack again, and compare
+        run: |
+          pnpm build
+          sh scripts/package-linux.sh
+          diff -r first build/release
+
+      - name: Nothing of a Mac is in it, nor of who made it
+        run: |
+          tar -tvzf first/*-linux.tar.gz | tee list.txt
+          test -s list.txt
+          if grep -E 'darwin|native/|\.swift|build-app|\.map$' list.txt; then exit 1; fi
+          # Every file of root, none that others can write.
+          if awk '{ print $1, $2 }' list.txt | grep -v -E '^[d-][rwx-]{4}-[rwx-]{2}-[x-] 0/0$'; then exit 1; fi
+
+      # For who publishes them: the files themselves pass through jobs that could change them.
+      - name: Their checksums
+        id: sums
+        run: |
+          echo "archive=$(sha256sum first/*-linux.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "installer=$(sha256sum first/install.sh | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-archive
+          path: first/
+          if-no-files-found: error
+          retention-days: 7
+
+  # As a person would, from the oldest to the newest Ubuntu and on both processors.
+  install:
+    name: Install on ${{ matrix.os }}
+    needs: archive
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04-arm, ubuntu-26.04]
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-archive
+          path: release
+
+      - name: Install tmux and lsof
+        run: sudo apt-get update && sudo apt-get install -y tmux lsof
+
+      # With no Node.js in the PATH: the installer takes its own, from nodejs.org.
+      - name: Install and open
+        run: |
+          version=$(sed -n 's/^PINNED_VERSION=//p' release/install.sh)
+          test -n "$version"
+          mkdir -p "$RUNNER_TEMP/releases/download/v$version" "$RUNNER_TEMP/home"
+          cp release/forchetta-* "$RUNNER_TEMP/releases/download/v$version/"
+          export HOME="$RUNNER_TEMP/home" PATH=/usr/bin:/bin FORCHETTA_RELEASES="file://$RUNNER_TEMP/releases" FORCHETTA_PROTO='=file,https' FORCHETTA_NO_SETUP=1
+          if command -v node; then echo "there is a Node.js here: this must try without"; exit 1; fi
+          sh release/install.sh
+          forchetta="$HOME/.local/bin/forchetta"
+          test "$("$forchetta" --version)" = "$version"
+          "$forchetta" setup --yes
+          grep -q "$HOME/.local/lib/forchetta/bin/forchetta-hook" "$HOME/.claude/settings.json"
+          "$forchetta" open --print | grep -q '^http://127.0.0.1:47821/#open='
+          test -S "$HOME/.local/share/forchetta/hooks.sock"
+          test ! -e "$HOME/Library"
+          "$forchetta" daemon stop
+
+      - name: A changed archive is refused
+        run: |
+          version=$(sed -n 's/^PINNED_VERSION=//p' release/install.sh)
+          there="$RUNNER_TEMP/releases/download/v$version"
+          # Another archive, whole, and with a checksum of its own next to it: the one in the installer counts.
+          mkdir "$RUNNER_TEMP/changed" "$RUNNER_TEMP/other"
+          tar -xzf "release/forchetta-$version-linux.tar.gz" -C "$RUNNER_TEMP/changed"
+          echo changed >> "$RUNNER_TEMP/changed/forchetta-$version/LICENSE"
+          tar -czf "$there/forchetta-$version-linux.tar.gz" -C "$RUNNER_TEMP/changed" "forchetta-$version"
+          (cd "$there" && sha256sum "forchetta-$version-linux.tar.gz" > "forchetta-$version-linux.tar.gz.sha256")
+          if HOME="$RUNNER_TEMP/other" FORCHETTA_RELEASES="file://$RUNNER_TEMP/releases" FORCHETTA_PROTO='=file,https' FORCHETTA_NO_SETUP=1 sh release/install.sh 2> "$RUNNER_TEMP/refused"; then echo "it was installed"; exit 1; fi
+          cat "$RUNNER_TEMP/refused"
+          grep -q 'not the one of the release' "$RUNNER_TEMP/refused"
+          test ! -e "$RUNNER_TEMP/other/.local"

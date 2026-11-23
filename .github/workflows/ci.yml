@@ -107,9 +107,11 @@ jobs:
             cp node_modules/node-pty/build/Release/pty.node "build/node-pty-linux/linux-$arch/"
           done
           sh scripts/package-linux.sh
+          grep -qx "PINNED_SHA256=$(sha256sum build/release/*-linux.tar.gz | cut -d' ' -f1)" build/release/install.sh
           version=$(node -p "require('./package.json').version")
           archive="forchetta-$version-linux.tar.gz"
-          if tar -tzf "build/release/$archive" | grep -E 'darwin|native/|\.swift|build-app'; then exit 1; fi
+          tar -tzf "build/release/$archive" > "$RUNNER_TEMP/list.txt"
+          if grep -E 'darwin|native/|\.swift|build-app' "$RUNNER_TEMP/list.txt"; then exit 1; fi
           mkdir -p "$RUNNER_TEMP/releases/download/v$version" "$RUNNER_TEMP/home"
           cp "build/release/$archive" "build/release/$archive.sha256" "$RUNNER_TEMP/releases/download/v$version/"
           export HOME="$RUNNER_TEMP/home" FORCHETTA_RELEASES="file://$RUNNER_TEMP/releases" FORCHETTA_PROTO==file FORCHETTA_VERSION="$version" FORCHETTA_NO_SETUP=1
@@ -122,3 +124,9 @@ jobs:
           test -S "$HOME/.local/share/forchetta/hooks.sock"
           test ! -e "$HOME/Library"
           "$forchetta" daemon stop
+
+  # The archive of a release, as linux-release.yml makes it: only when a person starts this workflow.
+  archive:
+    name: Archive
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/linux-archive.yml
