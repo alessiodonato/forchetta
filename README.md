@@ -21,6 +21,7 @@ Drag the agents onto a canvas, draw who leads whom, and start the team in your p
 [Draw a team in your browser](https://forchetta.dev/studio/) ·
 [Try the whole app](https://forchetta.dev/demo/) ·
 [Manual](https://forchetta.dev/manual.html) ·
+[Changelog](https://forchetta.dev/changelog/) ·
 [🇮🇹 Italiano](README.it.md)
 
 <br>

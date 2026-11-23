@@ -21,6 +21,7 @@ Trascina gli agenti su una tela, disegna chi guida chi, e avvia il team nel tuo 
 [Disegna un team nel browser](https://forchetta.dev/studio/) ·
 [Prova tutta l'app](https://forchetta.dev/demo/) ·
 [Manuale (in inglese)](https://forchetta.dev/manual.html) ·
+[Changelog (in inglese)](https://forchetta.dev/changelog/) ·
 [🇬🇧 English](README.md)
 
 <br>
