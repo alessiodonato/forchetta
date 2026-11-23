@@ -191,10 +191,10 @@ cd ~/forchetta &amp;&amp; scripts/from-source.sh</code></pre><button type="butto
 
   <h2 id="safe">What keeps it safe</h2>
   <ul>
-    <li><strong>Nobody gets in from outside.</strong> Forchetta listens only on your PC, and every request needs a token. The address that opens the page holds a code good once, for two minutes.</li>
-    <li><strong>The window is only for Forchetta.</strong> It is Edge or Chrome with a profile of its own: no extensions, which could read your terminals, and no translation or spelling service.</li>
-    <li><strong>Your data stays yours.</strong> It is in a folder only your user can open; on a disk where that isn't possible, Forchetta doesn't start. No telemetry.</li>
-    <li><strong>You can read all of it.</strong> You build it from the source, and the packages it uses are checked one by one.</li>
+    <li><strong>It listens only on your PC</strong>, and every request needs a token. The address that opens the page holds a code good once, for two minutes.</li>
+    <li><strong>The window has a profile of its own</strong> in Edge or Chrome, without your extensions, which could read your terminals. If it can't have one, <code>forchetta open</code> tells you. The page asks the browser not to translate it nor to check its spelling, which some do on a server.</li>
+    <li><strong>Its data is in a folder only your user can open.</strong> On a disk where that isn't possible, Forchetta doesn't start. No telemetry.</li>
+    <li><strong>You build it from the source</strong>, which you can read, and each package it uses must match the hash in the repository.</li>
   </ul>
   <p>What it can't protect you from: a program that runs as you, in Windows or in WSL, can read your files, those of Forchetta too. And Claude Code in WSL can start programs of Windows, like <code>powershell.exe</code>: the guard doesn't see what they change.</p>
   <p>If you find a way around any of this, please <a href="https://github.com/alessiodonato/forchetta/security/advisories/new">tell me in private</a>. <a href="https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md">More on its security</a>.</p>
