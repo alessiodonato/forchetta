@@ -137,7 +137,7 @@
 <article>
   <h1>Forchetta on Windows</h1>
   <p class="sub">A beta that needs people to try it.</p>
-  <p class="meta">23 November 2026. The tests pass on macOS and on Linux. It has not been tried on a Windows PC yet.</p>
+  <p class="meta">Version 0.13.0-beta.1, 23 November 2026. The tests pass on macOS and on Linux. It has not been tried on a Windows PC yet.</p>
 
   <p>Forchetta runs its Claude Code sessions in tmux, which Windows doesn't have. So on Windows it runs inside WSL 2, the Linux that comes with it, next to Claude Code and your projects. You use it from a window of Edge or Chrome: the same page as on a Mac.</p>
   <div class="wsl" role="img" aria-label="On Windows, a window of Edge or Chrome. Through localhost it reaches WSL 2, where Forchetta, tmux, Claude Code and your projects are.">
@@ -166,26 +166,20 @@
       <small>Run <code>claude</code> once and log in.</small>
     </li>
     <li>
-      <p>What Forchetta needs: git, tmux and a compiler, from Ubuntu.</p>
-      <div class="cmd-block"><pre><code>sudo apt update &amp;&amp;
-sudo apt install -y git curl tmux lsof build-essential python3</code></pre><button type="button" data-copy="sudo apt update &amp;&amp;&#10;sudo apt install -y git curl tmux lsof build-essential python3" aria-label="Copy the command">Copy</button></div>
+      <p>What Forchetta needs: tmux and two small tools, from Ubuntu.</p>
+      <div class="cmd-block"><pre><code>sudo apt update &amp;&amp; sudo apt install -y curl tmux lsof</code></pre><button type="button" data-copy="sudo apt update &amp;&amp; sudo apt install -y curl tmux lsof" aria-label="Copy the command">Copy</button></div>
       <small>It asks for your password of Ubuntu. Nothing after this runs as root.</small>
     </li>
     <li>
-      <p>Forchetta, from its <code>windows</code> branch.</p>
-      <div class="cmd-block"><pre><code>git clone -b windows https://github.com/alessiodonato/forchetta.git ~/forchetta &amp;&amp;
-cd ~/forchetta &amp;&amp; scripts/from-source.sh</code></pre><button type="button" data-copy="git clone -b windows https://github.com/alessiodonato/forchetta.git ~/forchetta &amp;&amp;&#10;cd ~/forchetta &amp;&amp; scripts/from-source.sh" aria-label="Copy the command">Copy</button></div>
-      <small>Without Node.js 22, it takes one from nodejs.org, checks it, and keeps it in <code>~/forchetta-node</code>, only for Forchetta. Keep it in your home, not under <code>/mnt/c</code>. When the beta becomes a release, an installer takes the place of steps 3 and 4.</small>
+      <p>Forchetta. <span class="where">On its own: at the end it asks you something</span></p>
+      <div class="cmd-block"><pre><code>curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &amp;&amp;
+sh ~/forchetta-install.sh</code></pre><button type="button" data-copy="curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &amp;&amp;&#10;sh ~/forchetta-install.sh" aria-label="Copy the command">Copy</button></div>
+      <small>The installer holds the checksum of Forchetta and takes nothing else. Without Node.js 22 it takes one from nodejs.org, checks it, and keeps it only for Forchetta. Then it shows the hooks it adds: answer <code>y</code>, or <code>d</code> to see the whole diff first. If you built Forchetta from the source before, <a href="#before-source">do this first</a>.</small>
     </li>
     <li>
-      <p>Set it up. <span class="where">On its own: it asks you something</span></p>
-      <div class="cmd-block"><pre><code>bin/forchetta setup</code></pre><button type="button" data-copy="bin/forchetta setup" aria-label="Copy the command">Copy</button></div>
-      <small>It says what is missing, if anything, then shows the hooks it adds: answer <code>y</code>, or <code>d</code> to see the whole diff first.</small>
-    </li>
-    <li>
-      <p>Open it.</p>
-      <div class="cmd-block"><pre><code>bin/forchetta open</code></pre><button type="button" data-copy="bin/forchetta open" aria-label="Copy the command">Copy</button></div>
-      <small>If no window appears, <code>bin/forchetta open --print</code> gives an address for your browser, good once, for two minutes.</small>
+      <p>Open it, <span class="where">in a new terminal</span></p>
+      <div class="cmd-block"><pre><code>forchetta open</code></pre><button type="button" data-copy="forchetta open" aria-label="Copy the command">Copy</button></div>
+      <small>If no window appears, <code>forchetta open --print</code> gives an address for your browser, good once, for two minutes.</small>
     </li>
   </ol>
 
@@ -194,7 +188,7 @@ cd ~/forchetta &amp;&amp; scripts/from-source.sh</code></pre><button type="butto
     <li><strong>It listens only on your PC</strong>, and every request needs a token. The address that opens the page holds a code good once, for two minutes.</li>
     <li><strong>The window has a profile of its own</strong> in Edge or Chrome, without your extensions, which could read your terminals. If it can't have one, <code>forchetta open</code> tells you. The page asks the browser not to translate it nor to check its spelling, which some do on a server.</li>
     <li><strong>Its data is in a folder only your user can open.</strong> On a disk where that isn't possible, Forchetta doesn't start. No telemetry.</li>
-    <li><strong>You build it from the source</strong>, which you can read, and each package it uses must match the hash in the repository.</li>
+    <li><strong>GitHub builds it from the source</strong>, which you can read, and signs which commit it comes from. With the <a href="https://cli.github.com">GitHub CLI</a> signed in, the installer checks that too. Each package it uses must match the hash in the repository.</li>
   </ul>
   <p>What it can't protect you from: a program that runs as you, in Windows or in WSL, can read your files, those of Forchetta too. And Claude Code in WSL can start programs of Windows, like <code>powershell.exe</code>: the guard doesn't see what they change.</p>
   <p>If you find a way around any of this, please <a href="https://github.com/alessiodonato/forchetta/security/advisories/new">tell me in private</a>. <a href="https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md">More on its security</a>.</p>
@@ -206,8 +200,8 @@ cd ~/forchetta &amp;&amp; scripts/from-source.sh</code></pre><button type="butto
     <li>Does <code>Ctrl+V</code> paste in the terminal? If you select text with the mouse, can you paste it in Notepad?</li>
     <li>Do <code>Ctrl+K</code> and <code>Ctrl+N</code> work?</li>
     <li>In Settings, <strong>allow them</strong> turns on the notifications. When a session asks for a permission and the window is behind, does one come? Can you answer from the box?</li>
-    <li>In Ubuntu, does a session started with <code>bin/forchetta run claude</code> show up in the window?</li>
-    <li>Close the window and run <code>bin/forchetta open</code> again: are the sessions still there?</li>
+    <li>In Ubuntu, does a session started with <code>forchetta run claude</code> show up in the window?</li>
+    <li>Close the window and run <code>forchetta open</code> again: are the sessions still there?</li>
   </ol>
 
   <h2 id="know">Good to know</h2>
@@ -215,23 +209,23 @@ cd ~/forchetta &amp;&amp; scripts/from-source.sh</code></pre><button type="butto
     <li>Keep your projects in your home of Ubuntu (<code>~/projects</code>). Under <code>/mnt/c</code> they work, but much slower.</li>
     <li>Leave a terminal of Ubuntu open while the sessions work: Windows may stop WSL after the last one closes.</li>
     <li>The shortcuts are with <code>Ctrl</code> in place of <code>⌘</code>.</li>
-    <li>After a restart of Forchetta, open the page again with <code>bin/forchetta open</code>.</li>
+    <li>After a restart of Forchetta, open the page again with <code>forchetta open</code>.</li>
   </ul>
-  <p>To update:</p>
-  <div class="cmd-block"><pre><code>cd ~/forchetta &amp;&amp; git pull &amp;&amp; scripts/from-source.sh
-bin/forchetta daemon stop &amp;&amp; bin/forchetta open</code></pre><button type="button" data-copy="cd ~/forchetta &amp;&amp; git pull &amp;&amp; scripts/from-source.sh&#10;bin/forchetta daemon stop &amp;&amp; bin/forchetta open" aria-label="Copy the command">Copy</button></div>
+  <p>To update, run step 4 of this page again: it names the last version.</p>
+  <p id="before-source"><strong>If you built it from the source before</strong>, close your sessions with <code>/exit</code>, then take its hooks away and stop it. After step 4, <code>~/forchetta</code> and <code>~/forchetta-node</code> can go, with the history that one kept.</p>
+  <div class="cmd-block"><pre><code>cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp; bin/forchetta daemon stop; cd ~</code></pre><button type="button" data-copy="cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp; bin/forchetta daemon stop; cd ~" aria-label="Copy the command">Copy</button></div>
 
   <h2 id="tell">Say how it went</h2>
   <p>Also when everything works: it tells me on which Windows. If something doesn't, this command writes a file that helps, and <code>explorer.exe .</code> opens its folder:</p>
-  <div class="cmd-block"><pre><code>cd ~/forchetta &amp;&amp; bin/forchetta doctor --bundle</code></pre><button type="button" data-copy="cd ~/forchetta &amp;&amp; bin/forchetta doctor --bundle" aria-label="Copy the command">Copy</button></div>
+  <div class="cmd-block"><pre><code>forchetta doctor --bundle</code></pre><button type="button" data-copy="forchetta doctor --bundle" aria-label="Copy the command">Copy</button></div>
   <p style="margin-top: 16px">Your names of Ubuntu and of Windows, the name of the PC, projects, e-mails and tokens are replaced in it. Look inside before you attach it: an issue on GitHub is public.</p>
-  <p class="actions"><a class="button" href="https://github.com/alessiodonato/forchetta/issues/new?title=Windows%3A%20&amp;body=Windows%20version%3A%0A%60wsl%20-l%20-v%60%20%28in%20PowerShell%29%3A%0A%60lsb_release%20-d%60%20%28in%20Ubuntu%29%3A%0A%0AWhat%20worked%3A%0A%0AWhat%20did%20not%2C%20and%20the%20last%20error%3A%0A%0A%28If%20you%20can%2C%20attach%20the%20file%20of%20%60bin%2Fforchetta%20doctor%20--bundle%60.%20Names%2C%20paths%20and%20tokens%20are%20replaced%2C%20but%20look%20inside%20first%3A%20an%20issue%20is%20public.%29%0A">Write it on GitHub</a></p>
+  <p class="actions"><a class="button" href="https://github.com/alessiodonato/forchetta/issues/new?title=Windows%3A%20&amp;body=Windows%20version%3A%0A%60wsl%20-l%20-v%60%20%28in%20PowerShell%29%3A%0A%60lsb_release%20-d%60%20%28in%20Ubuntu%29%3A%0A%0AWhat%20worked%3A%0A%0AWhat%20did%20not%2C%20and%20the%20last%20error%3A%0A%0A%28If%20you%20can%2C%20attach%20the%20file%20of%20%60forchetta%20doctor%20--bundle%60.%20Names%2C%20paths%20and%20tokens%20are%20replaced%2C%20but%20look%20inside%20first%3A%20an%20issue%20is%20public.%29%0A">Write it on GitHub</a></p>
   <p>Questions and first impressions are welcome in the <a href="https://github.com/alessiodonato/forchetta/discussions">discussions</a> too.</p>
 
   <h2 id="remove">Remove it</h2>
   <p>Close your sessions first, with <code>/exit</code>. Then this takes its hooks out of your settings, gives you back your status line, stops it and deletes its folder, with its data:</p>
-  <div class="cmd-block"><pre><code>cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp;
-bin/forchetta daemon stop &amp;&amp; cd ~ &amp;&amp; rm -rf ~/forchetta ~/forchetta-node</code></pre><button type="button" data-copy="cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp;&#10;bin/forchetta daemon stop &amp;&amp; cd ~ &amp;&amp; rm -rf ~/forchetta ~/forchetta-node" aria-label="Copy the command">Copy</button></div>
+  <div class="cmd-block"><pre><code>forchetta hooks uninstall --yes &amp;&amp; forchetta daemon stop &amp;&amp;
+rm -rf ~/.local/lib/forchetta ~/.local/lib/forchetta-node ~/.local/share/forchetta ~/.local/bin/forchetta</code></pre><button type="button" data-copy="forchetta hooks uninstall --yes &amp;&amp; forchetta daemon stop &amp;&amp;&#10;rm -rf ~/.local/lib/forchetta ~/.local/lib/forchetta-node ~/.local/share/forchetta ~/.local/bin/forchetta" aria-label="Copy the command">Copy</button></div>
   <p style="margin-top: 16px">The profile of its window is in Windows: close it, then delete the folder <code>%LOCALAPPDATA%\Forchetta</code>.</p>
 </article>
 </main>

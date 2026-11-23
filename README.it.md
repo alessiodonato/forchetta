@@ -84,7 +84,18 @@ Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
 Su Windows, Forchetta gira dentro [WSL 2](https://learn.microsoft.com/windows/wsl/install), il Linux incluso in Windows, accanto a Claude Code e ai tuoi progetti. La usi da una finestra di Edge o Chrome: la stessa pagina del Mac, senza la barra dei menu e la scorciatoia da qualunque programma. Vede le sessioni avviate dentro WSL: quelle di PowerShell, o di Claude Code per Windows, non compaiono.
 
-Serve qualcuno che la provi: i test passano su macOS e su Linux, ma su un PC Windows non è ancora stata provata. **[Provala su Windows](https://forchetta.dev/windows/)** (in inglese) ha i passi per installarla dal ramo `windows`, cosa provare e dove dire com'è andata. La stessa versione gira su Linux, nel browser.
+Serve qualcuno che la provi: i test passano su macOS e su Linux, ma su un PC Windows non è ancora stata provata. La stessa versione gira su Linux, nel browser. In un terminale di Ubuntu, con Claude Code al suo interno:
+
+```sh
+sudo apt update && sudo apt install -y curl tmux lsof
+```
+
+```sh
+curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &&
+sh ~/forchetta-install.sh
+```
+
+L'installer contiene l'impronta di Forchetta e non accetta altro; GitHub la costruisce dal codice e firma da quale commit viene ([come verificarlo](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows), in inglese). Mostra gli hook che aggiunge, e chiede conferma. Poi, in un nuovo terminale, `forchetta open`. **[Provala su Windows](https://forchetta.dev/windows/)** (in inglese) ha i passi dall'inizio, cosa provare e dove dire com'è andata.
 
 ## Prova il vigile
 
