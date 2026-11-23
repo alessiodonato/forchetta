@@ -84,18 +84,22 @@ Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
 Su Windows, Forchetta gira dentro [WSL 2](https://learn.microsoft.com/windows/wsl/install), il Linux incluso in Windows, accanto a Claude Code e ai tuoi progetti. La usi da una finestra di Edge o Chrome: la stessa pagina del Mac, senza la barra dei menu e la scorciatoia da qualunque programma. Vede le sessioni avviate dentro WSL: quelle di PowerShell, o di Claude Code per Windows, non compaiono.
 
-Serve qualcuno che la provi: i test passano su macOS e su Linux, ma su un PC Windows non è ancora stata provata. La stessa versione gira su Linux, nel browser. In un terminale di Ubuntu, con Claude Code al suo interno:
+Serve qualcuno che la provi: i test passano su macOS e su Linux, ma su un PC Windows non è ancora stata provata. Salta i passi che hai già fatto:
 
-```sh
-sudo apt update && sudo apt install -y curl tmux lsof
-```
+1. **WSL 2 e Ubuntu.** In PowerShell, come amministratore: `wsl --install`. Riavvia Windows, apri Ubuntu dal menu Start e scegli un nome e una password per Ubuntu. I passi seguenti si fanno lì.
+2. **Claude Code, dentro Ubuntu**, anche se ce l'hai su Windows: `curl -fsSL https://claude.ai/install.sh | bash`. Poi, in un nuovo terminale di Ubuntu, `claude` per accedere.
+3. **Forchetta, dentro Ubuntu.** Mostra gli hook che aggiunge e chiede conferma: rispondi `y`.
 
-```sh
-curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &&
-sh ~/forchetta-install.sh
-```
+   ```sh
+   curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &&
+   sh ~/forchetta-install.sh
+   ```
 
-L'installer contiene l'impronta di Forchetta e non accetta altro; GitHub la costruisce dal codice e firma da quale commit viene ([come verificarlo](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows), in inglese). Mostra gli hook che aggiunge, e chiede conferma. Poi, in un nuovo terminale, `forchetta open`. **[Provala su Windows](https://forchetta.dev/windows/)** (in inglese) ha i passi dall'inizio, cosa provare e dove dire com'è andata.
+4. **Aprila**, in un nuovo terminale di Ubuntu: `forchetta open`. Da lì in poi è l'unico comando.
+
+Su Linux parti dal passo 2, con `curl`, `tmux` e `lsof` installati; la pagina si apre nel browser. L'installer contiene l'impronta di Forchetta e non accetta altro; GitHub la costruisce dal codice e firma da quale commit viene ([come verificarlo](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows), in inglese).
+
+**[La guida per Windows](https://forchetta.dev/windows/)** (in inglese) dice come capire che ogni passo è riuscito, cosa fare se qualcosa va storto, cosa provare e dove dire com'è andata.
 
 ## Prova il vigile
 
