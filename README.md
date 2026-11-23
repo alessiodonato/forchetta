@@ -9,6 +9,7 @@
 Drag the agents onto a canvas, draw who leads whom, and start the team in your project. Each agent is a Claude Code session: they split the work, and Forchetta keeps them off each other's files. Every session on your Mac, in a team or not, sits in one window.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#install)
+[![Windows: beta](https://img.shields.io/badge/Windows-beta-8b867d?style=flat-square)](#windows-and-linux-beta)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#install)
 [![For Claude Code](https://img.shields.io/badge/for-Claude%20Code-d97757?style=flat-square)](https://code.claude.com)
 [![Runs locally](https://img.shields.io/badge/runs-locally-46c48a?style=flat-square)](#what-it-touches-on-your-mac)
@@ -79,15 +80,9 @@ To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Windows and Linux (beta)
 
-On Windows, Forchetta runs inside [WSL 2](https://learn.microsoft.com/windows/wsl/install) and opens in a window of Edge or Chrome. You need Claude Code inside WSL: the sessions started in PowerShell, or with Claude Code for Windows, do not show up. In a terminal of WSL (or of Linux):
+On Windows, Forchetta runs inside [WSL 2](https://learn.microsoft.com/windows/wsl/install), the Linux that comes with it, next to Claude Code and your projects. You use it from a window of Edge or Chrome: the same page as on a Mac, without the menu bar and the system-wide shortcut. It sees the sessions started inside WSL: those of PowerShell, or of Claude Code for Windows, don't show up.
 
-```sh
-sudo apt install -y tmux curl && curl -fsSL https://forchetta.dev/install.sh | sh
-```
-
-It shows the hooks it adds and asks first. Then, in a new terminal, `forchetta open`.
-
-There is no app: the menu bar, the system-wide shortcut and the daemon kept alive are only on a Mac. The rest is the same, and the [manual](https://forchetta.dev/manual.html#windows) says what differs. It is new: if something is off, `forchetta doctor` says what, and an issue helps.
+It needs people to try it: the tests pass on macOS and on Linux, but it has not been tried on a Windows PC yet. **[Try it on Windows](https://forchetta.dev/windows/)** has the steps to install it from the `windows` branch, what to try, and where to say how it went. The same version runs on Linux, in your browser.
 
 ## Try the guard
 
