@@ -7,6 +7,7 @@
 // the spec. No Node module here: the page uses it too.
 
 import { type AgentTools, cleanTools, toolsPrompt, toolsText } from './agent-tools.ts';
+import { MACHINE } from './machine.ts';
 import { cleanSkills } from './skills.ts';
 
 /** How a member talks with the one it reports to: it executes and that is all, or its final answer goes back. */
@@ -726,7 +727,7 @@ export function leadPrompt(spec: CrewSpec): string {
   const lead = crew.lead as Extract<CrewLeadSpec, { kind: 'claude' }>;
   const levels = hasLevels(crew);
   return [
-    `You are ${lead.name}, the lead of the team "${crew.name}" in Forchetta, a control center for parallel Claude Code sessions on this Mac.`,
+    `You are ${lead.name}, the lead of the team "${crew.name}" in Forchetta, a control center for parallel Claude Code sessions on this ${MACHINE}.`,
     `Your role: ${lead.role}`,
     ...(toolsPrompt(lead.tools) ? [toolsPrompt(lead.tools)] : []),
     ...valuesLines(crew),
@@ -784,7 +785,7 @@ export function memberPrompt(spec: CrewSpec, given: CrewMemberSpec): string {
   const answers = effectiveTalk(crew, member) === 'twoway';
   const others = crew.members.filter((other) => other !== member && other.reportsTo !== member.name);
   return [
-    `You are ${member.name}, a member of the team "${crew.name}" in Forchetta, a control center for parallel Claude Code sessions on this Mac.`,
+    `You are ${member.name}, a member of the team "${crew.name}" in Forchetta, a control center for parallel Claude Code sessions on this ${MACHINE}.`,
     `Your role: ${member.role}`,
     `Your lead is ${lead}.`,
     ...(member.relation ? [`How you work with ${from}: ${member.relation}`] : []),

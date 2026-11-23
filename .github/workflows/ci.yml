@@ -47,3 +47,34 @@ jobs:
 
       - name: Build the app
         run: pnpm build:app
+
+  # Linux is also what Forchetta runs on in Windows, inside WSL 2. node-pty is compiled here: it ships no binaries for Linux.
+  linux:
+    name: Tests and build on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install tmux and lsof
+        run: sudo apt-get update && sudo apt-get install -y tmux lsof
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck and tests
+        run: pnpm test
+
+      - name: Build the CLI, the daemon and the page
+        run: pnpm build
+
+      # No hook is written: without --yes, and with no terminal, the setup only checks and shows.
+      - name: The setup finds everything
+        run: bin/forchetta setup --no-restart

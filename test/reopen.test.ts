@@ -13,6 +13,7 @@ import { newAgent } from '../src/daemon/state.ts';
 import type { Agent, QueuedCommand } from '../src/shared/agent.ts';
 import type { CrewSpec } from '../src/shared/crew.ts';
 import { endedAtShutdown, endedByRestart, lostOf, lostText, modelAlias, REOPEN_KEEP_MS } from '../src/shared/reopen.ts';
+import { MACHINE } from '../src/shared/machine.ts';
 import { tempDir } from './helpers.ts';
 
 const temp = tempDir('reopen');
@@ -190,7 +191,7 @@ describe('a member of a team reopened', () => {
     expect(last.extras).toMatchObject({ name: 'developer', team: { label: 'developer', crew: crew.id, group: 'Studio' }, teamTools: expect.any(Array) });
     expect(String(last.extras.system)).toContain('developer');
     expect(crews.get(crew.id)!.agents.developer).toBe('agent-3');
-    expect(crews.get(crew.id)!.requests![0]!.deliveries[0]).toMatchObject({ status: 'failed', reason: 'its session ended with the Mac: send it again', agentId: 'agent-3' });
+    expect(crews.get(crew.id)!.requests![0]!.deliveries[0]).toMatchObject({ status: 'failed', reason: `its session ended with the ${MACHINE}: send it again`, agentId: 'agent-3' });
     // The lead too, as lead.
     const lead = await crews.reopen(crew.id, crew.agents.lead!, randomUUID(), '/Users/you/shop', start as never);
     expect(lead).toMatchObject({ ok: true });
@@ -236,13 +237,13 @@ describe('a box forgotten, and the command line', () => {
     const listed = (await handle('GET', '/api/reopen', new URLSearchParams(), {}))!.body as { sessions: unknown[] };
     expect(listed.sessions).toHaveLength(3);
     const text = renderLost(w.reopener.list(), { style: makeStyle(0) });
-    expect(text).toContain('3 sessions ended with the Mac:');
+    expect(text).toContain(`3 sessions ended with the ${MACHINE}:`);
     expect(text).toContain('lead  /Users/you/Desktop/shop · team Studio · 790k of context');
     expect(await handle('POST', '/api/reopen', new URLSearchParams(), { names: ['nobody'] })).toMatchObject({ status: 404 });
     const studio = (await handle('POST', '/api/reopen', new URLSearchParams(), { names: ['studio'] }))!.body as { reopened: { name: string }[] };
     expect(studio.reopened.map((one) => one.name)).toEqual(['lead', 'dev']);
     const rest = (await handle('POST', '/api/reopen', new URLSearchParams(), { all: true }))!.body as { reopened: { name: string }[] };
     expect(rest.reopened.map((one) => one.name)).toEqual(['api']);
-    expect(await handle('POST', '/api/reopen', new URLSearchParams(), { all: true })).toMatchObject({ status: 404, body: { error: 'no session ended with the Mac is waiting to reopen' } });
+    expect(await handle('POST', '/api/reopen', new URLSearchParams(), { all: true })).toMatchObject({ status: 404, body: { error: `no session ended with the ${MACHINE} is waiting to reopen` } });
   });
 });

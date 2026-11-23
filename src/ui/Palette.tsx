@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useReturnFocus } from './focus.ts';
+import { IS_MAC, keyText } from './platform.ts';
 
 // The palette of commands (⌘K): every action of the page and every session, found by typing a few letters. Enter
 // runs the one chosen, the arrows move, Esc closes.
@@ -103,7 +104,7 @@ export function Palette({ commands, onClose }: { commands: readonly PaletteComma
                   onClick={() => run(command)}
                 >
                   <span>{command.label}</span>
-                  {command.keys && <kbd>{command.keys}</kbd>}
+                  {command.keys && <kbd>{keyText(command.keys)}</kbd>}
                 </li>
               </>
             );
@@ -115,7 +116,7 @@ export function Palette({ commands, onClose }: { commands: readonly PaletteComma
 }
 
 /** The shortcuts of Forchetta, by what they do. */
-export const SHORTCUTS: { group: string; keys: string; what: string }[] = [
+export const SHORTCUTS: { group: string; keys: string; what: string; mac?: true }[] = [
   { group: 'Anywhere', keys: '⌘K', what: 'Commands and sessions, by typing' },
   { group: 'Anywhere', keys: '⌘N', what: 'New session' },
   { group: 'Anywhere', keys: '⇧⌘N', what: 'New team' },
@@ -130,7 +131,7 @@ export const SHORTCUTS: { group: string; keys: string; what: string }[] = [
   { group: 'Panes', keys: '⌘-click', what: 'Open a link of a terminal in the browser' },
   { group: 'Window', keys: '⌘+ ⌘− ⌘0', what: 'Zoom the page (in the studio: its canvas)' },
   { group: 'Window', keys: '⌘R', what: 'Reload the page' },
-  { group: 'Window', keys: 'ctrl ⌥ F', what: 'Show or hide Forchetta from any app (Settings)' },
+  { group: 'Window', keys: 'ctrl ⌥ F', what: 'Show or hide Forchetta from any app (Settings)', mac: true },
   { group: 'Studio', keys: '⌘Z ⇧⌘Z', what: 'Undo, redo' },
   { group: 'Studio', keys: '⌘C ⌘V ⌘D ⌘A', what: 'Copy, paste, duplicate, select every box' },
 ];
@@ -147,10 +148,10 @@ export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
           <section key={group}>
             <h3>{group}</h3>
             <dl>
-              {SHORTCUTS.filter((shortcut) => shortcut.group === group).map((shortcut) => (
+              {SHORTCUTS.filter((shortcut) => shortcut.group === group && (IS_MAC || !shortcut.mac)).map((shortcut) => (
                 <div key={shortcut.keys + shortcut.what}>
                   <dt>
-                    <kbd>{shortcut.keys}</kbd>
+                    <kbd>{keyText(shortcut.keys)}</kbd>
                   </dt>
                   <dd>{shortcut.what}</dd>
                 </div>

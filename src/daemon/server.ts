@@ -2,6 +2,7 @@ import { appendFileSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import type { Hub } from './hub.ts';
+import { isLocalHost, isOwnOrigin } from './origin.ts';
 import type { Permissions } from './permissions.ts';
 import type { Terminals } from './terminals.ts';
 import type { HookMeta, Registry, StatusContext, StatusLine } from './registry.ts';
@@ -24,13 +25,16 @@ import { type RateLimits, rateLimitsOf } from './limits.ts';
 // the decision of the guard as Claude Code reads it, or with an empty body (daemon/guard.ts). It applies nothing:
 // the same event comes through /forchetta/hook too.
 //
-// /api/* is for the CLI and the app, with the token of var/daemon.json.
+// /api/* is for the CLI and the app, with the token of var/daemon.json. /open gives that token to a page in a browser,
+// for a code of `forchetta open` (daemon/open-codes.ts).
 
 export const HOOK_PATH = '/forchetta/hook';
 export const PERMISSION_PATH = '/forchetta/permission';
 export const GUARD_PATH = '/forchetta/guard';
 /** The input of the status line, from bin/forchetta-statusline: the cost of the session. */
 export const STATUS_PATH = '/forchetta/status';
+/** Where the page of a browser trades the code of `forchetta open` for the token. */
+export const OPEN_PATH = '/open';
 const TICKET = /^[0-9a-f]{32}$/;
 const MAX_BODY = 32 * 1024 * 1024;
 
@@ -57,6 +61,8 @@ export interface ServerOptions {
   onRateLimits?: (limits: RateLimits, agent?: Agent) => void;
   /** The guard: what to answer before a tool that writes files or runs a command; undefined lets it go. */
   guard?: (agent: Agent, payload: HookPayload) => object | undefined | Promise<object | undefined>;
+  /** The codes of `forchetta open`: made for the CLI, traded once by the page for the token. */
+  openCodes?: { create(): string; redeem(code: unknown): boolean };
   /** The routes of the MCP server of a team: /api/crew/<route>, POST with JSON. */
   crew?: (route: string, input: Record<string, unknown>) => Promise<{ status: number; body: unknown }>;
   /** The other routes of /api/ (the commands of the CLI: teams, templates, diagnostics); undefined: not one. */
@@ -91,8 +97,6 @@ function readBody(req: IncomingMessage): Promise<Buffer | undefined> {
     req.on('error', reject);
   });
 }
-
-const isLocalHost = (host: string | undefined, port: number): boolean => host === `127.0.0.1:${port}` || host === `localhost:${port}`;
 
 function tokenMatches(header: string | undefined, token: string): boolean {
   const given = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
@@ -264,7 +268,6 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
     // Over the socket there is no host to check (no browser reaches it); over TCP the host stops DNS rebinding.
     if (!viaSocket && !isLocalHost(req.headers.host, port)) return send(res, 403);
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    const ownOrigin = `http://127.0.0.1:${port}`;
     // The hooks only over the socket; the socket only for the hooks.
     if (viaSocket !== isHookRoute(url.pathname)) return send(res, viaSocket ? 404 : 403);
 
@@ -332,7 +335,7 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
 
     if (url.pathname.startsWith('/api/')) {
       const origin = req.headers.origin;
-      if (origin !== undefined && origin !== ownOrigin) return send(res, 403);
+      if (origin !== undefined && !isOwnOrigin(origin, port)) return send(res, 403);
       if (!tokenMatches(req.headers.authorization, token)) return send(res, 401);
 
       if (url.pathname === '/api/health' && req.method === 'GET') return send(res, 200, { ok: true, ...options.info() });
@@ -365,6 +368,7 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
         const result = await options.crew(url.pathname.slice('/api/crew/'.length), input);
         return send(res, result.status, result.body);
       }
+      if (url.pathname === '/api/open' && req.method === 'POST' && options.openCodes) return send(res, 200, { code: options.openCodes.create() });
       if (url.pathname === '/api/shutdown' && req.method === 'POST') {
         send(res, 200, { ok: true });
         setImmediate(options.onShutdown);
@@ -386,6 +390,20 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
         if (answer) return send(res, answer.status, answer.body);
       }
       return send(res, 404);
+    }
+
+    // The page itself, opened by `forchetta open`: its origin, JSON, and a code not used yet.
+    if (url.pathname === OPEN_PATH && req.method === 'POST' && options.openCodes) {
+      if (!isOwnOrigin(req.headers.origin, port)) return send(res, 403);
+      if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415);
+      const body = await readBody(req);
+      let code: unknown;
+      try {
+        code = (JSON.parse(body?.toString('utf8') ?? '') as { code?: unknown } | null)?.code;
+      } catch {
+        return send(res, 400);
+      }
+      return options.openCodes.redeem(code) ? send(res, 200, { token }) : send(res, 403);
     }
 
     if (req.method === 'GET' && options.uiDir && serveStatic(options.uiDir, url.pathname, port, res)) return;

@@ -8,4 +8,9 @@ while [ -L "$self" ]; do
     *) self=$(dirname "$self")/$link ;;
   esac
 done
-exec node "$(dirname "$self")/../dist/cli.js" "$@"
+root=$(dirname "$self")/..
+# docs/install.sh puts a Node.js here on a Linux without one (or with an old one): not in the PATH, only for Forchetta.
+if [ -x "$root/../forchetta-node/bin/node" ]; then
+  exec "$root/../forchetta-node/bin/node" "$root/dist/cli.js" "$@"
+fi
+exec node "$root/dist/cli.js" "$@"

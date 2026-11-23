@@ -7,17 +7,20 @@ import { api, ensureDaemon, runningDaemon } from '../shared/daemon-client.ts';
 import { installLaunchAgent, launchAgentFile } from '../daemon/launch-agent.ts';
 import { UserError } from '../shared/errors.ts';
 import { ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
+import { PLATFORM } from '../shared/platform.ts';
 import { VERSION } from '../shared/version.ts';
 import { code } from './help.ts';
 import { hooksCommand } from './hooks.ts';
 import type { RunIO } from './run.ts';
+import { checkLinux } from './setup-linux.ts';
 import { spinner, tildify } from './style.ts';
 
 // `forchetta setup`: what makes an installed Forchetta ready, in one command. It checks tmux, claude and the
 // Command Line Tools, builds the app on this Mac and puts it in ~/Applications, then installs the hooks, with the
 // diff and the question of `forchetta hooks install`. The app is built here, not downloaded: macOS does not
 // quarantine it, so it opens with no warning even without a signature of Apple. After an upgrade it is run again,
-// and builds the app only when its version or the Forchetta folder it runs changed.
+// and builds the app only when its version or the Forchetta folder it runs changed. On Linux, and in WSL, there is no
+// app: the same checks and hooks, and the page in a browser (cli/setup-linux.ts).
 
 export interface SetupOptions {
   /** Install the hooks without asking. */
@@ -133,7 +136,7 @@ async function restartOldDaemon(io: RunIO): Promise<void> {
 
 export async function setupCommand(options: SetupOptions, io: RunIO): Promise<number> {
   const s = io.style;
-  if (process.platform !== 'darwin') throw new UserError('Forchetta works only on macOS');
+  if (!PLATFORM) throw new UserError('Forchetta does not run on Windows itself, but inside WSL 2 does', 'see https://forchetta.dev/manual.html#windows');
   if (!existsSync(paths.daemonJs) || !existsSync(join(ROOT, 'dist', 'ui', 'index.html'))) throw new UserError(`${tildify(join(ROOT, 'dist'))} is missing`, 'run `pnpm build` first');
   const width = 18;
   /** One step: "✓ tmux              /usr/local/bin/tmux". Without a symbol it lines up with the others. */
@@ -141,6 +144,20 @@ export async function setupCommand(options: SetupOptions, io: RunIO): Promise<nu
     const text = `${label.padEnd(width)}  ${detail}`;
     io.stdout(`${mark ? s.mark(mark, mark === '✓' ? 'green' : 'amber', text) : `${s.color ? '  ' : ''}${text}`}\n`);
   };
+
+  if (PLATFORM !== 'macos') {
+    checkLinux(({ label, detail, mark }) => step(label, mark === '✓' ? s.dim(detail) : code(detail, s), mark));
+    step('Data', s.dim(tildify(paths.varDir)));
+    io.stdout('\n');
+    const installed = await hooksCommand('install', { yes: options.yes, diff: options.diff }, io);
+    if (installed !== 0) return installed;
+    if (options.restart !== false) await restartOldDaemon(io);
+    io.stdout(
+      `\n${s.mark('✓', 'green', s.bold('Ready.'))} Open Forchetta${PLATFORM === 'wsl' ? ' in a window of Windows' : ' in your browser'} with:\n\n    ${s.claude('forchetta open')}\n\n` +
+        `${code('Sessions started with `forchetta run claude`, or from the page, also open in its terminals.', s)}\n`,
+    );
+    return 0;
+  }
 
   const tmux = which('tmux');
   if (!tmux) throw new UserError('tmux is missing', 'install it with `brew install tmux`, then run `forchetta setup` again');

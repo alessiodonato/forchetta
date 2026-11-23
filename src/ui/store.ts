@@ -1,6 +1,7 @@
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SessionColor, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
 import { resultAt } from '../shared/present.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
+import type { FolderList } from '../daemon/folder-list.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { AutomationView } from '../shared/automation.ts';
 import type { LostSession } from '../shared/reopen.ts';
@@ -102,6 +103,10 @@ export interface UiState {
   crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
   /** The installation, from the daemon: checks, optional features, settings (shared/system.ts). */
   system?: SystemInfo;
+  /** The choice of a folder in the page (FolderPicker.tsx), where there is no panel of macOS: what it shows. */
+  folderPicker?: { list?: FolderList };
+  /** A page in a browser without a token that works: `forchetta open` gives it one. */
+  needsOpen?: boolean;
   /** Saving the settings from their panel: under way, or how it went (and what waits for a restart). */
   settingsSave?: { busy: boolean; ok?: boolean; error?: string; restart?: string[]; at: number };
 }
@@ -319,6 +324,11 @@ export class Store {
     }
     if (message.type === 'skillEdited') {
       this.set({ skillEdit: { action: message.action, busy: false, ok: message.ok, ...(message.error ? { error: message.error } : {}), ...(message.id ? { id: message.id } : {}), at: Date.now() } });
+      return;
+    }
+    if (message.type === 'folders') {
+      // Closed meanwhile: the answer comes too late.
+      if (this.state.folderPicker) this.set({ folderPicker: { list: message } });
       return;
     }
     if (message.type === 'folderChosen') {
@@ -668,12 +678,38 @@ export class Store {
 
   /**
    * The panel of macOS for a folder, starting at `folder`: the app's own, or, in a browser, one the daemon opens on
-   * this Mac. The choice goes to window.forchettaFolder, the field of the panel open.
+   * this Mac. With the daemon on Linux or in WSL, a panel of the page (FolderPicker.tsx). The choice goes to
+   * window.forchettaFolder, the field of the panel open.
    */
   chooseFolder(folder: string): void {
     const app = shell();
+    const where = this.state.system?.platform;
     if (app) app.postMessage({ type: 'chooseFolder', folder });
-    else this.send({ type: 'chooseFolder', folder });
+    else if (where === undefined || where === 'macos') this.send({ type: 'chooseFolder', folder });
+    else {
+      this.set({ folderPicker: {} });
+      this.listFolders(folder);
+    }
+  }
+
+  /** The folders inside a folder, for the panel of the page. */
+  listFolders(folder: string): void {
+    this.send({ type: 'listFolders', folder });
+  }
+
+  /** The folder chosen in the panel of the page: as if it came from the panel of macOS. */
+  pickFolder(path: string): void {
+    this.set({ folderPicker: undefined });
+    window.forchettaFolder?.(path);
+  }
+
+  closeFolderPicker(): void {
+    this.set({ folderPicker: undefined });
+  }
+
+  /** No token, or one of a daemon that restarted, and no app to give another. */
+  setNeedsOpen(needed: boolean): void {
+    if (Boolean(this.state.needsOpen) !== needed) this.set({ needsOpen: needed });
   }
 
   /**

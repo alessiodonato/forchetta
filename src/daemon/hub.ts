@@ -11,6 +11,8 @@ import type { ReplayData } from '../shared/replay.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import type { SkillInfo } from '../shared/skills.ts';
 import type { SystemInfo } from '../shared/system.ts';
+import type { FolderList } from './folder-list.ts';
+import { isLocalHost, isOwnOrigin } from './origin.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
 // that changed and the ids of those that went away. The page tells whether its window can be seen, so that the
@@ -48,6 +50,8 @@ export type ServerMessage =
   | { type: 'skillEdited'; now: number; action: 'add' | 'remove'; ok: boolean; error?: string; id?: string }
   /** The folder chosen in the panel of macOS, for the window that asked (chooseFolder). */
   | { type: 'folderChosen'; now: number; path: string }
+  /** The folders inside a folder, for the panel of the page that chooses one (listFolders). */
+  | ({ type: 'folders'; now: number } & FolderList)
   /** How a change of a team went (a member added, taken away, → / ⇄), or a template saved: for the window that asked. */
   | { type: 'crewEdited'; now: number; ok: boolean; crewId?: string; action: string; error?: string }
   /** The teams of agents, after one was created. */
@@ -160,6 +164,8 @@ export type ClientMessage =
   | { type: 'removeSkill'; id: string }
   /** The panel of macOS for a folder, from a page in a browser (the app has its own), starting at `folder`. */
   | { type: 'chooseFolder'; folder?: string }
+  /** The folders inside a folder: where there is no panel of macOS, the page has its own. */
+  | { type: 'listFolders'; folder?: string }
   /** Run `claude update`, or hide the line of the last one. */
   | { type: 'claudeUpdate'; action: 'run' | 'dismiss' };
 
@@ -233,6 +239,8 @@ export interface HubOptions {
   onRemoveSkill?: (id: string) => { ok: boolean; error?: string };
   /** The folder chosen in the panel of macOS; undefined if cancelled. */
   onChooseFolder?: (folder: string | undefined) => Promise<string | undefined>;
+  /** The folders inside a folder, for the panel of the page. */
+  onListFolders?: (folder: string | undefined) => FolderList;
   /** A request from you to a team. */
   onCrewRequest?: (crewId: string, to: string[], text: string) => { ok: true; n: number } | { ok: false; error: string };
   /** The changes of a session, read when its panel opens. */
@@ -279,9 +287,7 @@ export class Hub {
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
     const port = this.options.port();
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    const own = `http://127.0.0.1:${port}`;
-    const hostOk = req.headers.host === `127.0.0.1:${port}` || req.headers.host === `localhost:${port}`;
-    if (url.pathname !== '/ws' || !hostOk || req.headers.origin !== own || !sameToken(url.searchParams.get('token'), this.options.token)) {
+    if (url.pathname !== '/ws' || !isLocalHost(req.headers.host, port) || !isOwnOrigin(req.headers.origin, port) || !sameToken(url.searchParams.get('token'), this.options.token)) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
       socket.destroy();
       return;
@@ -464,6 +470,8 @@ export class Hub {
             },
             (error: unknown) => this.options.log(`choice of a folder: ${String(error)}`, 'warn'),
           );
+        } else if (message.type === 'listFolders' && this.options.onListFolders) {
+          this.send(ws, { type: 'folders', now: Date.now(), ...this.options.onListFolders(typeof message.folder === 'string' ? message.folder.slice(0, 4096) : undefined) });
         } else if (message.type === 'crewThread' && typeof message.crewId === 'string' && this.options.crewThread) {
           const requests = this.options.crewThread(message.crewId);
           const reviews = this.options.crewReviews?.(message.crewId);

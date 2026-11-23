@@ -1,4 +1,5 @@
 import type { SessionEdit } from '../shared/agent.ts';
+import { MACHINE } from '../shared/machine.ts';
 
 // What each session knows of the files of its folder, and what the others changed since. A session that read a file
 // keeps what it read in its context; when another session changes that file, what it knows is out of date, and it
@@ -194,7 +195,7 @@ export function changedNote(
   }
   if (found.length > 3) parts.push(`- and ${found.slice(3).map((item) => shown(item.file)).join(', ')}`);
   return [
-    'Forchetta: other Claude Code sessions on this Mac changed files you read earlier. What you read of them is out of date:',
+    `Forchetta: other Claude Code sessions on this ${MACHINE} changed files you read earlier. What you read of them is out of date:`,
     ...parts,
     'Read them again before you write code that relies on them.',
   ].join('\n');

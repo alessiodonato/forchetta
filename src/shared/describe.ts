@@ -1,5 +1,6 @@
 import { toolsText } from './agent-tools.ts';
 import { BUILTIN_ROLES, type CrewTemplate, cleanTemplate, type RolePreset } from './crew.ts';
+import { MACHINE } from './machine.ts';
 import { TEMPLATE_GUIDE, TEMPLATE_SCHEMA } from './team-schema.ts';
 import { TEAM_FILE_KIND } from './team-file.ts';
 
@@ -13,7 +14,7 @@ export const DESCRIBE_MAX = 4000;
 
 /** Who Claude is for this, and what makes a good team. */
 export const DESCRIBE_SYSTEM = [
-  'You design teams of Claude Code agents for Forchetta, an app that runs several Claude Code sessions as a team on the Mac of the user, in one folder of a project.',
+  `You design teams of Claude Code agents for Forchetta, an app that runs several Claude Code sessions as a team on the ${MACHINE} of the user, in one folder of a project.`,
   'From the description of the user, write one team as a template, in the JSON shape you are given, and nothing else: no question back, no text around it.',
   'A team has a lead (a Claude session that splits the goal into requests for the members, checks what comes back and tells the user; or the user, lead kind "you", when the description says the user leads) and members, each one a Claude Code session with a role, a model, skills and tools; a member can report to another member, which leads it (more levels).',
   TEMPLATE_GUIDE,

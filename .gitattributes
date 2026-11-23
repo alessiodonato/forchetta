@@ -1,0 +1,4 @@
+# The scripts run on macOS and Linux, also from a clone made by the git of Windows.
+bin/* text eol=lf
+*.sh text eol=lf
+config/tmux.conf text eol=lf

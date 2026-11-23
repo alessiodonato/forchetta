@@ -12,9 +12,11 @@ import {
   triggerText,
 } from '../shared/automation.ts';
 import { type CrewSummary, type CrewTemplate, paramsUsed, VALUE_MAX } from '../shared/crew.ts';
+import { MACHINE } from '../shared/machine.ts';
 import { crewUsage, usdText } from '../shared/present.ts';
 import { lastPart, recentFolders } from './NewSession.tsx';
 import { useReturnFocus } from './focus.ts';
+import { keyText } from './platform.ts';
 import type { Store } from './store.ts';
 
 // The panel "auto": the teams that start by themselves (shared/automation.ts). On top, one chip for each and "+ new";
@@ -185,7 +187,7 @@ function AutoForm({ auto, agents, store, onDone }: { auto?: AutomationView; agen
           Folder
         </label>
         <input id="auto-folder" class="command-input mono" type="text" value={draft.cwd} placeholder="~/projects/app" spellcheck={false} onInput={(event) => put({ cwd: (event.target as HTMLInputElement).value })} />
-        <button type="button" title="Choose the folder in the panel of macOS" onClick={() => store.chooseFolder(draft.cwd)}>
+        <button type="button" title="Choose the folder" onClick={() => store.chooseFolder(draft.cwd)}>
           Choose…
         </button>
       </div>
@@ -218,7 +220,7 @@ function AutoForm({ auto, agents, store, onDone }: { auto?: AutomationView; agen
           {draft.kind === 'queue'
             ? 'You add the items, one per line; they go one at a time.'
             : draft.kind === 'schedule'
-              ? 'If the Mac sleeps then, the run starts once when it wakes.'
+              ? `If the ${MACHINE} sleeps then, the run starts once when it wakes.`
               : 'Checked every 5 minutes with gh, as you; each issue or pull request once.'}
         </span>
       </div>
@@ -321,7 +323,7 @@ function AutoForm({ auto, agents, store, onDone }: { auto?: AutomationView; agen
       </div>
       <div class="broadcast-row end">
         <span class={`broadcast-note${error ? ' error' : ''}`}>
-          {error ?? 'A run is over when its lead delivers. One that fails (over its budget or its time) stops, and the automation pauses until you look. ⌘↩ saves.'}
+          {error ?? keyText('A run is over when its lead delivers. One that fails (over its budget or its time) stops, and the automation pauses until you look. ⌘↩ saves.')}
         </span>
         <button type="button" class="primary" disabled={busy || !draft.name.trim() || !draft.template || !draft.cwd.trim()} onClick={save}>
           {busy ? 'Saving…' : auto ? 'Save' : 'Create'}

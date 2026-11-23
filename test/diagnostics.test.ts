@@ -93,7 +93,7 @@ describe('the checklist of the first start', () => {
     ...extra,
   });
   it('says what is missing and how to fix it', () => {
-    const checks = setupChecks(inputs({ tmux: undefined }));
+    const checks = setupChecks(inputs({ tmux: undefined }), 'macos');
     expect(checks.find((check) => check.id === 'hooks')).toMatchObject({ ok: false, fix: 'forchetta hooks install' });
     expect(checks.find((check) => check.id === 'tmux')).toMatchObject({ ok: false, fix: 'brew install tmux' });
     expect(checks.find((check) => check.id === 'claude')).toMatchObject({ ok: true, detail: expect.stringContaining('2.1.322') });

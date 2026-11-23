@@ -6,6 +6,8 @@ import { homedir, uptime } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { contextWindowOf, detectArricurdai, loadConfig, resolveTool, saveConfig, which } from '../shared/config.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
+import { MACHINE } from '../shared/machine.ts';
+import { installHint, PLATFORM } from '../shared/platform.ts';
 import { listPanes, Tmux } from '../shared/tmux.ts';
 import { VERSION } from '../shared/version.ts';
 import { ArricurdaiNotes, ArricurdaiPoller, readArricurdaiStatus } from './arricurdai.ts';
@@ -30,6 +32,8 @@ import { type GuardParts, RepoConfig, withRepoRules } from './repo-config.ts';
 import { crewApi, CrewTemplates, Crews, RolePresets, templateApi } from './crews.ts';
 import { CustomSkills, skillUsers } from './custom-skills.ts';
 import { FolderChooser } from './folder-chooser.ts';
+import { listFolders } from './folder-list.ts';
+import { OpenCodes } from './open-codes.ts';
 import { importTeam, saveTeamFile } from './team-files.ts';
 import { TokenCounter } from './token-usage.ts';
 import { gitRunner, SkillCache } from './skills.ts';
@@ -37,6 +41,7 @@ import { cleanCrewSpec, templateOf } from '../shared/crew.ts';
 import { mcpConfigFile } from '../shared/mcp-config.ts';
 import { Hub } from './hub.ts';
 import { Permissions } from './permissions.ts';
+import { ptyProblem } from './pty.ts';
 import { isInteractiveCommand, readCommandLine } from './process.ts';
 import { Registry } from './registry.ts';
 import { createDaemonServer } from './server.ts';
@@ -507,7 +512,7 @@ function main(): void {
     const atShutdown = typeof savedState?.savedAt === 'number' ? endedAtShutdown(savedState.agents ?? [], savedState.savedAt, bootAt) : [];
     const now = Date.now();
     for (const agent of lost) {
-      markEnded(agent, 'the Mac restarted', now);
+      markEnded(agent, `the ${MACHINE} restarted`, now);
       if (!endedInLedger.has(agent.id)) {
         endedInLedger.add(agent.id);
         ledger.append({ t: now, kind: 'session', event: 'end', ...who(agent) });
@@ -516,7 +521,7 @@ function main(): void {
     // The runs of automations are not offered: their automation says what to do with them ("again").
     const ended = [...lost, ...atShutdown];
     const offered = reopener.remember(ended.filter((agent) => !(agent.team?.crew && crews.get(agent.team.crew)?.auto)));
-    if (ended.length > 0) log(`${ended.length} ${ended.length === 1 ? 'session' : 'sessions'} ended when the Mac restarted${offered ? `: ${offered} can be reopened` : ''}`);
+    if (ended.length > 0) log(`${ended.length} ${ended.length === 1 ? 'session' : 'sessions'} ended when the ${MACHINE} restarted${offered ? `: ${offered} can be reopened` : ''}`);
   }
 
   // A failed automatic update of Claude Code: read from its file at start and every minute, said in the top line.
@@ -547,6 +552,8 @@ function main(): void {
             return undefined;
           }
         })(),
+        // On a Mac it comes with Forchetta, and is loaded only when a pane opens.
+        ptyProblem: PLATFORM === 'macos' ? undefined : ptyProblem(),
         claude,
         claudeVersion,
         arricurdai,
@@ -648,6 +655,7 @@ function main(): void {
     roles: () => roles.list(),
     onRole: (message) => (message.type === 'deleteRolePreset' ? roles.delete(message.name) : roles.save(message.preset, message.previous)),
     onChooseFolder: (folder) => folderChooser.choose(folder),
+    onListFolders: (folder) => listFolders(folder),
     customSkills: () => yourSkills.list(),
     crewTemplate: (crewId) => {
       const crew = crews.get(crewId);
@@ -858,7 +866,7 @@ function main(): void {
     isFolder,
     github: (cwd, trigger) => {
       const gh = ghPath ?? which('gh');
-      return gh ? githubItems(ghRunner(gh), cwd, trigger) : Promise.resolve({ ok: false as const, error: 'gh not found: install the GitHub CLI (brew install gh), then run gh auth login' });
+      return gh ? githubItems(ghRunner(gh), cwd, trigger) : Promise.resolve({ ok: false as const, error: `gh not found: install the GitHub CLI (${installHint('gh', which)}), then run gh auth login` });
     },
     notify: (notice) => {
       log(`${notice.title}: ${notice.body}`);
@@ -869,6 +877,7 @@ function main(): void {
   const server = createDaemonServer({
     registry,
     token,
+    openCodes: new OpenCodes(),
     uiDir: join(ROOT, 'dist', 'ui'),
     hub,
     terminals,

@@ -4,6 +4,7 @@ import type { Agent } from '../shared/agent.ts';
 import { crewUsage, shortTokens, tokensDetail, tokensTotal, usdText } from '../shared/present.ts';
 import { MODELS } from './NewSession.tsx';
 import { useReturnFocus } from './focus.ts';
+import { keyText } from './platform.ts';
 import type { Store } from './store.ts';
 
 // The panel of a team of agents, as a conversation: above, the thread of the team in the order things happened
@@ -666,7 +667,7 @@ export function TeamPanel({
           rows={2}
           value={text}
           maxLength={20_000}
-          placeholder={`What to do, as you would write it to them. It reaches them as "Request #n from the user:". ⌘↩ sends it.`}
+          placeholder={keyText(`What to do, as you would write it to them. It reaches them as "Request #n from the user:". ⌘↩ sends it.`)}
           onInput={(event) => setText((event.target as HTMLTextAreaElement).value)}
         />
       </div>

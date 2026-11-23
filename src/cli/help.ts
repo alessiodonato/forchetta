@@ -1,4 +1,6 @@
 import { VERSION } from '../shared/version.ts';
+import { MACHINE } from '../shared/machine.ts';
+import { PLATFORM } from '../shared/platform.ts';
 import type { Style } from './style.ts';
 
 // The help of `forchetta` and of each command, and the command you probably meant when you mistype one.
@@ -24,12 +26,13 @@ interface CommandHelp {
 
 const COMMANDS: Record<string, CommandHelp> = {
   setup: {
-    summary: 'Get Forchetta ready: build the app and install the hooks',
+    summary: PLATFORM === 'macos' ? 'Get Forchetta ready: build the app and install the hooks' : 'Get Forchetta ready: check what it needs and install the hooks',
     usage: 'forchetta setup [options]',
     about: [
       'Checks tmux, Claude Code and the Command Line Tools, builds the app in ~/Applications, then adds',
       'the hooks to ~/.claude/settings.json: it shows what it changes and asks first (d shows the whole diff).',
-      'Run it again after every `brew upgrade forchetta`: it builds the app again only when it changed.',
+      'Run it again after every upgrade: it builds the app again only when it changed. On Linux, and in WSL, there is no',
+      'app to build: it checks Node.js, tmux, curl, the terminals and Claude Code, then adds the hooks.',
     ],
     options: [
       { name: '--yes', text: 'Install the hooks without asking' },
@@ -39,6 +42,19 @@ const COMMANDS: Record<string, CommandHelp> = {
       { name: '--no-restart', text: 'Leave a daemon of another version running (by default it starts again on this one)' },
     ],
     examples: ['forchetta setup', 'forchetta setup --yes --app-dir /Applications'],
+  },
+  open: {
+    summary: PLATFORM === 'macos' ? 'Open the app, or the page in a browser' : 'Open Forchetta in a browser',
+    usage: 'forchetta open [--browser] [--print]',
+    about: [
+      'On a Mac it opens the app; on Linux, and in WSL, the page in a browser (in WSL, one of Windows: Edge or Chrome, in',
+      'a window of its own). It starts the daemon when it is off. The address has a code good once, for two minutes.',
+    ],
+    options: [
+      { name: '--browser', text: 'The browser, also on a Mac with the app' },
+      { name: '--print', text: 'Only print the address, to open by hand' },
+    ],
+    examples: ['forchetta open', 'forchetta open --print'],
   },
   run: {
     summary: 'Start Claude Code in tmux, where Forchetta shows it and sends it commands',
@@ -61,11 +77,11 @@ const COMMANDS: Record<string, CommandHelp> = {
     examples: ['forchetta ls', `forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'`],
   },
   stats: {
-    summary: 'What the guard did on this Mac in the last days',
+    summary: `What the guard did on this ${MACHINE} in the last days`,
     usage: 'forchetta stats [--days N] [--json]',
     about: [
       'Counts by kind: edits stopped while another session changed the file, git commands asked, notes before',
-      'tests, sessions going in circles… Only counts are kept, on this Mac: no file, command or name.',
+      `tests, sessions going in circles… Only counts are kept, on this ${MACHINE}: no file, command or name.`,
     ],
     options: [
       { name: '--days', args: '<N>', text: 'How many days, today included (default: 7, at most 120)' },
@@ -74,7 +90,7 @@ const COMMANDS: Record<string, CommandHelp> = {
     examples: ['forchetta stats', 'forchetta stats --days 30'],
   },
   report: {
-    summary: 'What the sessions and the teams did and cost, from the ledger of this Mac',
+    summary: `What the sessions and the teams did and cost, from the ledger of this ${MACHINE}`,
     usage: 'forchetta report [--since 7d] [--by team|session|project|model|day] [--csv|--json]',
     about: [
       'The daemon writes a line for each turn, cost, file written, step of the guard, request and review in',
@@ -110,7 +126,7 @@ const COMMANDS: Record<string, CommandHelp> = {
       { name: 'start', text: 'Start the daemon, unless it is running' },
       { name: 'stop', text: 'Stop it: the Claude and tmux sessions go on' },
       { name: 'status', text: 'Whether it runs, for how long and with how many sessions (exit code 1 when not)' },
-      { name: 'keepalive', args: 'on|off', text: 'Let macOS start it at login and again if it stops by mistake (a LaunchAgent)' },
+      { name: 'keepalive', args: 'on|off', text: 'On a Mac: macOS starts it at login and again if it stops by mistake (a LaunchAgent)' },
     ],
   },
   team: {
@@ -138,10 +154,10 @@ const COMMANDS: Record<string, CommandHelp> = {
     examples: ['forchetta team start review-squad --goal "Add a CSV export to the orders page"', 'forchetta team start bugfix --set ticket=APP-123 --goal "Fix {ticket}"', 'forchetta team export "Feature squad"', 'forchetta team ls --json | jq \'.[] | {name, usd}\''],
   },
   reopen: {
-    summary: 'Reopen the sessions that ended with the Mac, each on its conversation',
+    summary: `Reopen the sessions that ended with the ${MACHINE}, each on its conversation`,
     usage: 'forchetta reopen [--all | <name>…] [--json]',
     about: [
-      'A restart of the Mac closes every session. Forchetta remembers them for a week: each one reopens on its',
+      `A restart of the ${MACHINE} closes every session. Forchetta remembers them for a week: each one reopens on its`,
       'conversation (claude --resume), in its folder, with its name; a member of a team goes back into its team.',
       'Claude reads the whole conversation again at its first message: a large one costs a share of your limits.',
     ],
@@ -183,6 +199,7 @@ const COMMANDS: Record<string, CommandHelp> = {
 
 const LIST: Entry[] = [
   { name: 'setup', text: COMMANDS.setup!.summary },
+  { name: 'open', text: COMMANDS.open!.summary },
   { name: 'run', args: 'claude [arguments]', text: COMMANDS.run!.summary },
   { name: 'ls', text: COMMANDS.ls!.summary },
   { name: 'reopen', args: '[--all|<name>…]', text: COMMANDS.reopen!.summary },
@@ -227,7 +244,7 @@ const header = (style: Style, title: string, text: string): string => `${style.b
 export function mainHelp(style: Style): string {
   const width = widthOf(LIST, GLOBAL_OPTIONS);
   return `${[
-    header(style, 'forchetta', 'Control center for parallel Claude Code sessions, on your Mac'),
+    header(style, 'forchetta', `Control center for parallel Claude Code sessions, on your ${MACHINE}`),
     section('Usage', '  forchetta <command> [options]', style),
     section('Commands', entries(LIST, style, width), style),
     section('Options', entries(GLOBAL_OPTIONS, style, width), style),

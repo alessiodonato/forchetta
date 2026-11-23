@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { changedNote, Coherence, RECENT_MS, removedLines } from '../src/daemon/coherence.ts';
 import type { SessionEdit } from '../src/shared/agent.ts';
+import { MACHINE } from '../src/shared/machine.ts';
 
 // What each session read, and what the others changed since: the note of the files out of date, and the lines of
 // another session about to be taken away.
@@ -68,7 +69,7 @@ describe('files read and changed since', () => {
   it('reads as a note for Claude: the file, who, when, and the lines; long changes are cut', () => {
     const lines = Array.from({ length: 15 }, (_, i) => `+line ${i}`);
     const note = changedNote([{ file: FILE, changes: [{ agentId: 'alpha', at: 1_000_000 - 3 * MIN, lines }] }], () => '"retries"', () => 'src/api.ts', 1_000_000);
-    expect(note).toContain('Forchetta: other Claude Code sessions on this Mac changed files you read earlier.');
+    expect(note).toContain(`Forchetta: other Claude Code sessions on this ${MACHINE} changed files you read earlier.`);
     expect(note).toContain('- src/api.ts, by "retries" 3 min ago:\n    +line 0');
     expect(note).toContain('    … and 3 more changed lines');
     expect(note).toContain('Read them again before you write code that relies on them.');

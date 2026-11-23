@@ -20,8 +20,8 @@
   --claude-soft: rgba(217, 119, 87, 0.16);
   --green: #46c48a;
   --red: #ef5b5b;
-  --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
-  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, 'Helvetica Neue', sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', Consolas, monospace;
   --radius: 12px;
   /* A neutral drawn over the surfaces, as r, g, b: light on the dark theme, dark on the light one. */
   --tint: 232, 233, 235;
@@ -1602,7 +1602,8 @@ html[data-hidden] *::after {
   color: var(--text-3);
 }
 
-.broadcast button {
+/* The buttons of the panels; also those of the folder picker, of the checklist and of the commands to copy. */
+:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button {
   -webkit-appearance: none;
   appearance: none;
   padding: 3px 10px;
@@ -1614,11 +1615,11 @@ html[data-hidden] *::after {
   cursor: pointer;
 }
 
-.broadcast button:hover:not(:disabled) {
+:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button:hover:not(:disabled) {
   color: var(--text);
 }
 
-.broadcast button:disabled {
+:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -1629,14 +1630,14 @@ html[data-hidden] *::after {
   color: var(--text);
 }
 
-.broadcast button.primary {
+:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button.primary {
   border-color: var(--claude-strong);
   background: var(--claude-strong);
   font-weight: 600;
   color: #fff;
 }
 
-.broadcast button.primary:hover:not(:disabled) {
+:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button.primary:hover:not(:disabled) {
   border-color: var(--claude);
   background: var(--claude);
   color: #fff;
@@ -1647,7 +1648,7 @@ html[data-hidden] *::after {
   color: var(--red);
 }
 
-.broadcast button.quiet {
+:is(.broadcast, .folder-picker, .getting-ready, .shortcuts, .copy-command) button.quiet {
   border-color: transparent;
   background: transparent;
   color: var(--text-3);
@@ -4693,6 +4694,57 @@ header.top .view-switch button:not(.on):hover {
 
 .settings-toggle {
   font-size: 14px;
+}
+
+/* The choice of a folder in the page, where there is no panel of macOS (Linux, WSL). */
+.folder-picker {
+  width: min(560px, calc(100vw - 32px));
+  max-height: 62vh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 18px 48px var(--shadow);
+}
+
+.folder-path {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.folder-path input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+}
+
+.folder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 120px;
+  overflow-y: auto;
+}
+
+.folder-list button {
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  font: 13px var(--ui);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.folder-list button:hover,
+.folder-list button:focus-visible {
+  background: var(--claude-soft);
 }
 
 /* The palette of commands (⌘K) and the sheet of the shortcuts (⌘/). */

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { keyText } from './platform.ts';
 
 // "+ new" at the top: what to start, in one place. A session in a folder, a team from its panel, a team drawn in
 // the studio, each with its shortcut, which works anywhere in the window; or a team that starts by itself.
@@ -47,7 +48,7 @@ export function NewMenu({ active, onPick }: { active: boolean; onPick: (kind: Ne
         class={`broadcast-toggle primary${active || open ? ' active' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Start a session or a team (⌘N, ⇧⌘N, ⌥⌘N)"
+        title={keyText('Start a session or a team (⌘N, ⇧⌘N, ⌥⌘N)')}
         onClick={() => setOpen(!open)}
       >
         + new ▾
@@ -60,7 +61,7 @@ export function NewMenu({ active, onPick }: { active: boolean; onPick: (kind: Ne
                 {item.name}
                 <small>{item.what}</small>
               </span>
-              {item.keys ? <kbd>{item.keys}</kbd> : null}
+              {item.keys ? <kbd>{keyText(item.keys)}</kbd> : null}
             </button>
           ))}
         </div>

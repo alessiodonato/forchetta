@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
+import { MACHINE } from '../shared/machine.ts';
 import { shortTokens } from '../shared/present.ts';
 import { type LostSession, lostName, lostText, SESSION_ID } from '../shared/reopen.ts';
 import type { Store } from './store.ts';
@@ -46,7 +47,7 @@ export function ReopenNotice({ store }: { store: Store }) {
   const recent = doing && !doing.busy && Date.now() - doing.at < 30_000 ? doing : undefined;
   if (lost.length === 0 && !busy && !recent) return null;
   return (
-    <section class="notice reopen-notice" role="status" aria-label="Sessions that ended with the Mac">
+    <section class="notice reopen-notice" role="status" aria-label={`Sessions that ended with the ${MACHINE}`}>
       <div class="reopen-head">
         {busy && doing ? (
           <span>
@@ -54,7 +55,7 @@ export function ReopenNotice({ store }: { store: Store }) {
           </span>
         ) : lost.length > 0 ? (
           <span>
-            {lost.length} {lost.length === 1 ? 'session' : 'sessions'} ended when the Mac restarted: {lostText(lost)}.
+            {lost.length} {lost.length === 1 ? 'session' : 'sessions'} ended when the {MACHINE} restarted: {lostText(lost)}.
           </span>
         ) : (
           <span />
@@ -102,7 +103,7 @@ export function ReopenButton({ agent, store }: { agent: Agent; store: Store }) {
       <button type="button" class="link" disabled={busy} title="Its conversation again, in its folder (claude --resume); back into its team if it was in one" onClick={() => store.reopen([agent.id])}>
         {mine ? 'reopening…' : 'reopen'}
       </button>
-      <span class="team-hint">{agent.endReason === 'the Mac restarted' ? 'it ended with the Mac' : 'its conversation goes on'}</span>
+      <span class="team-hint">{/^the (Mac|computer) restarted$/.test(agent.endReason ?? '') ? `it ended with the ${MACHINE}` : 'its conversation goes on'}</span>
     </div>
   );
 }

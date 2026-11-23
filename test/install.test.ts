@@ -38,7 +38,13 @@ describe('the private folder', () => {
   });
 
   it('is in Application Support for an installed copy', () => {
-    expect(defaultVarDir(installed, {}, gitIn(checkout), home)).toBe('/Users/dev/Library/Application Support/Forchetta');
+    expect(defaultVarDir(installed, {}, gitIn(checkout), home, 'macos')).toBe('/Users/dev/Library/Application Support/Forchetta');
+  });
+
+  it('is in ~/.local/share on Linux and in WSL', () => {
+    expect(defaultVarDir('/home/dev/.local/lib/forchetta', {}, gitIn(checkout), '/home/dev', 'linux')).toBe('/home/dev/.local/share/forchetta');
+    expect(defaultVarDir('/home/dev/.local/lib/forchetta', { XDG_DATA_HOME: '/elsewhere' }, gitIn(checkout), '/home/dev', 'wsl')).toBe('/home/dev/.local/share/forchetta');
+    expect(defaultVarDir(checkout, {}, gitIn(checkout), '/home/dev', 'linux')).toBe('/Users/dev/Desktop/Forchetta/var');
   });
 
   it('is FORCHETTA_VAR when set, for the simulation and the tests', () => {

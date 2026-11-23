@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, renameSync } from 'node:fs';
 import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { isAbsolute, join, relative } from 'node:path';
+import { MACHINE } from '../shared/machine.ts';
 import { type Agent, type QueuedCommand, TEAM_TEXT_MAX, type TeamInfo } from '../shared/agent.ts';
 import {
   ANSWER_HEADER,
@@ -1374,7 +1375,7 @@ export class Crews {
         for (const delivery of request.deliveries) {
           if (delivery.agentId !== oldAgentId) continue;
           if (OPEN.includes(delivery.status) && delivery.status !== 'approval') {
-            Object.assign(delivery, { status: 'failed', reason: 'its session ended with the Mac: send it again', at: now });
+            Object.assign(delivery, { status: 'failed', reason: `its session ended with the ${MACHINE}: send it again`, at: now });
           }
           delivery.agentId = result.agentId;
         }

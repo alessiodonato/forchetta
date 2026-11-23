@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { systemTool } from '../shared/platform.ts';
 
 // Whether a claude process shows its dialogs in a terminal. `claude -p` and the SDK have no dialog: there a
 // PermissionRequest hook that waits stops the whole run until it answers (seen with 2.1.322), so Forchetta does
@@ -8,7 +9,7 @@ import { execFile } from 'node:child_process';
 /** The command line of a process, as ps shows it, or undefined when ps cannot tell. */
 export function readCommandLine(pid: number): Promise<string | undefined> {
   return new Promise((resolve) => {
-    execFile('/bin/ps', ['-ww', '-o', 'args=', '-p', String(pid)], { timeout: 3000 }, (error, stdout) => {
+    execFile(systemTool('ps'), ['-ww', '-o', 'args=', '-p', String(pid)], { timeout: 3000 }, (error, stdout) => {
       const line = error ? '' : String(stdout).trim();
       resolve(line || undefined);
     });

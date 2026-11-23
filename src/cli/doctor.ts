@@ -1,15 +1,17 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, release, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Agent } from '../shared/agent.ts';
 import { loadConfig, which } from '../shared/config.ts';
 import { api, runningDaemon } from '../shared/daemon-client.ts';
 import { paths, ROOT } from '../shared/paths.ts';
+import { onWindowsDrive, PLATFORM } from '../shared/platform.ts';
 import { compareVersions, type SetupCheck, type SystemInfo } from '../shared/system.ts';
 import { VERSION } from '../shared/version.ts';
 import { versionIn } from '../daemon/claude-update.ts';
 import { readClaudeSettings, systemInfo } from '../daemon/system.ts';
+import { ptyProblem } from '../daemon/pty.ts';
 import { parseArgs } from './args.ts';
 import { code } from './help.ts';
 import type { RunIO } from './run.ts';
@@ -83,12 +85,24 @@ function toolVersion(file: string | undefined, args: string[]): string | undefin
   return result.status === 0 ? `${result.stdout}${result.stderr}`.trim().split('\n')[0] : undefined;
 }
 
+/** "macOS 14.6", "Ubuntu 24.04.1 LTS (WSL, 5.15.153.1-microsoft-standard-WSL2)". */
+export function osName(platform = PLATFORM, kernel = release()): string {
+  if (platform === 'macos') return `macOS ${toolVersion('/usr/bin/sw_vers', ['-productVersion']) ?? kernel}`;
+  let name = 'Linux';
+  try {
+    name = /^PRETTY_NAME="?([^"\n]+)"?$/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1] ?? name;
+  } catch {
+    // No such file: the kernel says enough.
+  }
+  return `${name} (${platform === 'wsl' ? 'WSL, ' : ''}${kernel})`;
+}
+
 export async function doctorCommand(args: readonly string[], io: RunIO): Promise<number> {
   const { flags, values } = parseArgs('doctor', args, { flags: ['--bundle', '--json'], values: ['--out'] });
   const s = io.style;
   const findings: Finding[] = [];
   const node = process.versions.node;
-  findings.push({ ok: compareVersions(node, '22.0.0') >= 0, label: 'Node.js', detail: `${node}${compareVersions(node, '22.0.0') < 0 ? ': Forchetta needs 22 or later' : ''}`, ...(compareVersions(node, '22.0.0') < 0 ? { fix: 'brew upgrade node' } : {}) });
+  findings.push({ ok: compareVersions(node, '22.0.0') >= 0, label: 'Node.js', detail: `${node}${compareVersions(node, '22.0.0') < 0 ? ': Forchetta needs 22 or later' : ''}`, ...(compareVersions(node, '22.0.0') < 0 ? { fix: PLATFORM === 'macos' ? 'brew upgrade node' : 'install Node.js 22 or later, from https://nodejs.org' } : {}) });
   findings.push({ ok: true, label: 'Forchetta', detail: `${VERSION} · ${tildify(ROOT)}` });
   let mode = '';
   try {
@@ -97,6 +111,10 @@ export async function doctorCommand(args: readonly string[], io: RunIO): Promise
     mode = '';
   }
   findings.push({ ok: mode === '700' ? true : mode ? 'warn' : true, label: 'Private folder', detail: `${tildify(paths.varDir)}${mode && mode !== '700' ? ` (permissions ${mode}, not 700)` : mode ? '' : ' (not created yet)'}`, ...(mode && mode !== '700' ? { fix: `chmod 700 ${JSON.stringify(paths.varDir)}` } : {}) });
+
+  if (PLATFORM === 'wsl' && [ROOT, paths.varDir].some(onWindowsDrive)) {
+    findings.push({ ok: false, label: 'Folder of Windows', detail: 'Forchetta is on a drive of Windows, which cannot hold its sockets and private data: put it in your home of WSL' });
+  }
 
   const daemon = await runningDaemon();
   let system: SystemInfo | undefined;
@@ -127,6 +145,7 @@ export async function doctorCommand(args: readonly string[], io: RunIO): Promise
     system = systemInfo({
       config,
       tmux: config.paths.tmux ?? which('tmux'),
+      ptyProblem: PLATFORM === 'macos' ? undefined : ptyProblem(),
       claude,
       claudeVersion: versionIn(toolVersion(claude, ['--version']) ?? ''),
       arricurdai: config.arricurdai,
@@ -178,8 +197,8 @@ export async function doctorCommand(args: readonly string[], io: RunIO): Promise
     const stamp = new Date().toISOString().slice(0, 10);
     const folder = join(dir, `forchetta-doctor-${stamp}`);
     try {
-      spawnSync('/bin/mkdir', ['-p', folder]);
-      const report = { forchetta: VERSION, node, macos: toolVersion('/usr/bin/sw_vers', ['-productVersion']) ?? release(), tmux: toolVersion(system.checks.find((check) => check.id === 'tmux')?.ok ? (loadConfig().paths.tmux ?? which('tmux')) : undefined, ['-V']), findings, features: system.features, claude: system.claude };
+      mkdirSync(folder, { recursive: true });
+      const report = { forchetta: VERSION, node, os: osName(), tmux: toolVersion(system.checks.find((check) => check.id === 'tmux')?.ok ? (loadConfig().paths.tmux ?? which('tmux')) : undefined, ['-V']), findings, features: system.features, claude: system.claude };
       writeFileSync(join(folder, 'doctor.json'), scrub(`${JSON.stringify(report, null, 2)}\n`));
       writeFileSync(join(folder, 'daemon.log'), scrub(readLog().split('\n').slice(-3000).join('\n')));
       writeFileSync(join(folder, 'config.json'), scrub(`${JSON.stringify(loadConfig(), null, 2)}\n`));

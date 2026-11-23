@@ -2,6 +2,7 @@ import { render } from 'preact';
 import './styles.css';
 import { App } from './App.tsx';
 import { connectAttention } from './attention.ts';
+import { browserShell } from './browser-shell.ts';
 import { Connection, shell } from './connection.ts';
 import { setHidden } from './motion.ts';
 import { Store } from './store.ts';
@@ -25,7 +26,8 @@ if (!shell()) {
   document.addEventListener('visibilitychange', () => window.forchettaVisibility?.(document.visibilityState === 'visible'));
 }
 
-connectAttention(store, shell() ? (message) => shell()?.postMessage(message) : undefined);
+// The demo has notices of its own (it sets __FORCHETTA__, and no app is around it).
+connectAttention(store, shell() ? (message) => shell()?.postMessage(message) : window.__FORCHETTA__ ? undefined : browserShell());
 
 render(<App store={store} />, document.getElementById('app')!);
 connection.start();

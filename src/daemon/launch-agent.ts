@@ -6,7 +6,7 @@ import { paths } from '../shared/paths.ts';
 
 // The daemon kept alive by macOS (`forchetta daemon keepalive on`): a LaunchAgent that starts it at login and again
 // when it stops by mistake. A daemon stopped on purpose (`forchetta daemon stop`, exit code 0) stays stopped until
-// the next login, or until the app or the CLI start it.
+// the next login, or until the app or the CLI start it. Only on a Mac: elsewhere the CLI starts the daemon when it needs it.
 
 export const LAUNCH_AGENT_LABEL = 'dev.forchetta.daemon';
 
@@ -68,6 +68,7 @@ function launchctl(args: string[]): { ok: boolean; output: string } {
 
 /** Writes the LaunchAgent and loads it: macOS starts the daemon now (no other one must be running) and at login. */
 export function installLaunchAgent(node: string): { ok: true } | { ok: false; error: string } {
+  if (process.platform !== 'darwin') return { ok: false, error: 'the daemon is kept alive only on a Mac, by launchd' };
   const file = launchAgentFile();
   mkdirSync(dirname(file), { recursive: true });
   // Loaded already (an older copy): unloaded first, so that the new one is read.
@@ -92,6 +93,7 @@ export function removeLaunchAgent(): { ok: true; was: boolean } | { ok: false; e
 
 /** Asks macOS to start the daemon of the LaunchAgent, when there is one; false when it cannot. */
 export function kickstartLaunchAgent(): boolean {
+  if (process.platform !== 'darwin') return false;
   if (!existsSync(launchAgentFile())) return false;
   return launchctl(['kickstart', `${domain()}/${LAUNCH_AGENT_LABEL}`]).ok;
 }

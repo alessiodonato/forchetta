@@ -2,11 +2,13 @@ import { loadConfig, resolveTool } from '../shared/config.ts';
 import { api, ensureDaemon, readDaemonInfo, runningDaemon } from '../shared/daemon-client.ts';
 import { UserError } from '../shared/errors.ts';
 import { paths } from '../shared/paths.ts';
+import { PLATFORM } from '../shared/platform.ts';
 import { VERSION } from '../shared/version.ts';
 import { closest, code, commandHelp, mainHelp, suggestCommand } from './help.ts';
 import { hooksCommand } from './hooks.ts';
 import { ago, listSessions } from './ls.ts';
 import { type RunIO, runClaude } from './run.ts';
+import { openCommand } from './open.ts';
 import { defaultAppDir, setupCommand } from './setup.ts';
 import { parseDays, statsCommand } from './stats.ts';
 import { pairs, styleFor, tildify } from './style.ts';
@@ -74,7 +76,7 @@ async function daemonCommand(action: string | undefined, rest: readonly string[]
         ['uptime', ago(Date.now() - health.startedAt)],
         ['sessions', String(health.agents)],
       ];
-      rows.push(['keepalive', existsSync(launchAgentFile()) ? 'on: macOS starts it at login and again if it stops by mistake' : 'off']);
+      if (PLATFORM === 'macos') rows.push(['keepalive', existsSync(launchAgentFile()) ? 'on: macOS starts it at login and again if it stops by mistake' : 'off']);
       io.stdout(`${s.mark('●', 'green', s.bold('Daemon running'))}\n${pairs(rows, s)}\n`);
       if (health.version !== VERSION) {
         io.stdout(
@@ -85,6 +87,7 @@ async function daemonCommand(action: string | undefined, rest: readonly string[]
     }
     case 'keepalive': {
       const wanted = rest[0];
+      if (PLATFORM !== 'macos') throw new UserError('keepalive is only on a Mac, where launchd does it', 'here `forchetta open` and `forchetta run claude` start the daemon when it is off');
       if (wanted !== 'on' && wanted !== 'off') throw new UserError('keepalive is on or off', 'for example `forchetta daemon keepalive on`');
       if (wanted === 'off') {
         const removed = removeLaunchAgent();
@@ -129,6 +132,9 @@ async function main(argv: string[]): Promise<number> {
   switch (command) {
     case 'run':
       return runClaude(rest, io);
+    case 'open':
+      checkOptions('open', rest, ['--browser', '--print']);
+      return openCommand({ browser: rest.includes('--browser'), print: rest.includes('--print') }, io);
     case 'ls':
       checkOptions('ls', rest, ['--json']);
       return listSessions(io, { json: rest.includes('--json') });

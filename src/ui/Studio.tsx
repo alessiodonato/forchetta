@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type Agent, STATE_LABEL } from '../shared/agent.ts';
+import { MACHINE } from '../shared/machine.ts';
 import { crewUsage, shortTokens, tokensTotal, usdText } from '../shared/present.ts';
 import { type LinkKind, linkStates } from './org-lines.ts';
 import { type AgentTools, hasTools, MCP_SERVERS, type McpServerInfo, mcpServerById, TOOL_LIMITS, type ToolLimitId, toolsText } from '../shared/agent-tools.ts';
@@ -11,6 +12,7 @@ import { openLink } from './Artifacts.tsx';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { TALK_TEXT } from './NewTeam.tsx';
 import { useReturnFocus } from './focus.ts';
+import { keyText } from './platform.ts';
 import { canOpen, type Store } from './store.ts';
 import {
   addNode,
@@ -270,7 +272,7 @@ function ToolCard({ tool }: { tool: McpServerInfo }) {
         </li>
         <li>License {tool.license}</li>
         <li>Its tools: mcp__{tool.id}__…</li>
-        {tool.network && <li>Beyond this Mac: {tool.network}</li>}
+        {tool.network && <li>Beyond this {MACHINE}: {tool.network}</li>}
       </ul>
       <p class="studio-hint">
         Only the agents you give it to have it, for their session: npx runs it at this version when the session starts (the first time it downloads it), and its tools are allowed without asking for those agents. It is in no
@@ -722,7 +724,7 @@ function ImportTeam({ store }: { store: Store }) {
       <>
         <p class="studio-title">This team brings skills</p>
         <p class="studio-hint">
-          {file.ask.length === 1 ? 'One skill' : `${file.ask.length} skills`} from GitHub, that this Mac does not have. A skill is instructions and files that Claude reads and may run: open each to see what it holds, at the commit the team names, before fetching it.
+          {file.ask.length === 1 ? 'One skill' : `${file.ask.length} skills`} from GitHub, that this {MACHINE} does not have. A skill is instructions and files that Claude reads and may run: open each to see what it holds, at the commit the team names, before fetching it.
         </p>
         <ul class="studio-ask">
           {file.ask.map((skill) => (
@@ -752,7 +754,7 @@ function ImportTeam({ store }: { store: Store }) {
     <>
       <p class="studio-title">Open a team from its file</p>
       <p class="studio-hint">
-        Drop the file of a team (<code>.forchetta-team.json</code>) anywhere on the studio, or paste its text here. It opens on the canvas, in place of what is there; ⌘Z brings that back. Skills of GitHub it needs are added; skills that were a folder of the other Mac are left out.
+        Drop the file of a team (<code>.forchetta-team.json</code>) anywhere on the studio, or paste its text here. It opens on the canvas, in place of what is there; {keyText('⌘Z')} brings that back. Skills of GitHub it needs are added; skills that were a folder of the other computer are left out.
       </p>
       <Text label="Its text" area value={text} max={512 * 1024} placeholder='{ "kind": "forchetta-team", … }' onInput={setText} mono />
       <div class="studio-actions">
@@ -782,7 +784,7 @@ function AddSkill({ store, onChoose, onAdded }: { store: Store; onChoose?: (curr
     <>
       <p class="studio-title">Add a skill of yours</p>
       <p class="studio-hint">
-        From GitHub: the link of the folder of the skill, with its SKILL.md. Forchetta keeps the commit of now, so the skill does not change by itself, and fetches only that folder, outside your projects. From a folder of this Mac: it is used where it is, never copied.
+        From GitHub: the link of the folder of the skill, with its SKILL.md. Forchetta keeps the commit of now, so the skill does not change by itself, and fetches only that folder, outside your projects. From a folder of this {MACHINE}: it is used where it is, never copied.
       </p>
       <label class="studio-field">
         <span>Link or folder</span>
@@ -797,7 +799,7 @@ function AddSkill({ store, onChoose, onAdded }: { store: Store; onChoose?: (curr
             onKeyDown={(event) => event.key === 'Enter' && add()}
           />
           {onChoose && (
-            <button type="button" title="Choose the folder of a skill in the panel of macOS" onClick={() => onChoose(source.startsWith('/') || source.startsWith('~') ? source : '', setSource)}>
+            <button type="button" title="Choose the folder of a skill" onClick={() => onChoose(source.startsWith('/') || source.startsWith('~') ? source : '', setSource)}>
               Choose…
             </button>
           )}
@@ -1819,12 +1821,12 @@ export function Studio({
         </span>
         <span class="studio-spacer" />
         {!live && (
-          <button type="button" class="quiet studio-undo" title="Undo the last change of the canvas (⌘Z)" aria-label="Undo" disabled={history.past.length === 0} onClick={() => step(true)}>
+          <button type="button" class="quiet studio-undo" title={keyText('Undo the last change of the canvas (⌘Z)')} aria-label="Undo" disabled={history.past.length === 0} onClick={() => step(true)}>
             ↶
           </button>
         )}
         {!live && (
-          <button type="button" class="quiet studio-undo" title="Redo (⇧⌘Z)" aria-label="Redo" disabled={history.future.length === 0} onClick={() => step(false)}>
+          <button type="button" class="quiet studio-undo" title={keyText('Redo (⇧⌘Z)')} aria-label="Redo" disabled={history.future.length === 0} onClick={() => step(false)}>
             ↷
           </button>
         )}
@@ -1956,7 +1958,7 @@ export function Studio({
         />
         <div
           class={`studio-preset studio-new${selection?.kind === 'new-skill' ? ' on' : ''}`}
-          title="A skill of yours: the link of its folder on GitHub, or a folder of this Mac"
+          title={`A skill of yours: the link of its folder on GitHub, or a folder of this ${MACHINE}`}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             setSelection({ kind: 'new-skill' });
@@ -2189,13 +2191,13 @@ export function Studio({
         </div>
       </div>
       <div class="studio-zoom" role="group" aria-label="Zoom">
-        <button type="button" class="quiet" title="Zoom out (⌘−)" onClick={() => setZoom(zoom / 1.2)}>
+        <button type="button" class="quiet" title={keyText('Zoom out (⌘−)')} onClick={() => setZoom(zoom / 1.2)}>
           −
         </button>
-        <button type="button" class="quiet studio-zoom-value" title="Back to 100% (⌘0)" onClick={() => setZoom(1)}>
+        <button type="button" class="quiet studio-zoom-value" title={keyText('Back to 100% (⌘0)')} onClick={() => setZoom(1)}>
           {Math.round(zoom * 100)}%
         </button>
-        <button type="button" class="quiet" title="Zoom in (⌘+); a pinch on the trackpad works too" onClick={() => setZoom(zoom * 1.2)}>
+        <button type="button" class="quiet" title={keyText('Zoom in (⌘+); a pinch on the trackpad works too')} onClick={() => setZoom(zoom * 1.2)}>
           +
         </button>
         <button type="button" class="quiet" title="Everything in the view" disabled={doc.nodes.length === 0} onClick={fit}>
@@ -2241,7 +2243,7 @@ export function Studio({
                 <li key={key}>{nodeOf(doc, key)?.name ?? ''}</li>
               ))}
             </ul>
-            <p class="studio-hint">Drag one of them to move them all. ⇧-click adds a box or takes it away; a rectangle from an empty spot selects the boxes it touches.</p>
+            <p class="studio-hint">Drag one of them to move them all. {keyText('⇧-click')} adds a box or takes it away; a rectangle from an empty spot selects the boxes it touches.</p>
             <div class="studio-actions">
               <button type="button" onClick={duplicate}>
                 Duplicate
@@ -2416,7 +2418,7 @@ export function Studio({
                   spellcheck={false}
                   onInput={(event) => setDoc({ ...doc, folder: (event.target as HTMLInputElement).value })}
                 />
-                <button type="button" title="Choose the folder in the panel of macOS" onClick={() => chooseFolder(doc.folder)}>
+                <button type="button" title="Choose the folder" onClick={() => chooseFolder(doc.folder)}>
                   Choose…
                 </button>
               </div>
@@ -2513,7 +2515,7 @@ export function Studio({
       <footer class="studio-foot">
         <span class={`broadcast-note${spawn?.error || note?.error ? ' error' : ''}`}>
           {spawn?.error ??
-            note?.text ??
+            (note ? keyText(note.text) : undefined) ??
             (live
               ? 'Running: a box says what its agent does, an arrow what goes along it. Add an agent by dragging it here and drawing its arrow.'
               : issues.length > 0
@@ -2544,7 +2546,7 @@ export function Studio({
               }}
             >
               <span>{item.label}</span>
-              {item.keys && <kbd>{item.keys}</kbd>}
+              {item.keys && <kbd>{keyText(item.keys)}</kbd>}
             </button>
           ))}
         </div>

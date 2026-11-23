@@ -154,6 +154,7 @@
       <nav aria-label="Contents">
         <ol>
           <li><a href="#start">Getting started</a></li>
+          <li><a href="#windows">Windows and Linux</a></li>
           <li><a href="#window">The window</a></li>
           <li><a href="#terminals">The terminals</a></li>
           <li><a href="#commands">Commands to a session</a></li>
@@ -204,6 +205,31 @@ forchetta setup</pre>
           <li>The daemon of Forchetta starts by itself. Stopping it, or quitting the app, stops no session.</li>
         </ul>
         <p>After <code>brew upgrade forchetta</code>, run <code>forchetta setup</code> again: it builds the app again only when it changed.</p>
+      </section>
+
+      <section id="windows">
+        <h2>Windows and Linux (beta)</h2>
+        <p>Forchetta runs the sessions in tmux, which Windows does not have. On Windows it runs inside <a href="https://learn.microsoft.com/windows/wsl/install">WSL 2</a>, the Linux of Windows, and its page opens in a window of Edge or Chrome. On Linux it works the same way, in your browser.</p>
+        <ol>
+          <li>If you do not have WSL yet, in PowerShell: <code>wsl --install</code>, then restart Windows and open <strong>Ubuntu</strong> from the Start menu. The next steps are in that terminal.</li>
+          <li>Claude Code inside WSL, if it is not there: <code>curl -fsSL https://claude.ai/install.sh | bash</code>.</li>
+          <li>tmux 3.2 or later (Ubuntu 22.04 and later have it) and Forchetta:</li>
+        </ol>
+        <pre>sudo apt install tmux
+curl -fsSL https://forchetta.dev/install.sh | sh
+forchetta open</pre>
+        <p>The installer needs no root: Forchetta goes in <code>~/.local/lib/forchetta</code>, and without Node.js 22 one from nodejs.org goes next to it, only for Forchetta. Then it runs <code>forchetta setup</code>, which checks what is missing and adds the hooks, showing you every change to <code>~/.claude/settings.json</code> first. To update, run the installer again.</p>
+        <p><code>forchetta open</code> starts the daemon when it is off and opens the page with a code that is good once, for two minutes. After a restart of the daemon, open the page with it again. In Settings, <span class="ui">allow them</span> turns on the notifications of the browser, which come while the page is open.</p>
+        <h3>What differs from a Mac</h3>
+        <ul>
+          <li><strong>The sessions are those inside WSL.</strong> Claude Code started in PowerShell, or Claude Code for Windows, has its own settings and does not reach Forchetta. When both are installed, start the one of WSL.</li>
+          <li>Keep your projects in your home of WSL (<code>~/projects</code>), not under <code>/mnt/c</code>: there they work, but are much slower. Forchetta itself must not be under <code>/mnt/c</code>. A folder can be written as Windows does (<code>C:\Users\you\shop</code>).</li>
+          <li>The shortcuts are with <kbd>Ctrl</kbd> in place of <kbd>⌘</kbd>. Inside a terminal they go to Claude Code, except <kbd>Ctrl</kbd><kbd>V</kbd>, which pastes; <kbd>Ctrl</kbd>-click opens a link. In a tab of the browser, instead of the window <code>forchetta open</code> makes, the browser keeps some of them for itself (<kbd>Ctrl</kbd><kbd>N</kbd>, <kbd>Ctrl</kbd><kbd>W</kbd>).</li>
+          <li>Dragging the mouse in a terminal copies into the clipboard of Windows; <kbd>Shift</kbd>-drag selects in the page.</li>
+          <li>There is no app: no menu bar, no shortcut from any program, and <code>forchetta daemon keepalive</code> is only on a Mac. Windows may stop WSL after its last terminal closes: keep one open while the sessions work.</li>
+          <li>The data is in <code>~/.local/share/forchetta</code>.</li>
+        </ul>
+        <p>To remove it: <code>forchetta hooks uninstall</code>, <code>forchetta daemon stop</code>, then delete <code>~/.local/bin/forchetta</code>, <code>~/.local/lib/forchetta</code>, <code>~/.local/lib/forchetta-node</code> and <code>~/.local/share/forchetta</code>.</p>
       </section>
 
       <section id="window">
@@ -736,6 +762,7 @@ Read them again before you write code that relies on them.</code></pre>
           <thead><tr><th>Command</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td><code>forchetta setup</code></td><td>Builds the app and installs the hooks; a daemon of an older version starts again on this one (<code>--no-restart</code> leaves it). <code>--yes</code> without asking, <code>--diff</code> shows the whole diff, <code>--force</code> builds again, <code>--app-dir &lt;folder&gt;</code> puts the app elsewhere.</td></tr>
+            <tr><td><code>forchetta open</code></td><td>Opens the app; on Linux and in WSL, the page in a browser (see <a href="#windows">Windows and Linux</a>). <code>--browser</code> the page on a Mac too, <code>--print</code> only its address.</td></tr>
             <tr><td><code>forchetta run claude [args]</code></td><td>Starts Claude Code in the tmux of Forchetta and attaches this terminal.</td></tr>
             <tr><td><code>forchetta ls</code></td><td>One line per session: state, what it does, context and cache, <code>tmux</code> or read only.</td></tr>
             <tr><td><code>forchetta ls --json</code></td><td>The same as JSON, for scripts: <code>forchetta ls --json | jq -r '.[] | select(.state == "waiting") | .project'</code></td></tr>

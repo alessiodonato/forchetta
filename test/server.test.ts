@@ -1,7 +1,8 @@
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Registry } from '../src/daemon/registry.ts';
-import { createDaemonServer, GUARD_PATH, HOOK_PATH, hookMeta } from '../src/daemon/server.ts';
+import { OpenCodes } from '../src/daemon/open-codes.ts';
+import { createDaemonServer, GUARD_PATH, HOOK_PATH, hookMeta, OPEN_PATH } from '../src/daemon/server.ts';
 import { join } from 'node:path';
 import { http, tempDir } from './helpers.ts';
 
@@ -23,6 +24,7 @@ beforeAll(async () => {
     log: () => {},
     info: () => ({ pid: 1 }),
     onShutdown: () => shutdowns++,
+    openCodes: new OpenCodes(),
     guard: (agent, payload) => (payload.tool_name === 'Edit' ? { decided: agent.sessionId } : undefined),
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -124,6 +126,9 @@ describe('api', () => {
   it('accepts its own origin only', async () => {
     expect((await http(port, { path: '/api/health', headers: { ...auth, origin: 'https://evil.example' } })).status).toBe(403);
     expect((await http(port, { path: '/api/health', headers: { ...auth, origin: `http://127.0.0.1:${port}` } })).status).toBe(200);
+    // localhost too: how a browser of Windows reaches a daemon inside WSL2. Not another port of it.
+    expect((await http(port, { path: '/api/health', headers: { ...auth, origin: `http://localhost:${port}` } })).status).toBe(200);
+    expect((await http(port, { path: '/api/health', headers: { ...auth, origin: `http://localhost:${port + 1}` } })).status).toBe(403);
   });
 
   it('registers a session of forchetta run', async () => {
@@ -133,6 +138,25 @@ describe('api', () => {
     expect(registry.agents.get(id)).toMatchObject({ state: 'starting', control: { kind: 'tmux', session: 'fk-9a9a9a9a' } });
     const bad = await http(port, { method: 'POST', path: '/api/agents', headers: { ...auth, ...json }, body: JSON.stringify({ id, cwd: 'relative', tmuxSession: 'x;kill' }) });
     expect(bad.status).toBe(400);
+  });
+
+  it('gives the token to its page for a code of forchetta open, once', async () => {
+    const origin = `http://localhost:${port}`;
+    const trade = (code: unknown, headers: Record<string, string> = { ...json, origin }) => http(port, { method: 'POST', path: OPEN_PATH, headers, body: JSON.stringify({ code }) });
+    // Only who has the token makes a code.
+    expect((await http(port, { method: 'POST', path: '/api/open' })).status).toBe(401);
+    const { code } = JSON.parse((await http(port, { method: 'POST', path: '/api/open', headers: auth })).body) as { code: string };
+    expect(code).toMatch(/^[0-9a-f]{32}$/);
+    // Not for another page, nor for what is not a page, nor as a form; and the code is still good.
+    expect((await trade(code, { ...json, origin: 'https://evil.example' })).status).toBe(403);
+    expect((await trade(code, json)).status).toBe(403);
+    expect((await trade(code, { origin, 'content-type': 'text/plain' })).status).toBe(415);
+    expect((await trade('0'.repeat(32))).status).toBe(403);
+    expect((await http(port, { path: OPEN_PATH, headers: { origin } })).status).toBe(404);
+    const given = await trade(code);
+    expect(given).toMatchObject({ status: 200, body: JSON.stringify({ token: TOKEN }) });
+    expect(given.headers['cache-control']).toBe('no-store');
+    expect((await trade(code)).status).toBe(403);
   });
 
   it('shuts down on request', async () => {

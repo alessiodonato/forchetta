@@ -1,6 +1,7 @@
 import { statSync } from 'node:fs';
 import { type Crew, type CrewSpec, type CrewTemplate, type ReviewRecord, cleanBudget, cleanCrewSpec, fillParams, leadName, templateOf, threadOf } from '../shared/crew.ts';
 import type { Agent, AgentState, TokenUsage } from '../shared/agent.ts';
+import { MACHINE } from '../shared/machine.ts';
 import { activity, sumTokens, tokensTotal } from '../shared/present.ts';
 import { type Automation, type AutomationView, triggerText } from '../shared/automation.ts';
 import { type LostSession, lostName } from '../shared/reopen.ts';
@@ -219,7 +220,7 @@ export function cliApi(deps: CliApiDeps): (method: string, path: string, query: 
       // All of them, or those named: a name of the window, a folder, or a team (all its sessions).
       const names = Array.isArray(input.names) ? input.names.filter((name): name is string => typeof name === 'string').map((name) => name.trim().toLowerCase()) : [];
       const wanted = input.all === true ? sessions : sessions.filter((one) => names.some((name) => [lostName(one), one.project, one.team?.group ?? ''].some((key) => key.toLowerCase() === name)));
-      if (wanted.length === 0) return fail(sessions.length === 0 ? 'no session ended with the Mac is waiting to reopen' : 'no session to reopen is called so: see `forchetta reopen`', 404);
+      if (wanted.length === 0) return fail(sessions.length === 0 ? `no session ended with the ${MACHINE} is waiting to reopen` : 'no session to reopen is called so: see `forchetta reopen`', 404);
       return ok(await deps.reopen.reopen(wanted.map((one) => one.agentId)));
     }
 

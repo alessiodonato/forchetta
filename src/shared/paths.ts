@@ -2,10 +2,12 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync } from 'node:
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PLATFORM, type Platform } from './platform.ts';
 
 // Where Forchetta keeps its files. Everything it writes at run time stays in one private folder: the daemon token,
 // the tmux socket, the snapshot of the sessions, the log, the backups. In a git checkout it is `var/` inside the
-// folder, as it always was; installed (by Homebrew, say), it is ~/Library/Application Support/Forchetta.
+// folder, as it always was; installed (by Homebrew, say), it is ~/Library/Application Support/Forchetta on a Mac, and
+// ~/.local/share/forchetta on Linux (WSL too).
 
 /** The Forchetta folder: the nearest folder above this file that holds the package.json of forchetta. */
 function findRoot(): string {
@@ -42,13 +44,20 @@ export const ROOT = process.env.FORCHETTA_ROOT ?? stablePath(findRoot());
 
 /**
  * The private folder of Forchetta: FORCHETTA_VAR when set; `var/` inside the folder when it is a git checkout;
- * otherwise ~/Library/Application Support/Forchetta. The app (native/main.swift) and bin/forchetta-statusline
+ * otherwise ~/Library/Application Support/Forchetta on a Mac, ~/.local/share/forchetta on Linux: not XDG_DATA_HOME,
+ * which a hook may not have while the daemon does. The app (native/main.swift) and the scripts of the hooks (bin/)
  * follow the same rule.
  */
-export function defaultVarDir(root = ROOT, env: NodeJS.ProcessEnv = process.env, exists: (path: string) => boolean = existsSync, home = homedir()): string {
+export function defaultVarDir(
+  root = ROOT,
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (path: string) => boolean = existsSync,
+  home = homedir(),
+  platform: Platform | undefined = PLATFORM,
+): string {
   if (env.FORCHETTA_VAR) return env.FORCHETTA_VAR;
   if (exists(join(root, '.git'))) return join(root, 'var');
-  return join(home, 'Library', 'Application Support', 'Forchetta');
+  return platform === 'macos' ? join(home, 'Library', 'Application Support', 'Forchetta') : join(home, '.local', 'share', 'forchetta');
 }
 
 export interface Paths {

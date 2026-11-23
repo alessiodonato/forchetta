@@ -7,6 +7,8 @@ import { Palette, type PaletteCommand, ShortcutsSheet } from './Palette.tsx';
 import { CopyCommand, MANUAL, SettingsPanel, SetupChecks } from './Settings.tsx';
 import { openLink } from './Artifacts.tsx';
 import { applyTheme, resolvedTheme } from './theme.ts';
+import { IS_MAC, keyText } from './platform.ts';
+import { FolderPicker } from './FolderPicker.tsx';
 import { setTerminalFontSize, terminalFontSize } from './prefs.ts';
 import { PROTOCOL } from '../shared/system.ts';
 import { Box } from './Box.tsx';
@@ -140,7 +142,7 @@ function counts(agents: readonly Agent[], today: TodayInfo | undefined, limits: 
       {waiting > 0 && (
         <>
           {' · '}
-          <button type="button" class="waiting waiting-button" title="Open the next session that waits for you (⌘])" onClick={onWaiting}>
+          <button type="button" class="waiting waiting-button" title={keyText('Open the next session that waits for you (⌘])')} onClick={onWaiting}>
             {waiting} {waiting === 1 ? 'waits for you' : 'wait for you'}
           </button>
         </>
@@ -460,7 +462,7 @@ export function App({ store }: { store: Store }) {
           )}
           {state.ready && <NewMenu active={panel === 'new' || panel === 'team' || studio} onPick={startNew} />}
           {state.ready && (
-            <button type="button" class={`broadcast-toggle quiet settings-toggle${panel === 'settings' ? ' active' : ''}`} aria-pressed={panel === 'settings'} title="Settings (⌘,) · Commands (⌘K)" aria-label="Settings" onClick={() => toggle('settings')}>
+            <button type="button" class={`broadcast-toggle quiet settings-toggle${panel === 'settings' ? ' active' : ''}`} aria-pressed={panel === 'settings'} title={keyText('Settings (⌘,) · Commands (⌘K)')} aria-label="Settings" onClick={() => toggle('settings')}>
               ⚙
             </button>
           )}
@@ -554,10 +556,17 @@ export function App({ store }: { store: Store }) {
       )}
       {state.ready && !state.connected && (
         <p class="notice offline-notice" role="status">
-          The daemon of Forchetta is not answering: what you see may be old, and nothing can be sent until it is back. Trying again… If it stays off: <CopyCommand command="forchetta daemon start" />
+          The daemon of Forchetta is not answering: what you see may be old, and nothing can be sent until it is back. Trying again… If it stays off: <CopyCommand command={state.needsOpen ? 'forchetta open' : 'forchetta daemon start'} />
         </p>
       )}
-      {!state.ready ? (
+      {!state.ready && state.needsOpen ? (
+        <div class="empty">
+          <p>This page is not connected to Forchetta.</p>
+          <p class="hint">
+            Open it from a terminal{IS_MAC ? '' : ' (of Linux, or of WSL)'}: <CopyCommand command="forchetta open" />
+          </p>
+        </div>
+      ) : !state.ready ? (
         <p class="empty">Connecting to the daemon…</p>
       ) : working ? (
         <Workspace state={state} store={store} agents={agents} now={now} />
@@ -571,7 +580,7 @@ export function App({ store }: { store: Store }) {
           ) : null}
           <p>No Claude Code session running.</p>
           <p class="hint">
-            Start one with <code>forchetta run claude</code>, or <button type="button" class="link-button" onClick={() => startNew('session')}>a new session</button> (⌘N). ⌘K finds every command.
+            Start one with <code>forchetta run claude</code>, or <button type="button" class="link-button" onClick={() => startNew('session')}>a new session</button> {keyText('(⌘N). ⌘K finds every command.')}
           </p>
         </div>
       ) : showOrg ? (
@@ -613,6 +622,7 @@ export function App({ store }: { store: Store }) {
       )}
       <FilesPanel store={store} now={now} />
       <SubagentsPanel store={store} now={now} />
+      {state.folderPicker && <FolderPicker store={store} />}
       <Announcer agents={agents} />
       {overlay === 'palette' && <Palette commands={paletteCommands()} onClose={() => setOverlay(undefined)} />}
       {overlay === 'shortcuts' && <ShortcutsSheet onClose={() => setOverlay(undefined)} />}

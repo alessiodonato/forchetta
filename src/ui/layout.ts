@@ -118,6 +118,17 @@ export function layoutFor(state: PaneState): Layout {
 }
 
 /** Shift+Enter becomes a new line in the prompt of Claude Code (ESC and Enter, as Option+Enter in a terminal). */
+/**
+ * A key of the terminal that the browser takes, not Claude Code, on a computer that is not a Mac: Ctrl+V pastes, and
+ * Ctrl+C copies when something is selected in the pane by the page (Shift-drag). Elsewhere Ctrl+C stops Claude.
+ */
+export function clipboardKey(event: { type: string; key: string; shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }, selected: boolean, mac: boolean): 'paste' | 'copy' | undefined {
+  if (mac || event.type !== 'keydown' || !event.ctrlKey || event.altKey || event.metaKey) return undefined;
+  const key = event.key.toLowerCase();
+  if (key === 'v') return 'paste';
+  return key === 'c' && selected ? 'copy' : undefined;
+}
+
 export function keyInput(event: { type: string; key: string; shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }): string | undefined {
   if (event.type === 'keydown' && event.key === 'Enter' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) return '\u001b\r';
   return undefined;

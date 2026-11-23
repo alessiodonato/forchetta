@@ -52,6 +52,7 @@ beforeAll(async () => {
       foldersAsked.push(folder);
       return folder === '~/cancel' ? undefined : '/Users/you/projects/shop';
     },
+    onListFolders: (folder) => ({ path: folder ?? '/home/you', folders: ['shop'], places: [{ label: 'home', path: '/home/you' }] }),
     prompts: () => savedPrompts as never,
     onSavePrompts: (prompts) => {
       if (!Array.isArray(prompts)) return { ok: false, error: 'not a list of prompts' };
@@ -87,7 +88,7 @@ describe('the page', () => {
     const page = await http(port, { path: '/' });
     expect(page.status).toBe(200);
     expect(page.headers['content-security-policy']).toContain("default-src 'none'");
-    expect(page.headers['content-security-policy']).toContain(`connect-src ws://127.0.0.1:${port}`);
+    expect(page.headers['content-security-policy']).toContain(`connect-src 'self' ws://127.0.0.1:${port} ws://localhost:${port};`);
     expect((await http(port, { path: '/app.js' })).headers['content-type']).toContain('text/javascript');
     expect((await http(port, { path: '/../secret.txt' })).status).toBe(404);
     expect((await http(port, { path: '/%2e%2e/secret.txt' })).status).toBe(404);
@@ -99,6 +100,8 @@ describe('websocket', () => {
   it('refuses a wrong token or another origin', async () => {
     await expect(connect('d'.repeat(64), `http://127.0.0.1:${port}`)).rejects.toThrow(/403/);
     await expect(connect(TOKEN, 'https://evil.example')).rejects.toThrow(/403/);
+    await expect(connect(TOKEN, `http://localhost:${port + 1}`)).rejects.toThrow(/403/);
+    (await connect(TOKEN, `http://localhost:${port}`)).socket.close();
   });
 
   it('sends every agent, then the changes of a tick together, then what went away', async () => {
@@ -196,5 +199,15 @@ describe('the folder of a panel, from a page in a browser', () => {
     expect(other.messages.some((message) => message.type === 'folderChosen')).toBe(false);
     asking.socket.close();
     other.socket.close();
+  });
+
+  it('lists the folders inside a folder, where there is no such panel', async () => {
+    const asking = await connect(TOKEN, `http://127.0.0.1:${port}`);
+    await sleep(30);
+    asking.socket.send(JSON.stringify({ type: 'listFolders', folder: '/home/you/projects' }));
+    asking.socket.send(JSON.stringify({ type: 'listFolders', folder: 42 }));
+    await sleep(30);
+    expect(asking.messages.filter((message) => message.type === 'folders').map((message) => ('path' in message ? message.path : undefined))).toEqual(['/home/you/projects', '/home/you']);
+    asking.socket.close();
   });
 });

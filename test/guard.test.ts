@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GuardHold } from '../src/shared/agent.ts';
 import { changesWorkingTree, gitCommands, Guard, HOLD_AFTER_TURN_MS, hookOutput, shellCommands, targetFile } from '../src/daemon/guard.ts';
 import { type Agent, type HookPayload, newAgent } from '../src/daemon/state.ts';
+import { MACHINE } from '../src/shared/machine.ts';
 
 // The guard: a session that holds a file in its turn, another that is stopped, and git commands that would change
 // the files under another session.
@@ -61,7 +62,7 @@ describe('files', () => {
     t.write(alpha, `${REPO}/src/api.ts`);
     const decision = t.edit(beta, `${REPO}/src/api.ts`);
     expect(decision?.decision).toBe('deny');
-    expect(decision?.reason).toContain('"billing-api", another Claude Code session on this Mac, is changing src/api.ts');
+    expect(decision?.reason).toContain(`"billing-api", another Claude Code session on this ${MACHINE}, is changing src/api.ts`);
     expect(decision?.reason).toContain('You will be told when the file is free.');
     expect(hookOutput(decision!)).toEqual({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: decision!.reason } });
     // Both boxes say it.
@@ -90,7 +91,7 @@ describe('files', () => {
     expect(t.edit(alpha, `${REPO}/src/api.ts`, 'a1')).toBeUndefined();
     const decision = t.edit(beta, `${REPO}/src/api.ts`, 'b1');
     expect(decision?.decision).toBe('deny');
-    expect(decision?.reason).toContain('"shop", another Claude Code session on this Mac, is changing src/api.ts');
+    expect(decision?.reason).toContain(`"shop", another Claude Code session on this ${MACHINE}, is changing src/api.ts`);
     expect(beta.heldBack).toEqual([expect.objectContaining({ file: 'src/api.ts', with: 'alpha' })]);
     // The write of alpha goes through: it holds the file as any write, until its turn ends.
     t.write(alpha, `${REPO}/src/api.ts`);
@@ -269,7 +270,7 @@ describe('files written by a shell command', () => {
     for (const command of ["sed -i '' 's/retry/retries/' src/api.ts", 'echo "export {}" >> src/api.ts', "cat > src/api.ts <<'EOF'\nconst a = 1; // it's > b\nEOF", 'cd src && tee api.ts < /tmp/x']) {
       const decision = t.bash(beta, command);
       expect(decision?.decision, command).toBe('deny');
-      expect(decision?.reason).toContain('this command changes src/api.ts, and "shop", another Claude Code session on this Mac, is changing src/api.ts');
+      expect(decision?.reason).toContain(`this command changes src/api.ts, and "shop", another Claude Code session on this ${MACHINE}, is changing src/api.ts`);
       expect(decision?.reason).toContain('with an edit or with a command');
     }
     expect(beta.heldBack).toEqual([expect.objectContaining({ file: 'src/api.ts', with: 'alpha' })]);
@@ -346,14 +347,14 @@ describe('files written by a shell command', () => {
     const decision = t.bash(beta, 'npx prettier --write .');
     expect(decision?.decision).toBe('deny');
     expect(decision?.reason).toBe(
-      'Forchetta: this command would reformat src/api.ts, src/client.ts, test/api.test.ts, and other Claude Code sessions on this Mac ("shop", "billing-api") are changing them in the turns they are working on now. ' +
+      `Forchetta: this command would reformat src/api.ts, src/client.ts, test/api.test.ts, and other Claude Code sessions on this ${MACHINE} ("shop", "billing-api") are changing them in the turns they are working on now. ` +
         'Run it only on the files you changed yourself, leaving those files out, or end your turn saying that you are waiting for them. You will be told when they are free.',
     );
     expect(beta.heldBack?.map((hold) => hold.file).sort()).toEqual(['src/api.ts', 'src/client.ts', 'test/api.test.ts']);
     // On its own files, or a folder nobody holds, it goes; a check never stops.
     expect(t.bash(beta, 'npx prettier --write src/other.ts docs')).toBeUndefined();
     expect(t.bash(beta, 'npx prettier --check .')).toBeUndefined();
-    expect(t.bash(beta, 'ruff format test')?.reason).toContain('would reformat test/api.test.ts, and "billing-api", another Claude Code session on this Mac, is changing it in the turn it is working on now.');
+    expect(t.bash(beta, 'ruff format test')?.reason).toContain(`would reformat test/api.test.ts, and "billing-api", another Claude Code session on this ${MACHINE}, is changing it in the turn it is working on now.`);
     // It claims nothing: what it will rewrite is not known.
     expect(t.bash(beta, 'pnpm format', 'b1')?.decision).toBe('deny');
     alpha.state = 'idle';

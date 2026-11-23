@@ -77,6 +77,18 @@ Version 0.12.5. You need macOS 12 or later and Claude Code (tested with 2.1.322)
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+### Windows and Linux (beta)
+
+On Windows, Forchetta runs inside [WSL 2](https://learn.microsoft.com/windows/wsl/install) and opens in a window of Edge or Chrome. You need Claude Code inside WSL: the sessions started in PowerShell, or with Claude Code for Windows, do not show up. In a terminal of WSL (or of Linux):
+
+```sh
+sudo apt install tmux
+curl -fsSL https://forchetta.dev/install.sh | sh
+forchetta open
+```
+
+There is no app: the menu bar, the system-wide shortcut and the daemon kept alive are only on a Mac. The rest is the same, and the [manual](https://forchetta.dev/manual.html#windows) says what differs. It is new: if something is off, `forchetta doctor` says what, and an issue helps.
+
 ## Try the guard
 
 1. In a git repository, open two terminals and start a session in each with `forchetta run claude`.

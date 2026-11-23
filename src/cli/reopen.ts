@@ -1,5 +1,6 @@
 import { api, apiAnswer, type DaemonInfo, runningDaemon } from '../shared/daemon-client.ts';
 import { UserError } from '../shared/errors.ts';
+import { MACHINE } from '../shared/machine.ts';
 import { shortTokens } from '../shared/present.ts';
 import { type LostSession, lostName } from '../shared/reopen.ts';
 import { parseArgs } from './args.ts';
@@ -23,14 +24,14 @@ async function daemon(): Promise<DaemonInfo> {
 /** The lines of `forchetta reopen`: what ended with the Mac, and how big its conversation is. */
 export function renderLost(sessions: readonly LostSession[], io: Pick<RunIO, 'style'>): string {
   const s = io.style;
-  if (sessions.length === 0) return `${s.dim('No session ended with the Mac is waiting to reopen.')}\n`;
+  if (sessions.length === 0) return `${s.dim(`No session ended with the ${MACHINE} is waiting to reopen.`)}\n`;
   const width = Math.max(...sessions.map((one) => lostName(one).length));
   const lines = sessions.map((one) => {
     const team = one.team?.crew && one.team.group ? s.dim(` · team ${one.team.group}`) : '';
     const context = one.contextTokens ? s.dim(` · ${shortTokens(one.contextTokens)} of context`) : '';
     return `  ${s.bold(lostName(one).padEnd(width))}  ${s.dim(tildify(one.cwd))}${team}${context}`;
   });
-  return `${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'} ended with the Mac:\n${lines.join('\n')}\n${s.dim('`forchetta reopen --all`, or `forchetta reopen <name>…`: each goes on with its conversation, in Forchetta.')}\n`;
+  return `${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'} ended with the ${MACHINE}:\n${lines.join('\n')}\n${s.dim('`forchetta reopen --all`, or `forchetta reopen <name>…`: each goes on with its conversation, in Forchetta.')}\n`;
 }
 
 export async function reopenCommand(args: readonly string[], io: RunIO): Promise<number> {

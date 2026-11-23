@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { EditableSettings, OptionalFeature, SetupCheck, SystemInfo } from '../shared/system.ts';
 import { openLink } from './Artifacts.tsx';
+import { askNotifications, notificationState } from './browser-shell.ts';
+import { shell } from './connection.ts';
 import { useReturnFocus } from './focus.ts';
+import { IS_MAC } from './platform.ts';
 import { FONT_MAX, FONT_MIN, onTerminalFontSize, setTerminalFontSize, terminalFontSize } from './prefs.ts';
 import type { Store } from './store.ts';
 import { applyTheme, currentTheme, type Theme } from './theme.ts';
@@ -126,6 +129,7 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
   }, [system]);
   const [theme, setTheme] = useState<Theme>(currentTheme);
   const [font, setFont] = useState(terminalFontSize);
+  const [notifications, setNotifications] = useState(notificationState);
   useEffect(() => onTerminalFontSize(setFont), []);
   const saving = store.state.settingsSave;
   const opened = useRef(Date.now());
@@ -146,7 +150,7 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
   return (
     <section ref={panel} class="broadcast settings-panel" aria-label="Settings" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
       {!system ? (
-        <p class="broadcast-note">This daemon is older than the page: restart it to change the settings here (forchetta daemon stop, then open the app).</p>
+        <p class="broadcast-note">This daemon is older than the page: restart it to change the settings here (forchetta daemon stop, then forchetta open).</p>
       ) : (
         <>
           {system.checks.some((check) => !check.ok) && (
@@ -191,12 +195,12 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
                 </button>
               </div>
 
-              <h2>The app</h2>
-              <label class="setting-row" for="setting-hotkey">
+              <h2>{(system.platform ?? 'macos') === 'macos' ? 'The app' : 'The daemon'}</h2>
+              {(system.platform ?? 'macos') === 'macos' && <label class="setting-row" for="setting-hotkey">
                 <span>Show or hide Forchetta from anywhere with</span>
                 <input id="setting-hotkey" type="text" value={draft.hotkey} placeholder="ctrl+alt+f" onInput={(event) => set({ hotkey: (event.target as HTMLInputElement).value })} />
                 <span class="setup-detail">empty for none</span>
-              </label>
+              </label>}
               <label class="setting-row" for="setting-port">
                 <span>Port of the daemon on 127.0.0.1</span>
                 <input id="setting-port" type="number" min={1024} max={65535} value={draft.port} onInput={(event) => set({ port: Number((event.target as HTMLInputElement).value) })} />
@@ -245,12 +249,24 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
             </button>
           ))}
         </div>
+        {!shell() && notifications !== 'unsupported' && (
+          <div class="setting-row">
+            <span>Notifications when a session waits for you</span>
+            {notifications === 'default' ? (
+              <button type="button" class="chip" onClick={() => void askNotifications().then(setNotifications)}>
+                allow them
+              </button>
+            ) : (
+              <span class="setup-detail">{notifications === 'granted' ? 'on, while this page is open' : 'blocked: allow them for this page in the settings of the browser'}</span>
+            )}
+          </div>
+        )}
         <label class="setting-row" for="setting-font">
           <span>Text of the terminals</span>
           <input id="setting-font" type="range" min={FONT_MIN} max={FONT_MAX} value={font} onInput={(event) => setTerminalFontSize(Number((event.target as HTMLInputElement).value))} />
           <span>{font} px</span>
         </label>
-        <p class="setup-detail">The whole page: View → Zoom In / Zoom Out in the app (⌘+ ⌘− ⌘0).</p>
+        <p class="setup-detail">{IS_MAC ? 'The whole page: View → Zoom In / Zoom Out in the app (⌘+ ⌘− ⌘0).' : 'The whole page: the zoom of the browser (Ctrl++ Ctrl+− Ctrl+0).'}</p>
       </div>
 
       {system && (

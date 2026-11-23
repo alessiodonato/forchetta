@@ -54,7 +54,7 @@ export async function importTeam(
     const source = toFetch.find((skill) => skill.id === id);
     if (!source) {
       gone.add(id);
-      notes.push(`${id} is left out: it was a skill from a folder of the Mac the team comes from`);
+      notes.push(`${id} is left out: it was a skill from a folder of the computer the team comes from`);
       continue;
     }
     if (choice === 'skip') {

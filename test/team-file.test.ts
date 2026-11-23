@@ -79,7 +79,7 @@ describe('a team as a file', () => {
     expect(opened).toMatchObject({
       ok: true,
       template: { name: 'Docs crew', rules: 'Plain English.', notes: [{ x: 10, y: 10, text: 'For the release notes.' }], lead: { skills: ['brainstorming', 'release-notes'] }, members: [{ name: 'writer', skills: ['pdf'] }] },
-      notes: [`added the skill release-notes, from someone/skills at aaaaaaa`, 'house-style is left out: it was a skill from a folder of the Mac the team comes from'],
+      notes: [`added the skill release-notes, from someone/skills at aaaaaaa`, 'house-style is left out: it was a skill from a folder of the computer the team comes from'],
     });
     expect((opened as { template: CrewTemplate }).template.builtin).toBeUndefined();
     // A fetch that fails leaves the skill out too, and says why.

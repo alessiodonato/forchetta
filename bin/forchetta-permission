@@ -14,8 +14,11 @@ if [ -n "${FORCHETTA_VAR:-}" ]; then
   data=$FORCHETTA_VAR
 elif [ -e "$root/.git" ]; then
   data="$root/var"
-else
+elif [ -d /System/Library/CoreServices ]; then
+  # A Mac; below, Linux (the one of WSL too). No program is started to tell: this runs at every tool call.
   data="$HOME/Library/Application Support/Forchetta"
+else
+  data="$HOME/.local/share/forchetta"
 fi
 socket="$data/hooks.sock"
 # A daemon from before the socket (0.9.12 and older) listens for the hooks on its port: the port, until it is

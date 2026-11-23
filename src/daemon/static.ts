@@ -23,7 +23,8 @@ export function contentSecurityPolicy(port: number): string {
     "img-src 'self' data:",
     // The font of the terminals, from dist/ui/fonts.
     "font-src 'self'",
-    `connect-src ws://127.0.0.1:${port}`,
+    // This daemon: its WebSockets (at localhost too, as a browser of Windows reaches one inside WSL2) and /open.
+    `connect-src 'self' ws://127.0.0.1:${port} ws://localhost:${port}`,
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",

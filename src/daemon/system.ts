@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Config } from '../shared/config.ts';
+import { type Config, which } from '../shared/config.ts';
 import { claudeConfigDir, paths } from '../shared/paths.ts';
+import { installHint, PLATFORM, type Platform } from '../shared/platform.ts';
 import { isOurStatusLine, withForchettaHooks } from '../shared/settings.ts';
 import { type EditableSettings, newerThanTested, type OptionalFeature, PROTOCOL, type SetupCheck, type SystemInfo, TESTED_CLAUDE } from '../shared/system.ts';
 import { VERSION } from '../shared/version.ts';
@@ -14,6 +15,8 @@ import { launchAgentFile } from './launch-agent.ts';
 export interface SystemInputs {
   config: Config;
   tmux?: string;
+  /** Why the terminals of the page cannot open, when they cannot (daemon/terminals.ts). */
+  ptyProblem?: string;
   claude?: string;
   claudeVersion?: string;
   arricurdai?: readonly string[];
@@ -40,7 +43,7 @@ export function readClaudeSettings(): string | undefined {
   }
 }
 
-export function setupChecks(inputs: SystemInputs): SetupCheck[] {
+export function setupChecks(inputs: SystemInputs, platform: Platform | undefined = PLATFORM): SetupCheck[] {
   let settings: Record<string, unknown> | undefined;
   try {
     const parsed = inputs.settingsText ? (JSON.parse(inputs.settingsText) as unknown) : {};
@@ -79,8 +82,10 @@ export function setupChecks(inputs: SystemInputs): SetupCheck[] {
       ok: Boolean(inputs.tmux),
       label: 'tmux',
       detail: inputs.tmux ? tilde(inputs.tmux) : 'not found: the sessions cannot open in the app',
-      ...(inputs.tmux ? {} : { fix: 'brew install tmux' }),
+      ...(inputs.tmux ? {} : { fix: installHint('tmux', which, platform) }),
     },
+    // Compiled for this computer or not: on a Mac it comes with Forchetta.
+    ...(inputs.ptyProblem ? [{ id: 'terminals' as const, ok: false, label: 'Terminals', detail: `they cannot open: ${inputs.ptyProblem}`, fix: 'forchetta setup' }] : []),
     {
       id: 'claude',
       ok: Boolean(inputs.claude),
@@ -106,9 +111,9 @@ export function setupChecks(inputs: SystemInputs): SetupCheck[] {
   ];
 }
 
-export function optionalFeatures(inputs: SystemInputs): OptionalFeature[] {
+export function optionalFeatures(inputs: SystemInputs, platform: Platform | undefined = PLATFORM): OptionalFeature[] {
   const link = 'https://github.com/alessiodonato/arricurdai';
-  return [
+  const features: OptionalFeature[] = [
     inputs.arricurdai
       ? { id: 'arricurdai', on: true, label: 'arricurdAI', why: 'the prompt cache of each session, the cost of today, search through earlier sessions', link }
       : {
@@ -141,6 +146,8 @@ export function optionalFeatures(inputs: SystemInputs): OptionalFeature[] {
       ...(existsSync(launchAgentFile()) ? {} : { how: 'forchetta daemon keepalive on' }),
     },
   ];
+  // launchd keeps the daemon alive, and only a Mac has it.
+  return platform === 'macos' ? features : features.filter((feature) => feature.id !== 'keepalive');
 }
 
 export const editableSettings = (config: Config): EditableSettings => ({
@@ -156,6 +163,7 @@ export const editableSettings = (config: Config): EditableSettings => ({
 export function systemInfo(inputs: SystemInputs): SystemInfo {
   return {
     version: VERSION,
+    ...(PLATFORM ? { platform: PLATFORM } : {}),
     protocol: PROTOCOL,
     checks: setupChecks(inputs),
     features: optionalFeatures(inputs),

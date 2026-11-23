@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Coherence } from '../src/daemon/coherence.ts';
 import { type DirtyFile, Guard, hookOutput, parseStatus, sweepOf } from '../src/daemon/guard.ts';
 import { type Agent, newAgent } from '../src/daemon/state.ts';
+import { MACHINE } from '../src/shared/machine.ts';
 
 // The guard tells Claude what it should know: before tests, which files other sessions are halfway through; and it
 // stops once what would undo the work of another session: lines it added, its changes in a git add -A.
@@ -96,7 +97,7 @@ describe('lines of another session', () => {
     const old = ['for (let attempt = 0; attempt < 3; attempt++) {', ...added, '}'].join('\n');
     const answer = t.edit(beta, `${REPO}/src/api.ts`, old, 'await limiter.take();');
     expect(answer?.decision).toBe('deny');
-    expect(answer?.reason).toContain('takes away lines that "retries", another Claude Code session on this Mac, added to src/api.ts 6 min ago:');
+    expect(answer?.reason).toContain(`takes away lines that "retries", another Claude Code session on this ${MACHINE}, added to src/api.ts 6 min ago:`);
     expect(answer?.reason).toContain('    + await sleep(delay);');
     expect(answer?.reason).toContain('make the same change again: it will go through');
     expect(t.edit(beta, `${REPO}/src/api.ts`, old, 'await limiter.take();')).toBeUndefined();

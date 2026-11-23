@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { UserError } from './errors.ts';
 import { ensurePrivateDir, paths } from './paths.ts';
+import { onWindowsDrive, PLATFORM, type Platform } from './platform.ts';
 
 // The settings of Forchetta, in var/config.json. `forchetta hooks install` writes there the full paths of
 // node, tmux and claude, because an app opened from the Finder gets a PATH without /usr/local/bin.
@@ -150,11 +151,15 @@ function executable(path: string): boolean {
   }
 }
 
-/** The full path of a program, from the PATH and then from the usual places of Homebrew and of Claude Code. */
-export function which(name: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+/**
+ * The full path of a program, from the PATH and then from the usual places of Homebrew and of Claude Code. In WSL the
+ * PATH has the folders of Windows too: the programs there are not those of Linux (the claude of npm on Windows looks
+ * like one, and would run outside WSL), so they do not count.
+ */
+export function which(name: string, env: NodeJS.ProcessEnv = process.env, platform: Platform | undefined = PLATFORM): string | undefined {
   const dirs = [...(env.PATH ?? '').split(delimiter), '/usr/local/bin', '/opt/homebrew/bin', join(homedir(), '.local', 'bin')];
   for (const dir of dirs) {
-    if (!dir) continue;
+    if (!dir || (platform === 'wsl' && onWindowsDrive(dir))) continue;
     const candidate = join(dir, name);
     if (executable(candidate)) return candidate;
   }

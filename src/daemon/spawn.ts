@@ -8,6 +8,7 @@ import { type AgentTools, sessionTools } from '../shared/agent-tools.ts';
 import { MODELS, MODES, TEAM_MCP, TEMPLATE_TOOLS, TEMPLATE_TOOLS_ALLOWED } from '../shared/crew.ts';
 import { type TeamMcpServer, writeMcpConfig } from '../shared/mcp-config.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
+import { fromWindowsPath, PLATFORM, type Platform } from '../shared/platform.ts';
 import { type Tmux, tmuxSessionName } from '../shared/tmux.ts';
 import type { Registry } from './registry.ts';
 import { SESSION_ID } from '../shared/reopen.ts';
@@ -76,10 +77,11 @@ export interface SpawnOptions {
   teamMcp?: TeamMcpServer;
 }
 
-/** A folder as typed: ~ for the home, and absolute. */
-export function folderOf(input: string): string | undefined {
-  const text = input.trim();
-  if (!text) return undefined;
+/** A folder as typed: ~ for the home, and absolute; in WSL, also as Windows writes it (C:\Users\me\shop). */
+export function folderOf(input: string, platform: Platform | undefined = PLATFORM): string | undefined {
+  const typed = input.trim();
+  if (!typed) return undefined;
+  const text = (platform === 'wsl' ? fromWindowsPath(typed) : undefined) ?? typed;
   const expanded = text === '~' ? homedir() : text.startsWith('~/') ? join(homedir(), text.slice(2)) : text;
   return isAbsolute(expanded) ? resolve(expanded) : undefined;
 }
@@ -140,7 +142,7 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   const chosen = claudeArgs(input);
   if ('error' in chosen) return { ok: false, error: chosen.error };
   if (input.worktree && !inGitRepo(cwd)) return { ok: false, error: 'for a worktree the folder must be in a git repository' };
-  const shell = options.shell ?? (userInfo().shell || '/bin/zsh');
+  const shell = options.shell ?? (userInfo().shell || (PLATFORM === 'macos' ? '/bin/zsh' : '/bin/bash'));
   const command = startCommand(shell, paths.startScript, claude, chosen.args);
   if (!command) return { ok: false, error: 'the path of Forchetta or of claude contains a quote: the session cannot start from here' };
 

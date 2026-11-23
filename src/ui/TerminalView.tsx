@@ -8,7 +8,8 @@ import { linksIn } from '../shared/artifacts.ts';
 import { openLink } from './Artifacts.tsx';
 import { token } from './connection.ts';
 import { GlyphFilter } from './glyphs.ts';
-import { isFocusReport, keyInput } from './layout.ts';
+import { clipboardKey, isFocusReport, keyInput } from './layout.ts';
+import { commandKey, IS_MAC, keyText } from './platform.ts';
 import type { SelectionPlace } from './store.ts';
 import { terminalTheme } from './terminal-theme.ts';
 import { onThemeChange, resolvedTheme } from './theme.ts';
@@ -19,7 +20,7 @@ import { onTerminalFontSize, terminalFontSize } from './prefs.ts';
 
 // Apple Symbols draws ⏺ and the other symbols of Claude Code as text, one cell wide: without it WebKit falls back
 // to the color emoji, two cells wide over the next letter.
-const FALLBACK_FONTS = 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", monospace';
+const FALLBACK_FONTS = 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", "Cascadia Mono", Consolas, "Segoe UI Symbol", monospace';
 const FONTS = `"JetBrains Mono", ${FALLBACK_FONTS}`;
 
 /**
@@ -42,13 +43,13 @@ function linksAt(term: Terminal, y: number, open: (url: string) => void): ILink[
       text: url,
       decorations: { pointerCursor: true, underline: true },
       hover: () => {
-        if (term.element) term.element.title = '⌘-click to open in the browser';
+        if (term.element) term.element.title = keyText('⌘-click to open in the browser');
       },
       leave: () => {
         if (term.element) term.element.title = '';
       },
       activate: (event: MouseEvent, link: string) => {
-        if (event.metaKey) open(link);
+        if (commandKey(event)) open(link);
       },
     }))
     .filter((link) => link.range.start.y <= y && y <= link.range.end.y);
@@ -134,7 +135,7 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
       // Links that the program marks itself (OSC 8): ⌘-click opens them, as in the Terminal.
       linkHandler: {
         activate: (event, text) => {
-          if (event.metaKey) openLink(text);
+          if (commandKey(event)) openLink(text);
         },
         allowNonHttpProtocols: false,
       },
@@ -195,12 +196,31 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
     term.onBinary((data) => send({ type: 'input', data, binary: true }));
     term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
     term.attachCustomKeyEventHandler((event) => {
+      const clipboard = clipboardKey(event, term.hasSelection(), IS_MAC);
+      if (clipboard === 'copy') {
+        event.preventDefault();
+        void navigator.clipboard?.writeText(term.getSelection()).catch(() => undefined);
+        term.clearSelection();
+        return false;
+      }
+      // Not read by xterm.js (it would send ^V): the browser pastes, and xterm.js takes the paste.
+      if (clipboard === 'paste') return false;
       const input = keyInput(event);
       if (input === undefined) return true;
       send({ type: 'input', data: input });
       callbacks.current.onUse();
       return false;
     });
+    // An image pasted with no text: Claude Code takes it from the clipboard itself, at its own ^V.
+    const onPaste = (event: ClipboardEvent): void => {
+      const data = event.clipboardData;
+      if (!data || data.getData('text/plain') || ![...data.items].some((item) => item.type.startsWith('image/'))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      send({ type: 'input', data: '\u0016' });
+      callbacks.current.onUse();
+    };
+    if (!IS_MAC) element.addEventListener('paste', onPaste, true);
     // A press, then a move beyond a few pixels, is a drag: the release may come outside the pane, so it is heard on
     // the window, in the capture phase (xterm.js handles the mouse of the terminal on its own).
     let press: { x: number; y: number; option: boolean; dragging: boolean } | undefined;
@@ -229,7 +249,8 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
     const onPointer = (event: MouseEvent): void => {
       callbacks.current.onUse();
       if (event.button !== 0) return;
-      press = { x: event.clientX, y: event.clientY, option: event.altKey, dragging: false };
+      // Selected by xterm.js in the page, not by tmux: with Option on a Mac, with Shift elsewhere.
+      press = { x: event.clientX, y: event.clientY, option: IS_MAC ? event.altKey : event.shiftKey, dragging: false };
       // Told at the press, before tmux can copy anything: the daemon notes where its buffers stand (daemon/selection.ts).
       if (!press.option) callbacks.current.onDragStart?.();
       window.addEventListener('mousemove', onMove, true);
@@ -267,6 +288,7 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
       observer.disconnect();
       cancelAnimationFrame(frame);
       element.removeEventListener('mousedown', onPointer, true);
+      element.removeEventListener('paste', onPaste, true);
       window.removeEventListener('mousemove', onMove, true);
       window.removeEventListener('mouseup', onRelease, true);
       socket.onclose = null;

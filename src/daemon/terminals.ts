@@ -1,9 +1,11 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
-import { createRequire } from 'node:module';
 import type { Duplex } from 'node:stream';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
+import { PLATFORM } from '../shared/platform.ts';
 import type { Tmux } from '../shared/tmux.ts';
+import { isLocalHost, isOwnOrigin } from './origin.ts';
+import { loadPty, type Pty } from './pty.ts';
 import type { Registry } from './registry.ts';
 
 // The terminals of the app: one WebSocket per open pane, on /term. Each runs `tmux attach` for the session of its
@@ -12,28 +14,6 @@ import type { Registry } from './registry.ts';
 // Closing the pane closes the WebSocket, and the daemon sends SIGHUP to that tmux *client*, the `attach` it
 // started: tmux detaches it, and the session, with Claude in it, goes on. Nothing here, nor anywhere in
 // Forchetta, can end a session (see shared/tmux.ts).
-
-interface Pty {
-  readonly pid: number;
-  onData(listener: (data: Buffer | string) => void): unknown;
-  onExit(listener: (event: { exitCode: number; signal?: number }) => void): unknown;
-  write(data: string | Buffer): void;
-  resize(columns: number, rows: number): void;
-  kill(signal?: string): void;
-  pause(): void;
-  resume(): void;
-}
-
-interface PtyModule {
-  spawn(file: string, args: string[], options: Record<string, unknown>): Pty;
-}
-
-let ptyModule: PtyModule | undefined;
-/** node-pty is native and loaded from node_modules, the first time a pane opens. */
-function loadPty(): PtyModule {
-  ptyModule ??= createRequire(import.meta.url)('node-pty') as PtyModule;
-  return ptyModule;
-}
 
 export interface TerminalsOptions {
   token: string;
@@ -65,7 +45,7 @@ function sameToken(given: string | null, token: string): boolean {
 /** The environment of the tmux client: a terminal that speaks UTF-8 and 256 colors, outside any other tmux. */
 function clientEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color' };
-  if (!/UTF-?8/i.test(env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? '')) env.LANG = 'en_US.UTF-8';
+  if (!/UTF-?8/i.test(env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? '')) env.LANG = PLATFORM === 'macos' ? 'en_US.UTF-8' : 'C.UTF-8';
   delete env.TMUX;
   delete env.TMUX_PANE;
   return env;
@@ -97,8 +77,7 @@ export class Terminals {
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
     const port = this.options.port();
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    const hostOk = req.headers.host === `127.0.0.1:${port}` || req.headers.host === `localhost:${port}`;
-    if (!hostOk || req.headers.origin !== `http://127.0.0.1:${port}` || !sameToken(url.searchParams.get('token'), this.options.token)) {
+    if (!isLocalHost(req.headers.host, port) || !isOwnOrigin(req.headers.origin, port) || !sameToken(url.searchParams.get('token'), this.options.token)) {
       return this.refuse(socket, '403 Forbidden');
     }
     const agent = this.options.registry.agents.get(url.searchParams.get('agent') ?? '');

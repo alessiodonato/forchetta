@@ -13,7 +13,7 @@ export const PROTOCOL = 4;
 export const TESTED_CLAUDE = '2.1.322';
 
 export interface SetupCheck {
-  id: 'hooks' | 'statusline' | 'tmux' | 'claude' | 'socket' | 'events';
+  id: 'hooks' | 'statusline' | 'tmux' | 'terminals' | 'claude' | 'socket' | 'events';
   ok: boolean;
   /** What it is: "Hooks in ~/.claude/settings.json". */
   label: string;
@@ -58,6 +58,8 @@ export interface EditableSettings {
 
 export interface SystemInfo {
   version: string;
+  /** Where the daemon runs; undefined with one from before Linux and WSL, on a Mac. */
+  platform?: 'macos' | 'linux' | 'wsl';
   protocol: number;
   checks: SetupCheck[];
   features: OptionalFeature[];

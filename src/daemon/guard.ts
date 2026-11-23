@@ -2,6 +2,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Agent, GuardHold } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
 import { pathsText } from '../shared/crew.ts';
+import { MACHINE } from '../shared/machine.ts';
 import type { GuardStatKind } from '../shared/guard-stats.ts';
 import { type HookPayload, keyOf } from './state.ts';
 import { removedLines } from './coherence.ts';
@@ -508,7 +509,7 @@ export class Guard {
     return {
       decision: 'deny',
       reason: [
-        `Forchetta: this change takes away lines that "${otherName(other, agent)}", another Claude Code session on this Mac, added to ${shown} ${ago(this.now() - found.at)}:`,
+        `Forchetta: this change takes away lines that "${otherName(other, agent)}", another Claude Code session on this ${MACHINE}, added to ${shown} ${ago(this.now() - found.at)}:`,
         ...lines,
         ...more,
         "If that is not on purpose, leave its lines and change only your part. If you do mean to take them away, make the same change again: it will go through.",
@@ -651,8 +652,8 @@ export class Guard {
     const one = files.length === 1;
     const who =
       holders.length === 1
-        ? `${names}, another Claude Code session on this Mac, is changing ${one ? 'it' : 'them'} in the turn it is working on now`
-        : `other Claude Code sessions on this Mac (${names}) are changing ${one ? 'it' : 'them'} in the turns they are working on now`;
+        ? `${names}, another Claude Code session on this ${MACHINE}, is changing ${one ? 'it' : 'them'} in the turn it is working on now`
+        : `other Claude Code sessions on this ${MACHINE} (${names}) are changing ${one ? 'it' : 'them'} in the turns they are working on now`;
     return {
       decision: 'deny',
       reason:
@@ -701,7 +702,7 @@ export class Guard {
       decision: 'deny',
       reason:
         (byShell ? `Forchetta: this command changes ${shown}, and ` : 'Forchetta: ') +
-        `"${otherName(holder, agent)}", another Claude Code session on this Mac, is changing ${shown} in the turn it is working on now. ` +
+        `"${otherName(holder, agent)}", another Claude Code session on this ${MACHINE}, is changing ${shown} in the turn it is working on now. ` +
         `Don't change this file yet, with an edit or with a command, and don't try again now: work on something else first, or end your turn saying that you are waiting for ${shown}. ` +
         'You will be told when the file is free.',
     };

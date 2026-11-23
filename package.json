@@ -27,6 +27,9 @@
   "pnpm": {
     "ignoredBuiltDependencies": [
       "esbuild"
+    ],
+    "onlyBuiltDependencies": [
+      "node-pty"
     ]
   },
   "dependencies": {

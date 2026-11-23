@@ -1,4 +1,5 @@
 import type { Agent } from '../shared/agent.ts';
+import { systemTool } from '../shared/platform.ts';
 import { type GuardDecision, ONCE_MS, otherName } from './guard.ts';
 import { isDevServerCommand, killTargets, placedCommands } from './shell.ts';
 import type { HookPayload } from './state.ts';
@@ -12,6 +13,11 @@ import type { HookPayload } from './state.ts';
 //
 // Which session started a process: the Claude Code process of a session among its parents (ps). A server started in
 // the background of a shell that ended has no parent left but launchd: it counts as started outside Claude Code.
+
+// On a Mac lsof is in /usr/sbin, on Linux in /usr/bin, if it is installed at all: without it nothing is found.
+const LSOF = systemTool('lsof');
+const PS = systemTool('ps');
+const PGREP = systemTool('pgrep');
 
 export interface ProcessRow {
   ppid: number;
@@ -106,9 +112,9 @@ export class Servers {
   /** A dev server about to start where one already listens: its address, once. */
   private async decideStart(agent: Agent, line: string, dir: string): Promise<GuardDecision | undefined> {
     const scope = this.options.repoOf(dir) ?? dir;
-    const listening = parseListening((await this.options.run('/usr/sbin/lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])) ?? '');
+    const listening = parseListening((await this.options.run(LSOF, ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])) ?? '');
     if (listening.size === 0) return undefined;
-    const cwds = parseCwds((await this.options.run('/usr/sbin/lsof', ['-a', '-p', [...listening.keys()].join(','), '-d', 'cwd', '-Fn'])) ?? '');
+    const cwds = parseCwds((await this.options.run(LSOF, ['-a', '-p', [...listening.keys()].join(','), '-d', 'cwd', '-Fn'])) ?? '');
     // A server of this folder: it works inside the working tree, in the folder of the command, above it or under it.
     const servers = [...listening].filter(([pid]) => {
       if (pid === (this.options.self ?? process.pid)) return false;
@@ -117,7 +123,7 @@ export class Servers {
     });
     if (servers.length === 0) return undefined;
     if (!this.firstTime(agent.id, `start\n${line}`)) return undefined;
-    const processes = parsePs((await this.options.run('/bin/ps', ['-axo', 'pid=,ppid=,comm='])) ?? '');
+    const processes = parsePs((await this.options.run(PS, ['-axo', 'pid=,ppid=,comm='])) ?? '');
     const described = servers.slice(0, 3).map(([pid, ports]) => {
       const owner = ownerOf(pid, processes, this.options.agents());
       const by = !owner ? 'started outside Claude Code' : owner.id === agent.id ? 'started by you earlier' : `started by "${otherName(owner, agent)}", another Claude Code session`;
@@ -143,15 +149,15 @@ export class Servers {
     if (!targets) return undefined;
     const pids = new Set(targets.pids);
     for (const pattern of targets.patterns) {
-      const found = (await this.options.run('/usr/bin/pgrep', pattern)) ?? '';
+      const found = (await this.options.run(PGREP, pattern)) ?? '';
       for (const word of found.split(/\s+/)) if (/^\d+$/.test(word)) pids.add(Number(word));
     }
     if (targets.ports.length > 0) {
-      const listening = parseListening((await this.options.run('/usr/sbin/lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])) ?? '');
+      const listening = parseListening((await this.options.run(LSOF, ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])) ?? '');
       for (const [pid, ports] of listening) if (ports.some((port) => targets.ports.includes(port))) pids.add(pid);
     }
     if (pids.size === 0) return undefined;
-    const processes = parsePs((await this.options.run('/bin/ps', ['-axo', 'pid=,ppid=,comm='])) ?? '');
+    const processes = parsePs((await this.options.run(PS, ['-axo', 'pid=,ppid=,comm='])) ?? '');
     const hit: string[] = [];
     for (const pid of pids) {
       const owner = ownerOf(pid, processes, this.options.agents());

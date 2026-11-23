@@ -1,10 +1,10 @@
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders } from 'node:http';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { daemonEnv, envFileText, paneEnv } from '../src/cli/pane-env.ts';
-import { paths } from '../src/shared/paths.ts';
+import { defaultVarDir, paths } from '../src/shared/paths.ts';
 import { tempDir } from './helpers.ts';
 
 const temp = tempDir('scripts');
@@ -42,6 +42,30 @@ async function onSocket(server: { listen: (path: string, done: () => void) => un
   await new Promise<void>((resolve) => server.listen(join(dir, 'hooks.sock'), resolve));
   return dir;
 }
+
+describe('the private folder of the scripts', () => {
+  it('is the one of the daemon, for an installed copy too', async () => {
+    const app = join(temp.dir, 'installed');
+    const home = join(temp.dir, 'home');
+    const script = join(app, 'bin', 'forchetta-statusline');
+    mkdirSync(join(app, 'bin'), { recursive: true });
+    copyFileSync(paths.statusScript, script);
+    chmodSync(script, 0o755);
+    const env = { PATH: '/usr/bin:/bin', HOME: home };
+    expect((await run(script, ['1'], env, '{}')).stdout).toBe('');
+    // A daemon ran there, and is off now: the status line says so.
+    const data = defaultVarDir(app, {}, existsSync, home);
+    mkdirSync(data, { recursive: true });
+    writeFileSync(join(data, 'data-version'), '1\n');
+    expect((await run(script, ['1'], env, '{}')).stdout).toContain('Forchetta is off');
+  });
+
+  it('is found the same way by each of them', () => {
+    const rule = (file: string): string | undefined => /root=\$\(cd[\s\S]*?\nfi\nsocket=.*\n/.exec(readFileSync(file, 'utf8'))?.[0];
+    expect(rule(paths.hookScript)).toBeDefined();
+    for (const file of [paths.permissionScript, paths.guardScript, paths.statusScript]) expect(rule(file)).toBe(rule(paths.hookScript));
+  });
+});
 
 describe('bin/forchetta-hook', () => {
   it('prints nothing and exits 0 at once when the daemon is not running', async () => {

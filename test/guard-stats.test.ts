@@ -8,6 +8,7 @@ import { parseDays, statsCommand, statsText } from '../src/cli/stats.ts';
 import { commandHelp } from '../src/cli/help.ts';
 import { makeStyle } from '../src/cli/style.ts';
 import { dayOf, guardTotal, shortSummary, statLines, statsTitle } from '../src/shared/guard-stats.ts';
+import { MACHINE } from '../src/shared/machine.ts';
 import { tempDir } from './helpers.ts';
 
 // What the guard did, counted by day on this Mac: the top line of the app and `forchetta stats`.
@@ -93,7 +94,7 @@ describe('the counts', () => {
         '1 time you let a session through',
         '',
         'Today: 1 stop.',
-        'Counted on this Mac only. forchetta stats lists them.',
+        `Counted on this ${MACHINE} only. forchetta stats lists them.`,
       ].join('\n'),
     );
     expect(dayOf(new Date(2026, 0, 5, 23, 59).getTime())).toBe('2026-01-05');

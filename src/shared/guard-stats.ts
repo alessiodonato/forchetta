@@ -1,3 +1,5 @@
+import { MACHINE } from './machine.ts';
+
 // What the guard did, counted by day on this Mac only (daemon/guard-stats.ts keeps them in var/guard-stats.json),
 // for the top line of the app and `forchetta stats`. No Node module here: the page uses it too.
 
@@ -92,7 +94,7 @@ export function shortSummary(counts: GuardCounts): string {
 export function statsTitle(info: GuardStatsInfo): string {
   const lines = statLines(info.counts).map((line) => `${line.count} ${line.text}`);
   const span = info.days === 1 ? 'today' : `in the last ${info.days} days`;
-  return [`What the guard did ${span}${info.since ? ` (counted since ${info.since})` : ''}:`, ...lines, '', `Today: ${shortSummary(info.today)}.`, 'Counted on this Mac only. forchetta stats lists them.'].join('\n');
+  return [`What the guard did ${span}${info.since ? ` (counted since ${info.since})` : ''}:`, ...lines, '', `Today: ${shortSummary(info.today)}.`, `Counted on this ${MACHINE} only. forchetta stats lists them.`].join('\n');
 }
 
 /** The day of a time, in local time: YYYY-MM-DD. */
