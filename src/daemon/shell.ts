@@ -102,12 +102,15 @@ export interface ShellWrite {
   glob?: boolean;
   /** Taken away with what is under it (rm -r, mv of a folder): any file under it counts. */
   tree?: boolean;
+  /** Rewritten by a formatter or a fixer (prettier --write, eslint --fix, ruff format): with `tree`, a folder it covers. */
+  formatter?: boolean;
 }
 
 /**
  * The files a shell line writes: redirections (> and >>), tee, sed -i, perl -i, the destination of cp and mv, what
- * rm and mv take away. Each with the folder it runs in (cd followed). A plain reading: a word with $, a backquote or
- * ~ is not followed, and what a program writes by itself (a Python or Node script, a formatter) is not seen.
+ * rm and mv take away, and what the usual formatters and fixers rewrite (FORMATTERS, formatterPaths). Each with the
+ * folder it runs in (cd followed). A plain reading: a word with $, a backquote or ~ is not followed, and what a
+ * program writes by itself (a Python or Node script, a formatter not in the list) is not seen.
  */
 export function shellWrites(line: string, cwd: string): ShellWrite[] {
   const commands = shellTokens(withoutHeredocs(line));
@@ -144,8 +147,115 @@ export function shellWrites(line: string, cwd: string): ShellWrite[] {
       continue;
     }
     for (const write of programWrites(name, args)) add(write.word, write.tree ? { tree: true } : {});
+    for (const word of formatterPaths(words.slice(start))) add(word, { tree: true, formatter: true });
   }
   return found;
+}
+
+/**
+ * A formatter or a fixer. Its paths are the plain words after the program (and its subcommand), each a file, a folder
+ * or a pattern it rewrites; the values of `values` are not paths.
+ */
+interface Formatter {
+  /** Whether this call rewrites files: prettier only with --write, ruff format unless --check. */
+  writes: (args: readonly string[]) => boolean;
+  /** The options followed by a value. */
+  values?: readonly string[];
+  /** With no path, it formats the folder it runs in. */
+  dot?: boolean;
+  /** It takes no paths: it formats the project of the folder it runs in (cargo fmt). */
+  project?: boolean;
+}
+
+/** An option given, alone or as --option=value. */
+const given = (args: readonly string[], ...flags: string[]): boolean => args.some((word) => flags.some((flag) => word === flag || word.startsWith(`${flag}=`)));
+const withFlag = (...flags: string[]) => (args: readonly string[]): boolean => given(args, ...flags);
+const withoutFlag = (...flags: string[]) => (args: readonly string[]): boolean => !given(args, ...flags);
+
+const BIOME_VALUES = ['--config-path', '--stdin-file-path', '--max-diagnostics', '--diagnostic-level', '--reporter', '--log-level', '--log-kind', '--since', '--vcs-root'];
+const RUFF_VALUES = ['--config', '--target-version', '--line-length', '--select', '--ignore', '--extend-select', '--extend-ignore', '--exclude', '--extend-exclude', '--output-format', '-o', '--output-file', '--stdin-filename', '--cache-dir', '--fixable', '--unfixable', '--range'];
+
+/** By program, or by program and subcommand ("ruff format", "go fmt"). */
+const FORMATTERS = new Map<string, Formatter>([
+  ['prettier', { writes: withFlag('--write', '-w'), values: ['--config', '--ignore-path', '--plugin', '--parser', '--cache-location', '--stdin-filepath', '--log-level'] }],
+  ['eslint', { writes: withFlag('--fix'), values: ['-c', '--config', '--ext', '--rule', '-f', '--format', '-o', '--output-file', '--ignore-path', '--ignore-pattern', '--plugin', '--parser', '--cache-location', '--max-warnings', '--rulesdir', '--resolve-plugins-relative-to', '--fix-type'], dot: true }],
+  ['biome format', { writes: withFlag('--write', '--fix', '--apply'), values: BIOME_VALUES, dot: true }],
+  ['biome check', { writes: withFlag('--write', '--fix', '--apply', '--apply-unsafe'), values: BIOME_VALUES, dot: true }],
+  ['biome lint', { writes: withFlag('--write', '--fix', '--apply', '--apply-unsafe'), values: BIOME_VALUES, dot: true }],
+  ['ruff format', { writes: withoutFlag('--check', '--diff'), values: RUFF_VALUES, dot: true }],
+  ['ruff check', { writes: (args) => given(args, '--fix') && !given(args, '--no-fix', '--diff'), values: RUFF_VALUES, dot: true }],
+  ['black', { writes: withoutFlag('--check', '--diff'), values: ['-l', '--line-length', '-t', '--target-version', '--config', '--include', '--exclude', '--extend-exclude', '--force-exclude', '--stdin-filename', '-W', '--workers'] }],
+  ['isort', { writes: withoutFlag('--check-only', '-c', '--check', '--diff'), values: ['--settings-path', '--sp', '--settings-file', '--profile', '-l', '--line-length', '--src', '--skip', '--skip-glob'] }],
+  ['gofmt', { writes: withFlag('-w') }],
+  ['go fmt', { writes: () => true, dot: true }],
+  ['cargo fmt', { writes: withoutFlag('--check'), project: true }],
+  ['rustfmt', { writes: withoutFlag('--check', '--emit'), values: ['--edition', '--config-path', '--config', '--color', '--style-edition'] }],
+  ['clang-format', { writes: withFlag('-i'), values: ['--style', '--assume-filename', '--lines', '--offset', '--length', '--fallback-style', '--files'] }],
+  ['rubocop', { writes: withFlag('-a', '-A', '--autocorrect', '--autocorrect-all', '--auto-correct', '--auto-correct-all', '-x', '--fix-layout'), values: ['-c', '--config', '-f', '--format', '-o', '--out', '--only', '--except', '-r', '--require', '--cache-root'], dot: true }],
+  ['swiftformat', { writes: withoutFlag('--lint', '--dryrun'), values: ['--config', '--swiftversion', '--rules', '--enable', '--disable', '--exclude', '--unexclude', '--indent', '--cache', '--report', '--baseconfig', '--filelist'] }],
+  ['dart format', { writes: (args) => !args.some((word, i) => /^--output=(none|show|json)$/.test(word) || ((word === '-o' || word === '--output') && /^(none|show|json)$/.test(args[i + 1] ?? ''))), values: ['-o', '--output', '-l', '--line-length', '--page-width', '--language-version', '--show', '--summary', '--indent', '--trailing-commas'] }],
+  ['mix format', { writes: withoutFlag('--check-formatted', '--dry-run'), values: ['--dot-formatter', '--stdin-filename'], dot: true }],
+  ['terraform fmt', { writes: (args) => !given(args, '-check', '--check') && !args.includes('-write=false'), dot: true }],
+  ['shfmt', { writes: withFlag('-w', '--write'), values: ['-i', '--indent', '-ln', '--language-dialect', '--filename'] }],
+  ['php-cs-fixer fix', { writes: withoutFlag('--dry-run'), values: ['--config', '--rules', '--path-mode', '--using-cache', '--cache-file', '--format', '--allow-risky'], dot: true }],
+]);
+
+/** The words that run the program after them: npx prettier, pnpm exec, uv run, bundle exec, python -m black. */
+function unwrapRunner(words: readonly string[]): string[] | undefined {
+  const tool = base(words[0]);
+  let i = -1;
+  if (['npx', 'pnpx', 'bunx', 'uvx'].includes(tool)) i = 1;
+  else if (['pnpm', 'npm', 'yarn'].includes(tool) && (words[1] === 'exec' || words[1] === 'dlx')) i = 2;
+  else if (tool === 'bun' && words[1] === 'x') i = 2;
+  else if (['uv', 'poetry', 'pipenv', 'pdm', 'rye', 'hatch', 'pipx'].includes(tool) && words[1] === 'run') i = 2;
+  else if (tool === 'bundle' && words[1] === 'exec') i = 2;
+  else if (/^python[\d.]*$/.test(tool) && words[1] === '-m') i = 2;
+  // pnpm and yarn run a program of the project by its name: pnpm prettier --write .
+  else if ((tool === 'pnpm' || tool === 'yarn') && words[1] !== undefined && FORMATTERS.has(programName(words[1]))) i = 1;
+  if (i < 0) return undefined;
+  while (i < words.length && words[i]!.startsWith('-')) i++;
+  return i < words.length ? words.slice(i) : undefined;
+}
+
+/** A program as FORMATTERS names it: @biomejs/biome@1.9 → biome. */
+const programName = (word: string): string => base(word).replace(/@[^/]*$/, '');
+
+/** A package script that formats or fixes: npm run format, pnpm fmt, yarn lint:fix, pnpm lint --fix. */
+function formatsByScript(words: readonly string[]): boolean {
+  const script = scriptOf(words);
+  if (!script || /check|verify/i.test(script)) return false;
+  if (/(^|[:_-])(format|fmt|prettier|prettify|fix)([:_-]|$)/i.test(script)) return true;
+  return /^lint/i.test(script) && words.includes('--fix');
+}
+
+/**
+ * What a formatter or a fixer rewrites, as the words of the command name it: files, folders, patterns (go fmt ./...
+ * is the folder). None when the call only checks (prettier --check, ruff format --check). A package script that
+ * formats rewrites the folder it runs in: what is in it is not read.
+ */
+function formatterPaths(words: readonly string[]): string[] {
+  let call: readonly string[] = words;
+  for (let n = 0; n < 3; n++) call = unwrapRunner(call) ?? call;
+  if (call === words && formatsByScript(words)) return ['.'];
+  const name = programName(call[0] ?? '');
+  const sub = call[1];
+  const bySub = sub !== undefined ? FORMATTERS.get(`${name} ${sub}`) : undefined;
+  const formatter = bySub ?? FORMATTERS.get(name);
+  if (!formatter) return [];
+  const args = call.slice(bySub ? 2 : 1);
+  if (!formatter.writes(args) || given(args, '--help', '-h', '--version', '-V')) return [];
+  if (formatter.project) return ['.'];
+  const values = new Set(formatter.values ?? []);
+  const paths: string[] = [];
+  let options = true;
+  for (let i = 0; i < args.length; i++) {
+    const word = args[i]!;
+    if (options && word === '--') options = false;
+    else if (options && word.startsWith('-') && word !== '-') {
+      if (values.has(word)) i++;
+    } else paths.push(word.replace(/\/\.\.\.$/, '') || '.');
+  }
+  return paths.length > 0 ? paths : formatter.dot ? ['.'] : [];
 }
 
 /** The words a program writes or takes away, by how it reads its arguments. */
@@ -243,12 +353,15 @@ function inPlaceFiles(args: readonly string[], program: 'sed' | 'perl'): string[
   return script ? plain : plain.slice(1);
 }
 
-/** Whether a pattern of * and ? (and ** for any folders) matches a path; both absolute. */
+/** Whether a pattern of * and ? (and ** for any folders, none included) matches a path; both absolute. */
 export function globMatches(pattern: string, path: string): boolean {
   let source = '';
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i]!;
-    if (c === '*' && pattern[i + 1] === '*') {
+    if (c === '*' && pattern[i + 1] === '*' && pattern[i + 2] === '/') {
+      source += '(?:.*/)?';
+      i += 2;
+    } else if (c === '*' && pattern[i + 1] === '*') {
       source += '.*';
       i++;
     } else if (c === '*') source += '[^/]*';

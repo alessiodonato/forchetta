@@ -334,6 +334,36 @@ describe('files written by a shell command', () => {
     expect(t.edit(beta, `${REPO}/src/types.ts`, 'b5')?.decision).toBe('deny');
   });
 
+  it('a formatter that would rewrite files others hold is stopped, with all of them in one answer', () => {
+    const t = setup();
+    const alpha = t.add('alpha');
+    const beta = t.add('beta');
+    const gamma = t.add('gamma');
+    gamma.team = { label: 'billing-api' };
+    t.write(alpha, `${REPO}/src/api.ts`);
+    t.write(alpha, `${REPO}/src/client.ts`);
+    t.write(gamma, `${REPO}/test/api.test.ts`);
+    const decision = t.bash(beta, 'npx prettier --write .');
+    expect(decision?.decision).toBe('deny');
+    expect(decision?.reason).toBe(
+      'Forchetta: this command would reformat src/api.ts, src/client.ts, test/api.test.ts, and other Claude Code sessions on this Mac ("shop", "billing-api") are changing them in the turns they are working on now. ' +
+        'Run it only on the files you changed yourself, leaving those files out, or end your turn saying that you are waiting for them. You will be told when they are free.',
+    );
+    expect(beta.heldBack?.map((hold) => hold.file).sort()).toEqual(['src/api.ts', 'src/client.ts', 'test/api.test.ts']);
+    // On its own files, or a folder nobody holds, it goes; a check never stops.
+    expect(t.bash(beta, 'npx prettier --write src/other.ts docs')).toBeUndefined();
+    expect(t.bash(beta, 'npx prettier --check .')).toBeUndefined();
+    expect(t.bash(beta, 'ruff format test')?.reason).toContain('would reformat test/api.test.ts, and "billing-api", another Claude Code session on this Mac, is changing it in the turn it is working on now.');
+    // It claims nothing: what it will rewrite is not known.
+    expect(t.bash(beta, 'pnpm format', 'b1')?.decision).toBe('deny');
+    alpha.state = 'idle';
+    t.event(alpha, { hook_event_name: 'Stop' });
+    gamma.state = 'idle';
+    t.event(gamma, { hook_event_name: 'Stop' });
+    expect(t.bash(beta, 'pnpm format', 'b2')).toBeUndefined();
+    expect(t.edit(alpha, `${REPO}/src/api.ts`, 'a1')).toBeUndefined();
+  });
+
   it('a session that wrote the file with a command holds it, and stops the edits of the others', () => {
     const t = setup();
     const alpha = t.add('alpha');

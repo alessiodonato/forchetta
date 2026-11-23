@@ -21,7 +21,9 @@ export { shellCommands } from './shell.ts';
 // else, or end the turn and wait. Two worktrees are two different folders: nothing in common to hold. You can let a
 // session through from its box. A Bash command counts as a write of the files it writes as a plain reading of its
 // line tells (> and >>, tee, sed -i, perl -i, cp, mv, rm: shell.ts): stopped the same way before, held the same way
-// after (daemon/main.ts). What a script writes by itself is not seen.
+// after (daemon/main.ts). The usual formatters and fixers (prettier --write, eslint --fix, ruff format…) count for the
+// held files under what they are given, or under the folder they run in: stopped with all of them in one answer, held
+// after by no one, since what they rewrote is not known. What a script writes by itself is not seen.
 //
 // git. Before a Bash command with a git that changes the files of a working tree (checkout, reset --hard, stash…),
 // if another live session works in that same working tree, the answer is "ask": you decide, with the reason in
@@ -624,14 +626,40 @@ export class Guard {
    * it covers; the files of a member are checked for the files named one by one.
    */
   private decideShellWrites(agent: Agent, line: string, cwd: string): GuardDecision | undefined {
+    const formatted: string[] = [];
     for (const write of shellWrites(line, cwd)) {
       const named = !write.glob && !write.tree;
       for (const file of named ? [write.path] : this.heldUnder(write, agent)) {
         const answer = (named ? this.decideLane(agent, file) : undefined) ?? this.decideFile(agent, file, true);
-        if (answer) return answer;
+        if (!answer) continue;
+        if (!write.formatter) return answer;
+        if (!formatted.includes(file)) formatted.push(file);
       }
     }
-    return undefined;
+    return formatted.length > 0 ? this.formatterStop(agent, formatted) : undefined;
+  }
+
+  /**
+   * A formatter or a fixer that would rewrite files other sessions are changing: all of them in one answer, so that
+   * Claude runs it once more on its own files only, not once per file.
+   */
+  private formatterStop(agent: Agent, files: string[]): GuardDecision {
+    const shown = files.map((file) => this.shownPath(file, agent));
+    const listed = shown.length <= 6 ? shown.join(', ') : `${shown.slice(0, 6).join(', ')} and ${shown.length - 6} more`;
+    const holders = [...new Set(files.map((file) => this.holderOf(file, agent)).filter((other): other is Agent => other !== undefined))];
+    const names = holders.map((other) => `"${otherName(other, agent)}"`).join(', ');
+    const one = files.length === 1;
+    const who =
+      holders.length === 1
+        ? `${names}, another Claude Code session on this Mac, is changing ${one ? 'it' : 'them'} in the turn it is working on now`
+        : `other Claude Code sessions on this Mac (${names}) are changing ${one ? 'it' : 'them'} in the turns they are working on now`;
+    return {
+      decision: 'deny',
+      reason:
+        `Forchetta: this command would reformat ${listed}, and ${who}. ` +
+        `Run it only on the files you changed yourself, leaving ${one ? 'that file' : 'those files'} out, or end your turn saying that you are waiting for ${one ? 'it' : 'them'}. ` +
+        `You will be told when ${one ? 'it is' : 'they are'} free.`,
+    };
   }
 
   /** The files other sessions hold that a pattern matches, or that are under a folder (or are it). */

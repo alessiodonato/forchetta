@@ -152,8 +152,44 @@ describe('the files a line writes', () => {
     expect(globMatches(`${W}/src/*.ts`, `${W}/src/a.ts`)).toBe(true);
     expect(globMatches(`${W}/src/*.ts`, `${W}/src/deep/a.ts`)).toBe(false);
     expect(globMatches(`${W}/src/**/*.ts`, `${W}/src/deep/a.ts`)).toBe(true);
+    expect(globMatches(`${W}/src/**/*.ts`, `${W}/src/a.ts`)).toBe(true);
+    expect(globMatches(`${W}/src/**`, `${W}/src/deep/a.ts`)).toBe(true);
     expect(globMatches(`${W}/a?.md`, `${W}/ab.md`)).toBe(true);
     expect(globMatches(`${W}/a.md`, `${W}/aXmd`)).toBe(false);
+  });
+
+  it('are what a formatter or a fixer rewrites: its paths, or the folder it runs in', () => {
+    const formatted = (line: string): string[] => shellWrites(line, W).filter((write) => write.formatter).map((write) => write.path);
+    expect(shellWrites('prettier --write src/a.ts', W)).toEqual([{ path: `${W}/src/a.ts`, tree: true, formatter: true }]);
+    expect(formatted('npx prettier --write .')).toEqual([W]);
+    expect(formatted('pnpm exec prettier -w --config .prettierrc src test')).toEqual([`${W}/src`, `${W}/test`]);
+    expect(formatted('pnpm prettier --write "src/**/*.ts"')).toEqual([`${W}/src/**/*.ts`]);
+    expect(formatted('eslint --fix')).toEqual([W]);
+    expect(formatted('npx eslint --fix --ext .ts,.tsx src')).toEqual([`${W}/src`]);
+    expect(formatted('npx @biomejs/biome check --write ./src')).toEqual([`${W}/src`]);
+    expect(formatted('ruff format')).toEqual([W]);
+    expect(formatted('uv run ruff check --fix app')).toEqual([`${W}/app`]);
+    expect(formatted('python3 -m black --line-length 100 app tests')).toEqual([`${W}/app`, `${W}/tests`]);
+    expect(formatted('go fmt ./...')).toEqual([W]);
+    expect(formatted('gofmt -w ./pkg/...')).toEqual([`${W}/pkg`]);
+    expect(formatted('cd crates/core && cargo fmt --all')).toEqual([`${W}/crates/core`]);
+    expect(formatted('bundle exec rubocop -A')).toEqual([W]);
+    expect(formatted('dart format lib')).toEqual([`${W}/lib`]);
+    expect(formatted('terraform fmt -recursive')).toEqual([W]);
+  });
+
+  it('are the folder of a package script that formats or fixes', () => {
+    const formatted = (line: string): string[] => shellWrites(line, W).filter((write) => write.formatter).map((write) => write.path);
+    for (const line of ['npm run format', 'pnpm format', 'yarn fmt', 'pnpm run lint:fix', 'bun run format:write', 'pnpm lint --fix', 'npm run lint -- --fix']) {
+      expect(formatted(line), line).toEqual([W]);
+    }
+    for (const line of ['npm run format:check', 'pnpm lint', 'npm test', 'pnpm build', 'pnpm run check-format']) expect(formatted(line), line).toEqual([]);
+  });
+
+  it('are not those of a formatter that only checks', () => {
+    for (const line of ['prettier --check .', 'npx prettier src/a.ts', 'eslint .', 'eslint --fix-dry-run src', 'biome check ./src', 'ruff format --check', 'ruff check .', 'black --check app', 'isort --diff app', 'gofmt -l .', 'cargo fmt --check', 'rubocop', 'dart format -o none lib', 'terraform fmt -check', 'mix format --check-formatted', 'npx prettier --write "$DIR"', 'cargo fmt --version', 'ruff format --help']) {
+      expect(shellWrites(line, W), line).toEqual([]);
+    }
   });
 
   it('leave the words of shellCommands as they were', () => {
