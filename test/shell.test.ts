@@ -75,6 +75,51 @@ describe('dev servers', () => {
   });
 });
 
+describe('here-documents', () => {
+  const run = (line: string): string[] | undefined => shellCommands(line)?.map((command) => command.join(' '));
+
+  it('are text for a program, not commands', () => {
+    expect(run("cat > a.ts <<'EOF'\nclass A {\n  constructor() {}\n}\nnpm run dev\nkill 123\nEOF\necho done")).toEqual(['cat > a.ts <<EOF', 'echo done']);
+    expect(run('python3 - <<PY\nimport os\ngit checkout .\nPY')).toEqual(['python3 - <<PY']);
+    expect(killTargets("cat > stop.md <<'EOF'\nthen kill 4242\nEOF")).toBeUndefined();
+    expect(placedCommands("tee notes.md <<EOF > /dev/null\nnpm run dev\nEOF\nnpm test", '/p').map((command) => command.words[0])).toEqual(['tee', 'npm']);
+    // For a program on another computer, the commands are not of this one.
+    expect(run('ssh prod <<EOF\nkill 4242\nEOF')).toEqual(['ssh prod <<EOF']);
+  });
+
+  it('with an apostrophe leave the rest of the line readable', () => {
+    expect(run("cat > a.md <<'EOF'\nit's here\nEOF\ngit checkout .")).toEqual(['cat > a.md <<EOF', 'git checkout .']);
+    expect(run("git commit -m \"$(cat <<'EOF'\nFix \"retries\", don't wait\n\nnpm run dev\nEOF\n)\" && npm test")?.at(-1)).toBe('npm test');
+  });
+
+  it('are commands for a shell', () => {
+    for (const opener of ["bash <<'EOF'", 'sh -x <<EOF', '/bin/bash -s one <<EOF', 'sudo -u me bash <<EOF', 'env -i bash <<EOF', 'FOO=1 zsh <<EOF', "cat <<'EOF' | sh", 'cat <<EOF |& bash', 'cd x && bash <<EOF', 'if true; then bash <<EOF', '(bash <<EOF', '. /dev/stdin <<EOF', 'cat <<EOF |', 'bash \\\n  -s <<EOF']) {
+      const commands = run(`${opener}\ngit checkout .\nkill 4242\nEOF\n`);
+      expect(commands, opener).toContain('git checkout .');
+      expect(commands, opener).not.toContain('EOF');
+    }
+    for (const opener of ["bash -c 'cat' <<EOF", 'sh -ec cat <<EOF', 'cat <<EOF || bash', 'cat <<EOF; bash', 'cat <<EOF 2>&1', 'while read x; do echo; done <<EOF', 'bashful <<EOF']) {
+      expect(run(`${opener}\ngit checkout .\nEOF\n`), opener).not.toContain('git checkout .');
+    }
+  });
+
+  it('inside the commands of a shell are text again', () => {
+    expect(run("bash <<'A'\ncat > x <<'B'\nnpm run dev\nB\nkill 5\nA\nls")).toEqual(['bash <<A', 'cat > x <<B', 'kill 5', 'ls']);
+  });
+
+  it('more than one on a line, with tabs, with any word', () => {
+    expect(run('cat <<A <<-"END OF B"\na\nA\nb\n\tEND OF B\nls')?.at(-1)).toBe('ls');
+    expect(run('cat <<\\EOF-1\ngit checkout .\nEOF-1\nls')?.at(-1)).toBe('ls');
+    expect(run('cat <<EOF\n  EOF\ngit checkout .\nEOF\nls')?.at(-1)).toBe('ls');
+  });
+
+  it('are not a << that opens none: the commands after it stay', () => {
+    for (const first of ['echo "1 << n"', "echo '1 << n'", 'echo $((1 << n))', '(( x = 1 << n ))', 'grep x <<< word', 'ls # <<EOF', 'echo "a\n<<EOF b"', 'cat <<NEVER']) {
+      expect(run(`${first}\ngit checkout .`), first).toContain('git checkout .');
+    }
+  });
+});
+
 describe('kills', () => {
   it('aim at pids, names, patterns and ports', () => {
     expect(killTargets('kill 123 456')).toEqual({ pids: [123, 456], patterns: [], ports: [] });

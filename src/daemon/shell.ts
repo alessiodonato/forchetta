@@ -7,9 +7,11 @@ import { resolve } from 'node:path';
 /**
  * The words of a shell line, split into simple commands at ;, &, |, &&, || and newlines, with quotes and
  * backslashes taken away. A plain reading: no expansions, no subshells. Undefined when a quote is left open.
+ * The body of a here-document is text for a program (a file it writes, the message of a commit), not commands,
+ * unless the program is a shell: bash <<EOF, cat <<EOF | sh.
  */
 export function shellCommands(line: string): string[][] | undefined {
-  return shellTokens(line)?.map((words) => words.map((word) => word.text));
+  return shellTokens(stripHeredocs(line, goesToShell))?.map((words) => words.map((word) => word.text));
 }
 
 /** A word of a shell line, with where in it a > was written outside quotes: the start of a redirection. */
@@ -77,21 +79,131 @@ function shellTokens(line: string): ShellToken[][] | undefined {
  * The line without the bodies of its here-documents (cat > f <<'EOF' … EOF): what they hold is text for a program,
  * not commands, and an apostrophe in it would leave a quote open. The line that opens one stays.
  */
-export function withoutHeredocs(line: string): string {
-  const opener = /(?<!<)<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
-  const lines = line.split('\n');
-  const kept: string[] = [];
-  const waiting: Array<{ word: string; tabs: boolean }> = [];
-  for (const text of lines) {
-    const open = waiting[0];
-    if (open) {
-      if ((open.tabs ? text.replace(/^\t+/, '') : text) === open.word) waiting.shift();
-      continue;
+export const withoutHeredocs = (line: string): string => stripHeredocs(line, () => false);
+
+const HEREDOC = /<<(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Za-z_][\w.-]*))/y;
+
+/**
+ * The line without the bodies of its here-documents, except those `keep` wants, told the command a body is for (the
+ * text before <<) and the rest of its line. A << in quotes, in a comment or in arithmetic opens none, nor does one
+ * whose end is nowhere: those lines stay, as commands.
+ */
+function stripHeredocs(line: string, keep: (head: string, tail: string) => boolean): string {
+  let out = '';
+  // Where the reading is: in double quotes or not, inside each $( and (; and where the command at hand starts.
+  const contexts = [{ quoted: false, from: 0 }];
+  const waiting: { word: string; tabs: boolean; keep: boolean }[] = [];
+  let i = 0;
+  const copyTo = (end: number): void => {
+    out += line.slice(i, end);
+    i = end;
+  };
+  while (i < line.length) {
+    const c = line[i]!;
+    const top = contexts.at(-1)!;
+    if (c === '\\') copyTo(Math.min(i + 2, line.length));
+    else if (line.startsWith('$((', i) || (!top.quoted && line.startsWith('((', i))) {
+      const end = line.indexOf('))', i);
+      copyTo(end < 0 ? i + 2 : end + 2);
+    } else if (line.startsWith('$(', i)) {
+      copyTo(i + 2);
+      contexts.push({ quoted: false, from: i });
+    } else if (c === '"') {
+      copyTo(i + 1);
+      if (top.quoted) contexts.pop();
+      else contexts.push({ quoted: true, from: i });
+    } else if (top.quoted) copyTo(i + 1);
+    else if (c === "'") {
+      const end = line.indexOf("'", i + 1);
+      copyTo(end < 0 ? line.length : end + 1);
+    } else if (c === '#' && (i === 0 || /[\s;&|(]/.test(line[i - 1]!))) {
+      const end = line.indexOf('\n', i);
+      copyTo(end < 0 ? line.length : end);
+    } else if (c === '\n' && waiting.length > 0) {
+      copyTo(i + 1);
+      for (const doc of waiting.splice(0)) {
+        const body = bodyOf(line, i, doc);
+        if (!body) break;
+        if (doc.keep) out += stripHeredocs(line.slice(i, body.end), keep);
+        i = body.next;
+      }
+      top.from = i;
+    } else if (line.startsWith('<<<', i)) copyTo(i + 3);
+    else if (line.startsWith('<<', i)) {
+      HEREDOC.lastIndex = i;
+      const match = HEREDOC.exec(line);
+      if (!match) copyTo(i + 2);
+      else {
+        const head = line.slice(top.from, i);
+        copyTo(HEREDOC.lastIndex);
+        const end = line.indexOf('\n', i);
+        waiting.push({ word: (match[2] ?? match[3] ?? match[4])!, tabs: match[1] === '-', keep: keep(head, line.slice(i, end < 0 ? line.length : end)) });
+      }
+    } else {
+      copyTo(i + 1);
+      if (c === '(') contexts.push({ quoted: false, from: i });
+      else if (c === ')' && contexts.length > 1) contexts.pop();
+      // 2>&1 and &> copy a descriptor: the & ends no command.
+      else if (c === ';' || c === '|' || c === '\n' || c === '`' || (c === '&' && line[i - 2] !== '>' && line[i] !== '>')) top.from = i;
     }
-    kept.push(text);
-    for (const match of text.matchAll(opener)) waiting.push({ word: match[3]!, tabs: match[1] === '-' });
   }
-  return kept.join('\n');
+  return out;
+}
+
+/** The body of a here-document that starts at `from`: where it ends, and where the line goes on; undefined with no end. */
+function bodyOf(line: string, from: number, doc: { word: string; tabs: boolean }): { end: number; next: number } | undefined {
+  for (let at = from; at < line.length; ) {
+    const newline = line.indexOf('\n', at);
+    const stop = newline < 0 ? line.length : newline;
+    const text = line.slice(at, stop);
+    if ((doc.tabs ? text.replace(/^\t+/, '') : text) === doc.word) return { end: at, next: newline < 0 ? line.length : newline + 1 };
+    at = stop + 1;
+  }
+  return undefined;
+}
+
+/** Programs that run as commands what they read. */
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'su']);
+
+function readsCommands(words: readonly string[]): boolean {
+  let start = 0;
+  while (['then', 'do', 'else', 'if', 'elif', 'while', 'until', '{', '!'].includes(words[start] ?? '')) start++;
+  const rest = words.slice(start);
+  const command = rest.slice(commandStart(rest));
+  const name = base(command[0]);
+  if (name === 'source' || name === '.') return command[1] === '/dev/stdin';
+  // sudo -u me bash, env -i bash: the shell comes after their options.
+  const at = ['sudo', 'doas'].includes(name) || name.startsWith('-') ? command.findIndex((word) => SHELLS.has(base(word))) : SHELLS.has(name) ? 0 : -1;
+  // bash -c '…' has its commands there: what it reads is their input.
+  return at >= 0 && !command.slice(at + 1).some((word) => /^-[A-Za-z]*c$/.test(word));
+}
+
+/** Whether a here-document is for a shell: the command it is written in, or one that command is piped to. */
+function goesToShell(head: string, tail: string): boolean {
+  const commands = [head];
+  let ended = false;
+  for (let i = 0; i < tail.length && !ended; i++) {
+    const c = tail[i]!;
+    let piece = c;
+    if (c === '\\') piece = tail.slice(i, i + 2);
+    else if (c === "'" || c === '"') {
+      const end = tail.indexOf(c, i + 1);
+      piece = tail.slice(i, end < 0 ? tail.length : end + 1);
+    } else if (c === '|' && tail[i + 1] !== '|') {
+      commands.push('');
+      if (tail[i + 1] === '&') i++;
+      continue;
+    } else if (c === '|' || c === ';' || c === ')' || c === '`' || (c === '&' && tail[i - 1] !== '>' && tail[i + 1] !== '>')) ended = true;
+    if (ended) break;
+    commands[commands.length - 1] += piece;
+    i += piece.length - 1;
+  }
+  // The pipe goes on after the body: who reads it is not known here, so the body stays.
+  if (!ended && commands.length > 1 && commands.at(-1)!.trim() === '') return true;
+  return commands.some((command) => {
+    const words = shellTokens(command)?.[0]?.map((word) => word.text);
+    return words ? readsCommands(words) : false;
+  });
 }
 
 /** A file a shell line writes, as far as a plain reading tells. */

@@ -95,6 +95,18 @@ describe('a second dev server', () => {
     expect(t.calls.length).toBe(before);
   });
 
+  it('is not a file written with a here-document that names one, nor a kill in it', async () => {
+    const t = setup();
+    t.add('retries', 100);
+    const beta = t.add('rate-limit', 200);
+    const before = t.calls.length;
+    expect(await t.bash(beta, "cd apps/web && cat > README.md <<'EOF'\nStart it:\n\nnpm run dev\n\nStop it:\n\nkill 4242\n\nclass A {\n  constructor() {}\n}\nEOF")).toBeUndefined();
+    expect(t.calls.length).toBe(before);
+    // For a shell they are commands.
+    expect((await t.bash(beta, "cd apps/web && bash <<'EOF'\nnpm run dev\nEOF"))?.decision).toBe('deny');
+    expect((await t.bash(beta, "bash <<'EOF'\nkill 4242\nEOF"))?.decision).toBe('ask');
+  });
+
   it('counts a server started by the same session, or outside Claude Code', async () => {
     const t = setup();
     const alpha = t.add('retries', 100);

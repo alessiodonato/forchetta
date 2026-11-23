@@ -401,6 +401,16 @@ describe('reading a shell line', () => {
 });
 
 describe('git', () => {
+  it('reads the git of a here-document for a shell, not the one in a text; and the git after a text with an apostrophe', () => {
+    const t = setup();
+    t.add('alpha');
+    const beta = t.add('beta');
+    expect(t.bash(beta, "cat > notes.md <<'EOF'\nThen run\ngit checkout main\nEOF")).toBeUndefined();
+    expect(t.bash(beta, "git commit -m \"$(cat <<'EOF'\nUndo it with\ngit reset --hard\nEOF\n)\"")).toBeUndefined();
+    expect(t.bash(beta, "bash <<'EOF'\ngit checkout main\nEOF")?.decision).toBe('ask');
+    expect(t.bash(beta, "cat > notes.md <<'EOF'\nit's done\nEOF\ngit checkout main")?.decision).toBe('ask');
+  });
+
   it('asks before a git command that changes the files under another session', () => {
     const t = setup();
     const alpha = t.add('alpha');
