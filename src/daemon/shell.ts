@@ -516,7 +516,8 @@ export function isDevServerCommand(words: readonly string[]): boolean {
   const name = program?.name ?? base(words[0]);
   const args = program?.args ?? words.slice(1);
   const sub = args.find((word) => !word.startsWith('-')) ?? '';
-  const known = SERVER_PROGRAMS[name];
+  // Its own entries only: a word like constructor is not one.
+  const known = Object.hasOwn(SERVER_PROGRAMS, name) ? SERVER_PROGRAMS[name] : undefined;
   if (known === true) return true;
   // A bare vite, with options or with the folder of the app: a server; vite build, a subcommand by name, is not.
   if (known) return known.includes(sub) || (known.includes('') && !/^[a-z][a-z-]*$/i.test(sub));
