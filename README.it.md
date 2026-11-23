@@ -9,6 +9,7 @@
 Trascina gli agenti su una tela, disegna chi guida chi, e avvia il team nel tuo progetto. Ogni agente è una sessione di Claude Code: si dividono il lavoro, e Forchetta li tiene lontani dai file degli altri. Tutte le sessioni del tuo Mac, in un team o no, stanno in una finestra.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#installazione)
+[![Windows: beta](https://img.shields.io/badge/Windows-beta-8b867d?style=flat-square)](#windows-e-linux-beta)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#installazione)
 [![Per Claude Code](https://img.shields.io/badge/per-Claude%20Code-d97757?style=flat-square)](https://code.claude.com)
 [![Gira in locale](https://img.shields.io/badge/gira-in%20locale-46c48a?style=flat-square)](#cosa-tocca-sul-tuo-mac)
@@ -78,6 +79,12 @@ Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. P
 Versione 0.12.6. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
+
+### Windows e Linux (beta)
+
+Su Windows, Forchetta gira dentro [WSL 2](https://learn.microsoft.com/windows/wsl/install), il Linux incluso in Windows, accanto a Claude Code e ai tuoi progetti. La usi da una finestra di Edge o Chrome: la stessa pagina del Mac, senza la barra dei menu e la scorciatoia da qualunque programma. Vede le sessioni avviate dentro WSL: quelle di PowerShell, o di Claude Code per Windows, non compaiono.
+
+Serve qualcuno che la provi: i test passano su macOS e su Linux, ma su un PC Windows non è ancora stata provata. **[Provala su Windows](https://forchetta.dev/windows/)** (in inglese) ha i passi per installarla dal ramo `windows`, cosa provare e dove dire com'è andata. La stessa versione gira su Linux, nel browser.
 
 ## Prova il vigile
 
