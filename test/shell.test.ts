@@ -66,6 +66,10 @@ describe('dev servers', () => {
     }
   });
 
+  it('are not words that every object of JavaScript has', () => {
+    for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) expect(isDevServerCommand([name, 'dev']), name).toBe(false);
+  });
+
   it('runs in the folder of the cd before it', () => {
     expect(placedCommands('cd apps/web && pnpm dev', '/p/shop')).toEqual([{ words: ['pnpm', 'dev'], dir: '/p/shop/apps/web' }]);
   });
