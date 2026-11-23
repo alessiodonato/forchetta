@@ -62,12 +62,13 @@ describe('the code of forchetta open', () => {
     expect(sameUser(socket, 1000, () => table)).toBe(false);
     // In the table of IPv6 only.
     expect(sameUser(socket, 1001, (file) => (file.endsWith('tcp6') ? table : HEAD))).toBe(true);
+    expect(sameUser({ remotePort: 50001, localPort: 47821 }, 1001, () => table)).toBe(false);
     const missing = (): string => {
       throw new Error('ENOENT');
     };
     expect(sameUser(socket, 1001, missing)).toBe(false);
-    expect(sameUser(socket, undefined, () => table)).toBe(false);
     expect(sameUser({}, 1001, () => table)).toBe(false);
+    expect(sameUser({ remotePort: 50000 }, 1001, () => table)).toBe(false);
   });
 
   it.skipIf(process.platform !== 'linux')('reads it from the kernel', async () => {
