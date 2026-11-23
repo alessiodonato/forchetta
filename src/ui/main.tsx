@@ -5,12 +5,15 @@ import { connectAttention } from './attention.ts';
 import { browserShell } from './browser-shell.ts';
 import { Connection, shell } from './connection.ts';
 import { setHidden } from './motion.ts';
-import { IS_MAC } from './platform.ts';
+import { IS_MAC, keepTextHere } from './platform.ts';
 import { Store } from './store.ts';
 import { applyTheme, savedTheme } from './theme.ts';
 
 // The fonts of Windows and Linux, only there (styles.css).
-if (!IS_MAC) document.documentElement.dataset.os = 'other';
+if (!IS_MAC) {
+  document.documentElement.dataset.os = 'other';
+  keepTextHere(document.documentElement);
+}
 
 // The theme before the first render: no flash of the dark one on a light choice.
 applyTheme(savedTheme(), false);

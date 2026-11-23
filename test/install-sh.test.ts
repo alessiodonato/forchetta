@@ -79,6 +79,23 @@ describe('docs/install.sh', () => {
     expect(existsSync(join(home, '.local', 'lib', 'forchetta-node', 'bin', 'node'))).toBe(true);
   });
 
+  it('for a clone (scripts/from-source.sh) takes only the Node.js, where it is told', () => {
+    const { dir, home, run } = scene({ node: '18' });
+    const dist = join(dir, 'node-dist');
+    mkdirSync(join(dir, 'node-v22.20.0-linux-x64', 'bin'), { recursive: true });
+    mkdirSync(dist);
+    writeFileSync(join(dir, 'node-v22.20.0-linux-x64', 'bin', 'node'), '#!/bin/sh\necho 22\n', { mode: 0o755 });
+    const tar = join(dist, 'node-v22.20.0-linux-x64.tar.gz');
+    execFileSync('tar', ['-czf', tar, '-C', dir, 'node-v22.20.0-linux-x64']);
+    const only = { FORCHETTA_NODE_ONLY: '1', FORCHETTA_NODE_LIB: join(home, 'forchetta-node'), FORCHETTA_NODE_DIST: `file://${dist}`, FORCHETTA_RELEASES: 'file:///nowhere', FORCHETTA_VERSION: '' };
+    writeFileSync(join(dist, 'SHASUMS256.txt'), `${'f'.repeat(64)}  node-v22.20.0-linux-x64.tar.gz\n`);
+    expect(run(only)).toMatchObject({ code: 1, err: expect.stringContaining('not the one nodejs.org lists') });
+    expect(existsSync(join(home, 'forchetta-node'))).toBe(false);
+    writeFileSync(join(dist, 'SHASUMS256.txt'), `${sha(tar)}  node-v22.20.0-linux-x64.tar.gz\n`);
+    expect(run(only)).toMatchObject({ code: 0, err: '' });
+    expect(readdirSync(home)).toEqual(['forchetta-node']);
+  });
+
   it('installs nothing that is not the release, or that does not run here', () => {
     const changed = scene({ checksum: 'f'.repeat(64) });
     expect(changed.run()).toMatchObject({ code: 1, err: expect.stringContaining('not the one of the release') });

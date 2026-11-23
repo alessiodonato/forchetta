@@ -159,12 +159,19 @@ describe('forchetta open', () => {
   it('in WSL opens a browser of Windows as a window of its own, else the default one', () => {
     const none = (): undefined => undefined;
     const edge = '/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
-    expect(openerOf('U', 'wsl', (path) => path === edge, none)).toEqual({ file: edge, args: ['--app=U'] });
-    expect(openerOf('U', 'wsl', () => false, (name) => (name === 'wslview' ? '/usr/bin/wslview' : undefined))).toEqual({ file: '/usr/bin/wslview', args: ['U'] });
-    expect(openerOf('U', 'wsl', (path) => path.endsWith('rundll32.exe'), none)).toEqual({ file: '/mnt/c/Windows/System32/rundll32.exe', args: ['url.dll,FileProtocolHandler', 'U'] });
-    expect(openerOf('U', 'linux', () => false, (name) => (name === 'google-chrome' ? '/usr/bin/google-chrome' : undefined))).toEqual({ file: '/usr/bin/google-chrome', args: ['--app=U'] });
-    expect(openerOf('U', 'linux', () => false, (name) => (name === 'xdg-open' ? '/usr/bin/xdg-open' : undefined))).toEqual({ file: '/usr/bin/xdg-open', args: ['U'] });
-    expect(openerOf('U', 'linux', () => false, none)).toBeUndefined();
+    const profile = (): string => 'P';
+    const flags = ['--user-data-dir=P', '--disable-extensions', '--no-first-run', '--no-default-browser-check'];
+    expect(openerOf('U', 'wsl', (path) => path === edge, none, profile)).toEqual({ file: edge, args: ['--app=U', ...flags], own: true });
+    // Without a folder for the profile it still opens, and says it is not its own.
+    expect(openerOf('U', 'wsl', (path) => path === edge, none, none)).toEqual({ file: edge, args: ['--app=U'], own: false });
+    expect(openerOf('U', 'wsl', () => false, (name) => (name === 'wslview' ? '/usr/bin/wslview' : undefined), profile)).toEqual({ file: '/usr/bin/wslview', args: ['U'], own: false });
+    expect(openerOf('U', 'wsl', (path) => path.endsWith('rundll32.exe'), none, profile)).toEqual({ file: '/mnt/c/Windows/System32/rundll32.exe', args: ['url.dll,FileProtocolHandler', 'U'], own: false });
+    expect(openerOf('U', 'linux', () => false, (name) => (name === 'google-chrome' ? '/usr/bin/google-chrome' : undefined), profile)).toEqual({ file: '/usr/bin/google-chrome', args: ['--app=U', ...flags], own: true });
+    expect(openerOf('U', 'linux', () => false, (name) => (name === 'xdg-open' ? '/usr/bin/xdg-open' : undefined), profile)).toEqual({ file: '/usr/bin/xdg-open', args: ['U'], own: false });
+    expect(openerOf('U', 'linux', () => false, none, profile)).toBeUndefined();
+    // A browser of Linux inside WSL has its profile among the files of Linux, not of Windows.
+    const inside = openerOf('U', 'wsl', () => false, (name) => (name === 'google-chrome' ? '/usr/bin/google-chrome' : undefined), () => 'C:\\P');
+    expect(inside?.args[1]).toMatch(/^--user-data-dir=\/.*\/browser$/);
   });
 
   it('on a Mac opens the app, when it is there', () => {

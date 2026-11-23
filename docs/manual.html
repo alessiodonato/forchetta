@@ -222,12 +222,14 @@ forchetta setup</pre>
         <ul>
           <li><strong>The sessions are those inside WSL.</strong> Claude Code started in PowerShell, or Claude Code for Windows, has its own settings and does not reach Forchetta. When both are installed, start the one of WSL.</li>
           <li>Keep your projects in your home of WSL (<code>~/projects</code>), not under <code>/mnt/c</code>: there they work, but are much slower. Forchetta itself must not be under <code>/mnt/c</code>. A folder can be written as Windows does (<code>C:\Users\you\shop</code>).</li>
+          <li><strong>The window has a profile of its own</strong> in Edge, Chrome, Chromium or Brave, without your extensions, which could read the terminals. With another browser the page opens in the usual one, and <code>forchetta open</code> says so.</li>
+          <li>A session in WSL can start programs of Windows, like <code>powershell.exe</code>: the guard does not see what they change.</li>
           <li>The shortcuts are with <kbd>Ctrl</kbd> in place of <kbd>⌘</kbd>. Inside a terminal they go to Claude Code, except <kbd>Ctrl</kbd><kbd>V</kbd>, which pastes; <kbd>Ctrl</kbd>-click opens a link. In a tab of the browser, instead of the window <code>forchetta open</code> makes, the browser keeps some of them for itself (<kbd>Ctrl</kbd><kbd>N</kbd>, <kbd>Ctrl</kbd><kbd>W</kbd>).</li>
           <li>Dragging the mouse in a terminal copies into the clipboard of Windows; <kbd>Shift</kbd>-drag selects in the page.</li>
           <li>There is no app: no menu bar, no shortcut from any program, and <code>forchetta daemon keepalive</code> is only on a Mac. Windows may stop WSL after its last terminal closes: keep one open while the sessions work.</li>
           <li>The data is in <code>~/.local/share/forchetta</code>.</li>
         </ul>
-        <p>To remove it: <code>forchetta hooks uninstall</code>, <code>forchetta daemon stop</code>, then delete <code>~/.local/bin/forchetta</code>, <code>~/.local/lib/forchetta</code>, <code>~/.local/lib/forchetta-node</code> and <code>~/.local/share/forchetta</code>.</p>
+        <p>To remove it: <code>forchetta hooks uninstall</code>, <code>forchetta daemon stop</code>, then delete <code>~/.local/bin/forchetta</code>, <code>~/.local/lib/forchetta</code>, <code>~/.local/lib/forchetta-node</code> and <code>~/.local/share/forchetta</code>. On Windows also <code>%LOCALAPPDATA%\Forchetta</code>, the profile of the window.</p>
       </section>
 
       <section id="window">

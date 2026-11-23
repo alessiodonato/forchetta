@@ -5,6 +5,15 @@ const name = typeof navigator === 'undefined' ? 'Mac' : navigator.platform || ''
 
 export const IS_MAC = /^(?:Mac|iPhone|iPad)/i.test(name);
 
+/**
+ * A browser may send the text of a page, or what you type in it, to a service of its own, to translate it or to check
+ * its spelling: not the text of the sessions. The app on a Mac has neither.
+ */
+export function keepTextHere(root: { translate: boolean; spellcheck: boolean }): void {
+  root.translate = false;
+  root.spellcheck = false;
+}
+
 /** The title of the buttons that choose a folder: the panel of macOS, or the one of the page. */
 export const CHOOSE_FOLDER = IS_MAC ? 'Choose the folder in the panel of macOS' : 'Choose the folder';
 

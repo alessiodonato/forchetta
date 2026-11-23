@@ -65,7 +65,12 @@ export interface ServerOptions {
    * The page in a browser, where there is no app (Linux, WSL): the codes of `forchetta open`, made for the CLI and
    * traded once by the page for the token; at localhost too, in WSL. Undefined on a Mac: the app has the token.
    */
-  browser?: { codes: { create(): string; redeem(code: unknown): boolean }; localhost: boolean };
+  browser?: {
+    codes: { create(): string; redeem(code: unknown): boolean };
+    localhost: boolean;
+    /** On Linux: whether who trades a code is of the user of the daemon (daemon/peer.ts). */
+    sameUser?: (socket: { remotePort?: number; localPort?: number }) => boolean;
+  };
   /** The routes of the MCP server of a team: /api/crew/<route>, POST with JSON. */
   crew?: (route: string, input: Record<string, unknown>) => Promise<{ status: number; body: unknown }>;
   /** The other routes of /api/ (the commands of the CLI: teams, templates, diagnostics); undefined: not one. */
@@ -399,6 +404,11 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
     if (url.pathname === OPEN_PATH && req.method === 'POST' && options.browser) {
       if (!isOwnOrigin(req.headers.origin, port, options.browser.localhost)) return send(res, 403);
       if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415);
+      // Not spent: it is still good for who it was made for.
+      if (options.browser.sameUser && !options.browser.sameUser(req.socket)) {
+        log('open: refused, not from a program of this user', 'warn');
+        return send(res, 403);
+      }
       const body = await readBody(req);
       let code: unknown;
       try {

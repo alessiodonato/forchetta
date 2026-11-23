@@ -49,7 +49,7 @@ describe('on a Mac', () => {
 
   it('the daemon turns on what is of Linux and WSL only there', () => {
     const main = readFileSync(join(ROOT, 'src', 'daemon', 'main.ts'), 'utf8');
-    expect(main).toContain("...(PLATFORM === 'macos' ? {} : { browser: { codes: new OpenCodes(), localhost: PLATFORM === 'wsl' } }),");
+    expect(main).toContain("...(PLATFORM === 'macos' ? {} : { browser: { codes: new OpenCodes(), localhost: PLATFORM === 'wsl', ...(PLATFORM === 'linux' ? { sameUser } : {}) } }),");
     expect(main).toContain("PLATFORM === 'macos' ? { onChooseFolder: (folder?: string) => folderChooser.choose(folder) } : { onListFolders: (folder?: string) => listFolders(folder) }");
     expect(main.match(/localhost: PLATFORM === 'wsl'/g)).toHaveLength(3);
     expect(main).toContain("ptyProblem: PLATFORM === 'macos' ? undefined : ptyProblem(),");

@@ -2,6 +2,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync } from 'node:
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { UserError } from './errors.ts';
 import { PLATFORM, type Platform } from './platform.ts';
 
 // Where Forchetta keeps its files. Everything it writes at run time stays in one private folder: the daemon token,
@@ -149,10 +150,25 @@ export const paths = pathsFor(defaultVarDir());
 /** The folder of Claude Code: ~/.claude, or CLAUDE_CONFIG_DIR. */
 export const claudeConfigDir = (env: NodeJS.ProcessEnv = process.env): string => env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
 
-/** Makes a folder that only this user can open: it holds the daemon token and the text of the sessions. */
-export function ensurePrivateDir(dir: string): void {
+/**
+ * Makes a folder that only this user can open: it holds the daemon token and the text of the sessions. Off a Mac it
+ * looks again: a drive of Windows in WSL, or a disk with no permissions, takes a chmod and changes nothing, and the
+ * files in it would be of anyone.
+ */
+export function ensurePrivateDir(dir: string, platform: Platform | undefined = PLATFORM, look: (path: string) => { mode: number; uid: number } = lstatSync, own = process.getuid?.()): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const stats = lstatSync(dir);
   if (!stats.isDirectory()) throw new Error(`forchetta: ${dir} is not a folder`);
-  if ((stats.mode & 0o077) !== 0) chmodSync(dir, 0o700);
+  if ((stats.mode & 0o077) !== 0) {
+    try {
+      chmodSync(dir, 0o700);
+    } catch (error) {
+      // Off a Mac, what follows says why.
+      if (platform === 'macos') throw error;
+    }
+  }
+  if (platform === 'macos') return;
+  const made = look(dir);
+  if (own !== undefined && made.uid !== own) throw new UserError(`${dir} is of another user: Forchetta keeps its private data there`, 'run forchetta as the user it belongs to, without sudo');
+  if ((made.mode & 0o077) !== 0) throw new UserError(`${dir} cannot be made private: it is on a drive of Windows, or on a disk with no permissions`, 'put Forchetta in your home of Linux (~)');
 }

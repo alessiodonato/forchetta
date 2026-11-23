@@ -85,10 +85,19 @@ jobs:
           code=${url##*#open=}
           trade() { curl -fsS -H "Origin: $1" -H 'Content-Type: application/json' -d "{\"code\":\"$code\"}" http://127.0.0.1:47821/open; }
           if trade http://localhost:47821; then echo "localhost is for WSL only"; exit 1; fi
+          # Another user, who can read the code among the arguments of the browser, gets nothing with it.
+          if sudo -u nobody curl -fsS -H "Origin: http://127.0.0.1:47821" -H 'Content-Type: application/json' -d "{\"code\":\"$code\"}" http://127.0.0.1:47821/open; then echo "the code was good for another user"; exit 1; fi
           trade http://127.0.0.1:47821 | grep -q token
           if trade http://127.0.0.1:47821; then echo "the code was good twice"; exit 1; fi
           bin/forchetta doctor | grep -v 'Claude Code'
           bin/forchetta daemon stop
+
+      # As forchetta.dev/windows says to, with no pnpm in the PATH and no root.
+      - name: A clone builds with scripts/from-source.sh
+        run: |
+          git clone -q . "$RUNNER_TEMP/clone/forchetta"
+          PATH=$(dirname "$(command -v node)"):/usr/bin:/bin sh "$RUNNER_TEMP/clone/forchetta/scripts/from-source.sh"
+          test "$("$RUNNER_TEMP/clone/forchetta/bin/forchetta" --version)" = "$(node -p "require('./package.json').version")"
 
       # The archive of Linux, installed as a person would. The binary of arm64 is not compiled here: the other one, only to pack.
       - name: The archive of Linux installs, with nothing of a Mac in it

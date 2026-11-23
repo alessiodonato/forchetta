@@ -34,6 +34,7 @@ import { CustomSkills, skillUsers } from './custom-skills.ts';
 import { FolderChooser } from './folder-chooser.ts';
 import { listFolders } from './folder-list.ts';
 import { OpenCodes } from './open-codes.ts';
+import { sameUser } from './peer.ts';
 import { importTeam, saveTeamFile } from './team-files.ts';
 import { TokenCounter } from './token-usage.ts';
 import { gitRunner, SkillCache } from './skills.ts';
@@ -879,7 +880,7 @@ function main(): void {
     registry,
     token,
     // On a Mac the app has the token: no codes, no page at localhost.
-    ...(PLATFORM === 'macos' ? {} : { browser: { codes: new OpenCodes(), localhost: PLATFORM === 'wsl' } }),
+    ...(PLATFORM === 'macos' ? {} : { browser: { codes: new OpenCodes(), localhost: PLATFORM === 'wsl', ...(PLATFORM === 'linux' ? { sameUser } : {}) } }),
     uiDir: join(ROOT, 'dist', 'ui'),
     hub,
     terminals,

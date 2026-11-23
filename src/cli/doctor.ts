@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir, release, tmpdir, userInfo } from 'node:os';
+import { homedir, hostname, release, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Agent } from '../shared/agent.ts';
 import { loadConfig, which } from '../shared/config.ts';
@@ -41,12 +41,26 @@ export function logProblems(text: string, now = Date.now(), max = 12): string[] 
     .slice(-max);
 }
 
+const literal = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The folder of a user of Windows, as WSL writes it, as Windows does, and as JSON writes that. */
+const WINDOWS_USER = /((?:\/mnt)?\/[a-z]\/|[a-z]:(?:\\{1,2}|\/))(Users)(\\{1,2}|\/)([^\\/\r\n"'`<>|:*?]{1,64}(?=[\\/])|[^\s\\/"'`<>|:*?,;)]+)/gi;
+
 /**
  * The text with what could say who you are taken out: the home and the user name, e-mail addresses, long hex
- * tokens, and the names given (projects, teams), each replaced by a neutral one.
+ * tokens, and the names given (projects, teams), each replaced by a neutral one. With `host` (Linux and WSL, where
+ * it is the name of the PC) also that, and the users of Windows, whose folders the paths of WSL name.
  */
-export function redact(text: string, names: readonly string[] = [], home = homedir(), user = userInfo().username): string {
+export function redact(text: string, names: readonly string[] = [], home = homedir(), user = userInfo().username, host = PLATFORM === 'macos' ? '' : hostname()): string {
   let out = text.split(home).join('~');
+  if (host) {
+    const users = new Set<string>();
+    out = out.replace(WINDOWS_USER, (_path, drive: string, folder: string, slash: string, name: string) => {
+      if (!/^(?:public|default|default user|all users)$/i.test(name)) users.add(name);
+      return `${drive}${folder}${slash}<user>`;
+    });
+    for (const name of [...users, host]) if (name.length >= 3) out = out.replace(new RegExp(`(?<![\\w-])${literal(name)}(?![\\w-])`, 'gi'), name === host ? '<computer>' : '<user>');
+  }
   out = out.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>');
   out = out.replace(/\b[0-9a-f]{32,}\b/gi, '<token>');
   out = out.replace(/\bsk-ant-[\w-]+/g, '<key>');
@@ -54,7 +68,7 @@ export function redact(text: string, names: readonly string[] = [], home = homed
   unique.forEach((name, index) => {
     out = out.split(name).join(`name-${index + 1}`);
   });
-  if (user && user.length >= 3) out = out.replace(new RegExp(`\\b${user.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), '<user>');
+  if (user && user.length >= 3) out = out.replace(new RegExp(`\\b${literal(user)}\\b`, 'g'), '<user>');
   return out;
 }
 

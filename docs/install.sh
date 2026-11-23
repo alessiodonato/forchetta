@@ -12,7 +12,7 @@ RELEASES=${FORCHETTA_RELEASES:-https://github.com/alessiodonato/forchetta/releas
 NODE_DIST=${FORCHETTA_NODE_DIST:-https://nodejs.org/dist/latest-v22.x}
 PROTO=${FORCHETTA_PROTO:-=https}
 LIB="$HOME/.local/lib/forchetta"
-NODE_LIB="$HOME/.local/lib/forchetta-node"
+NODE_LIB=${FORCHETTA_NODE_LIB:-"$HOME/.local/lib/forchetta-node"}
 BIN="$HOME/.local/bin"
 
 say() { printf '%s\n' "$*"; }
@@ -79,6 +79,12 @@ main() {
   WORK=$(mktemp -d)
   trap 'rm -rf "$WORK"' EXIT
   trap 'exit 1' HUP INT TERM
+
+  # Only the Node.js: for scripts/from-source.sh.
+  if [ -n "${FORCHETTA_NODE_ONLY:-}" ]; then
+    install_node
+    return 0
+  fi
 
   version=${FORCHETTA_VERSION:-}
   if [ -z "$version" ]; then
