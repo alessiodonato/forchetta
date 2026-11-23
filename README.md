@@ -82,18 +82,22 @@ To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 On Windows, Forchetta runs inside [WSL 2](https://learn.microsoft.com/windows/wsl/install), the Linux that comes with it, next to Claude Code and your projects. You use it from a window of Edge or Chrome: the same page as on a Mac, without the menu bar and the system-wide shortcut. It sees the sessions started inside WSL: those of PowerShell, or of Claude Code for Windows, don't show up.
 
-It needs people to try it: the tests pass on macOS and on Linux, but it has not been tried on a Windows PC yet. The same version runs on Linux, in your browser. In a terminal of Ubuntu, with Claude Code in it:
+It needs people to try it: the tests pass on macOS and on Linux, but it has not been tried on a Windows PC yet. Skip the steps you have done already:
 
-```sh
-sudo apt update && sudo apt install -y curl tmux lsof
-```
+1. **WSL 2 and Ubuntu.** In PowerShell, as administrator: `wsl --install`. Restart Windows, open Ubuntu from the Start menu, and choose a name and a password for it. The next steps are there.
+2. **Claude Code, inside Ubuntu**, also if you have it on Windows: `curl -fsSL https://claude.ai/install.sh | bash`. Then, in a new terminal of Ubuntu, `claude` to log in.
+3. **Forchetta, inside Ubuntu.** It shows the hooks it adds, and asks: answer `y`.
 
-```sh
-curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &&
-sh ~/forchetta-install.sh
-```
+   ```sh
+   curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &&
+   sh ~/forchetta-install.sh
+   ```
 
-The installer holds the checksum of Forchetta and takes nothing else; GitHub builds it from the source and signs which commit it comes from ([how to check it](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows)). It shows the hooks it adds, and asks. Then, in a new terminal, `forchetta open`. **[Try it on Windows](https://forchetta.dev/windows/)** has the steps from the start, what to try, and where to say how it went.
+4. **Open it**, in a new terminal of Ubuntu: `forchetta open`. From then on it is the only command.
+
+On Linux start from step 2, with `curl`, `tmux` and `lsof` installed; the page opens in your browser. The installer holds the checksum of Forchetta and takes nothing else; GitHub builds it from the source and signs which commit it comes from ([how to check it](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows)).
+
+**[The guide for Windows](https://forchetta.dev/windows/)** says how to know that each step is done, what to do if something goes wrong, what to try, and where to say how it went.
 
 ## Try the guard
 
