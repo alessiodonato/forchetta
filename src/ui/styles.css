@@ -295,6 +295,20 @@ header.top {
   }
 }
 
+/* Narrower still, the counts have a line of their own above the buttons. */
+@media (max-width: 800px) {
+  header.top .top-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 8px;
+  }
+
+  header.top .counts {
+    flex: 1 0 100%;
+    margin-right: 0;
+  }
+}
+
 /* A failed automatic update of Claude Code: one line for every session, with "update". The dot is red, the
    state; the button is the action. Long answers of claude update are cut: the tooltip has them whole. */
 .claude-update {
@@ -4759,6 +4773,32 @@ header.top .view-switch button:not(.on):hover {
 
 .copy-command button {
   font-size: 11px;
+}
+
+/* The buttons of a notice and of the first screen: small, in a line of text, with the edge of those of the top line. */
+.notice:not(.reopen-notice) button,
+.getting-ready button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  padding: 1px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  font: 11.5px/17px var(--ui);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.notice:not(.reopen-notice) button:hover,
+.getting-ready button:hover {
+  border-color: rgba(217, 119, 87, 0.6);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.notice:not(.reopen-notice) > button {
+  margin-left: 4px;
 }
 
 .feature-state {
