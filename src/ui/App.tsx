@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { type Agent, displayName, type TodayInfo, type UsageLimits } from '../shared/agent.ts';
-import { limitParts, nextChange, shortTokens, usdText } from '../shared/present.ts';
+import { type Agent, displayName } from '../shared/agent.ts';
+import { nextChange } from '../shared/present.ts';
 import { startAmbient, stopAmbient } from './ambient.ts';
 import { Announcer } from './Announcer.tsx';
 import { Palette, type PaletteCommand, ShortcutsSheet } from './Palette.tsx';
@@ -12,6 +12,7 @@ import { PROTOCOL } from '../shared/system.ts';
 import { Box } from './Box.tsx';
 import { BroadcastButton, BroadcastPanel } from './Broadcast.tsx';
 import { ClaudeUpdateNotice } from './ClaudeUpdate.tsx';
+import { Counts } from './Counts.tsx';
 import { FilesPanel } from './Files.tsx';
 import { SubagentsPanel } from './Subagents.tsx';
 import { NewSessionPanel } from './NewSession.tsx';
@@ -23,7 +24,6 @@ import { AutoPanel } from './Automations.tsx';
 import { ReopenNotice } from './Reopen.tsx';
 import type { AutomationView } from '../shared/automation.ts';
 import { crewLineOf } from '../shared/crew.ts';
-import { guardTotal, type GuardStatsInfo, statsTitle } from '../shared/guard-stats.ts';
 import { PromptsPanel } from './PromptsPanel.tsx';
 import { RecallPanel } from './Recall.tsx';
 import { hasGroups, OrgChart } from './Team.tsx';
@@ -100,55 +100,6 @@ function savedView(): 'grid' | 'org' {
     return 'grid';
   }
 }
-
-function todayTitle(today: TodayInfo): string {
-  const since = new Date(today.since).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const unpriced = today.unpricedCalls > 0 ? `, ${today.unpricedCalls} of them from models with no known price left out of the cost` : '';
-  return `Every session since ${since}: ${today.calls.toLocaleString('en-US')} calls, ${today.tokens.toLocaleString('en-US')} tokens, at API prices${unpriced} (data from arricurdAI)`;
-}
-
-function counts(agents: readonly Agent[], today: TodayInfo | undefined, limits: UsageLimits | undefined, guardStats: GuardStatsInfo | undefined, onWaiting: () => void) {
-  const live = agents.filter((agent) => agent.state !== 'ended').length;
-  const waiting = agents.filter((agent) => agent.state === 'waiting').length;
-  const byId = new Map(agents.map((agent) => [agent.id, agent]));
-  const parts = limitParts(limits, Date.now(), (id) => {
-    const agent = byId.get(id);
-    return agent ? displayName(agent) : undefined;
-  });
-  // With the limits of a plan, what counts is how much of them is left: the cost at API prices goes in their tooltip.
-  const todayLine = today ? `today ≈ ${usdText(today.usd)} · ${shortTokens(today.tokens)} tokens` : undefined;
-  // What the guard did this week: shown once it did something, the details in its tooltip.
-  const guarded = guardStats ? guardTotal(guardStats.counts) : 0;
-  return (
-    <p class="counts">
-      {guardStats && guarded > 0 && (
-        <span class="guard-count" title={statsTitle(guardStats)}>
-          guard {guarded} this week ·{' '}
-        </span>
-      )}
-      {today && parts.length === 0 && (
-        <span class="today" title={todayTitle(today)}>
-          {todayLine} ·{' '}
-        </span>
-      )}
-      {parts.map((part, index) => (
-        <span key={part.text} class={`limit ${part.level}`} title={index === 0 && today ? `${part.title}\n\n${todayLine}: ${todayTitle(today)}` : part.title}>
-          {part.text} ·{' '}
-        </span>
-      ))}
-      {live} {live === 1 ? 'session' : 'sessions'}
-      {waiting > 0 && (
-        <>
-          {' · '}
-          <button type="button" class="waiting waiting-button" title="Open the next session that waits for you (⌘])" onClick={onWaiting}>
-            {waiting} {waiting === 1 ? 'waits for you' : 'wait for you'}
-          </button>
-        </>
-      )}
-    </p>
-  );
-}
-
 
 /** The automations in a line, for the title of their button: at work, waiting, paused. */
 function autoSummary(automations: readonly AutomationView[]): string {
@@ -413,7 +364,7 @@ export function App({ store }: { store: Store }) {
         <h1>Forchetta</h1>
         <div class="top-right">
           {state.ready && <ClaudeUpdateNotice info={state.claudeUpdate} store={store} />}
-          {state.ready && counts(agents, state.today, state.limits, state.guardStats, nextWaiting)}
+          {state.ready && <Counts agents={agents} today={state.today} limits={state.limits} guardStats={state.guardStats} onWaiting={nextWaiting} />}
           {state.ready && grouped && !working && (
             <span class="view-switch" role="group" aria-label="View">
               <button type="button" class={view === 'grid' ? 'on' : undefined} aria-pressed={view === 'grid'} onClick={() => chooseView('grid')}>

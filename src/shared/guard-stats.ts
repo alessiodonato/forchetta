@@ -40,6 +40,8 @@ export interface GuardStatsInfo {
   days: number;
   counts: GuardCounts;
   today: GuardCounts;
+  /** What the top line counts, for each of those days: the oldest first, today last. */
+  byDay?: number[];
   /** The first day with a count (YYYY-MM-DD), when it is within those days: the counts started then. */
   since?: string;
 }

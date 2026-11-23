@@ -37,7 +37,7 @@ describe('the counts', () => {
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ version: 1, days: { '2026-11-17': { held: 2, tests: 1 }, '2026-11-16': { git: 1 } } });
     now = NOV_17;
     // The counts started yesterday, within the week: the week says since when.
-    expect(stats.info()).toEqual({ days: 7, counts: { held: 2, tests: 1, git: 1 }, today: { held: 2, tests: 1 }, since: '2026-11-16' });
+    expect(stats.info()).toEqual({ days: 7, counts: { held: 2, tests: 1, git: 1 }, today: { held: 2, tests: 1 }, since: '2026-11-16', byDay: [0, 0, 0, 0, 0, 1, 3] });
     expect(statSync(file).mode & 0o777).toBe(0o600);
     // A new daemon finds them.
     expect(new GuardStats(file, { now: () => now }).info().counts).toEqual({ held: 2, tests: 1, git: 1 });
@@ -49,6 +49,28 @@ describe('the counts', () => {
     expect(statsOver(byDay, 30, NOV_17)).toEqual({ days: 30, counts: { held: 10, lane: 2 }, today: { lane: 2 }, since: '2026-11-01' });
     expect(statsOver({ '2026-11-15': { git: 1 } }, 7, NOV_17).since).toBe('2026-11-15');
     expect(statsOver({}, 1, NOV_17)).toEqual({ days: 1, counts: {}, today: {} });
+  });
+
+  it('give the top line what it counts for each day, the oldest first, and the days move with the clock', () => {
+    let now = NOV_17;
+    const stats = new GuardStats(undefined, { now: () => now });
+    stats.count('held', 2);
+    // What the top line leaves out of its total is out of the days too.
+    stats.count('letThrough', 5);
+    stats.count('freed', 4);
+    now += 2 * DAY;
+    stats.count('tests');
+    const info = stats.info();
+    expect(info.byDay).toEqual([0, 0, 0, 0, 2, 0, 1]);
+    expect(info.byDay?.reduce((sum, value) => sum + value, 0)).toBe(guardTotal(info.counts));
+    now += 5 * DAY;
+    expect(stats.info().byDay).toEqual([0, 1, 0, 0, 0, 0, 0]);
+    expect(stats.info(2).byDay).toEqual([0, 0]);
+    // The hour that goes back on 25 October: no day twice, none missing.
+    const clock = new Date(2026, 9, 26, 0, 30).getTime();
+    const autumn = new GuardStats(undefined, { now: () => clock });
+    autumn.count('held', 3);
+    expect(autumn.info().byDay).toEqual([0, 0, 0, 0, 0, 0, 3]);
   });
 
   it('keep the last 120 days', () => {

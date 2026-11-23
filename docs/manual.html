@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.6. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.7. The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -634,7 +634,7 @@ Read them again before you write code that relies on them.</code></pre>
           <li>To turn it off, see <a href="#config">Configuration</a>.</li>
         </ul>
         <h3 id="guard-stats">What it did</h3>
-        <p>Once the guard has done something, the top line says how much in the last 7 days: <span class="ui">guard 14 this week</span>. Its tooltip lists each kind: edits stopped while another session changed the file, the sessions that went on by themselves when it was free, git commands asked, notes before tests, sessions going in circles, the times you let a session through… <code>forchetta stats</code> lists the same in the terminal. Only counts are kept, by day, in <code>guard-stats.json</code>: no file, command or name.</p>
+        <p>Once the guard has done something, the top line says how much in the last 7 days: <span class="ui">guard 14</span>, with a column for each day under it, today the brightest. Its tooltip lists each kind: edits stopped while another session changed the file, the sessions that went on by themselves when it was free, git commands asked, notes before tests, sessions going in circles, the times you let a session through… <code>forchetta stats</code> lists the same in the terminal. Only counts are kept, by day, in <code>guard-stats.json</code>: no file, command or name.</p>
       </section>
 
       <section id="changes">
@@ -686,7 +686,7 @@ Read them again before you write code that relies on them.</code></pre>
           <li><strong>The cost of each session</strong>, in its box, is the one Claude Code computes for <code>/cost</code>. It reaches Forchetta through your status line, which <code>forchetta hooks install</code> wraps without changing what it shows.</li>
           <li><strong>The context</strong> of each session comes from your status line too: the tokens the next prompt sends again and the share of the window they fill, the same numbers Claude Code gives (2.1.6 or later). Before the first answer, and after <code>/compact</code> until the next one, there is none yet. Without them, the context comes from <a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a>, if you use it, with the window from the <a href="#config">configuration</a>: then the percentage is an estimate, marked <code>≈</code>.</li>
           <li><strong>The prompt cache</strong> comes from arricurdAI: the countdown of each session, and the <span class="ui">guard</span> badge when arricurdAI will stop the next prompt.</li>
-          <li><strong>The limits of your plan</strong>, at the top, with a Claude subscription: <span class="ui">5h 62% · week 31%</span>, from the status line of any session. Amber when, at the pace of the last half hour, the 5-hour window runs out before it resets (<span class="ui">5h 62% · out ≈3:20 PM</span>); red when it is used up. Its tooltip says when each one resets and, with two sessions or more, what each one spent in the window: an estimate from their cost at API prices, not a figure of Anthropic.</li>
+          <li><strong>The limits of your plan</strong>, at the top, with a Claude subscription: <span class="ui">5h 62%</span> and <span class="ui">week 31%</span>, each with a bar of how much is used, from the status line of any session. Amber when, at the pace of the last half hour, the 5-hour window runs out before it resets (<span class="ui">5h 62% out ≈3:20 PM</span>); red when it is used up, with when it is back. Its tooltip says when each one resets and, with two sessions or more, what each one spent in the window: an estimate from their cost at API prices, not a figure of Anthropic.</li>
           <li><strong>The total of today</strong>, at the top, counts every call of every session since midnight, at API prices (with arricurdAI). With the limits of a plan it goes in their tooltip: what counts then is how much of them is left.</li>
         </ul>
       </section>

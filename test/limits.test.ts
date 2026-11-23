@@ -113,32 +113,36 @@ describe('the limits in the top line', () => {
 
   it('shows the share of both windows', () => {
     const parts = limitParts({ at: now, fiveHour: { percent: 62, resetsAt }, sevenDay: week }, now);
-    expect(parts.map((part) => [part.text, part.level])).toEqual([
-      ['5h 62%', 'calm'],
-      ['week 31%', 'calm'],
+    expect(parts.map(({ name, value, note, percent, level }) => ({ name, value, note, percent, level }))).toEqual([
+      { name: '5h', value: '62%', note: undefined, percent: 62, level: 'calm' },
+      { name: 'week', value: '31%', note: undefined, percent: 31, level: 'calm' },
     ]);
     expect(parts[0]?.title).toMatch(/^5-hour limit of your Claude plan: 62% used, it resets at /);
   });
 
   it('warns when at this pace the 5-hour window runs out before the reset', () => {
     const runsOutAt = now + 80 * MIN;
-    const [five = { text: '', level: '', title: '' }] = limitParts({ at: now, fiveHour: { percent: 62, resetsAt, runsOutAt } }, now);
-    expect(five.level).toBe('warn');
-    expect(five.text).toMatch(/^5h 62% · out ≈\d{1,2}:\d\d [AP]M$/);
-    expect(five.title).toContain('1 h 40 min before the reset');
+    const [five] = limitParts({ at: now, fiveHour: { percent: 62, resetsAt, runsOutAt } }, now);
+    expect(five).toMatchObject({ name: '5h', value: '62%', percent: 62, level: 'warn' });
+    expect(five?.note).toMatch(/^out ≈\d{1,2}:\d\d [AP]M$/);
+    expect(five?.title).toContain('1 h 40 min before the reset');
   });
 
   it('drops the pace when no status line came for a while, and a window whose reset passed', () => {
     const old = { at: now - LIMITS_PACE_FRESH_MS - 1, fiveHour: { percent: 62, resetsAt, runsOutAt: now + 80 * MIN } };
-    expect(limitParts(old, now).map((part) => part.text)).toEqual(['5h 62%']);
-    expect(limitParts({ at: now, fiveHour: { percent: 62, resetsAt: now - 1 }, sevenDay: week }, now).map((part) => part.text)).toEqual(['week 31%']);
+    expect(limitParts(old, now).map(({ name, value, note }) => [name, value, note])).toEqual([['5h', '62%', undefined]]);
+    expect(limitParts({ at: now, fiveHour: { percent: 62, resetsAt: now - 1 }, sevenDay: week }, now).map(({ name, value }) => `${name} ${value}`)).toEqual(['week 31%']);
     expect(limitParts(undefined, now)).toEqual([]);
   });
 
   it('says when a window is used up, and when it comes back', () => {
     const parts = limitParts({ at: now, fiveHour: { percent: 100, resetsAt }, sevenDay: { ...week, percent: 100 } }, now);
     expect(parts.map((part) => part.level)).toEqual(['out', 'out']);
-    expect(parts[0]?.text).toMatch(/^5h used up · back /);
-    expect(parts[1]?.text).toMatch(/^week used up · back [A-Z][a-z]{2} /);
+    expect(parts.map(({ name, value, percent }) => [name, value, percent])).toEqual([
+      ['5h', 'used up', 100],
+      ['week', 'used up', 100],
+    ]);
+    expect(parts[0]?.note).toMatch(/^back \d/);
+    expect(parts[1]?.note).toMatch(/^back [A-Z][a-z]{2} /);
   });
 });
