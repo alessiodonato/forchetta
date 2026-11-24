@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forchetta in WSL, a beta</title>
+<meta name="description" content="Forchetta inside WSL 2, for who works there: how to install the beta, what to try, and how to say how it went.">
+<meta property="og:title" content="Forchetta in WSL, a beta">
+<meta property="og:description" content="For who works in WSL: it runs there and opens in a window of Edge or Chrome.">
+<meta property="og:image" content="https://forchetta.dev/img/social.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:url" content="https://forchetta.dev/windows/wsl/">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:type" content="website">
+<link rel="canonical" href="https://forchetta.dev/windows/wsl/">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<style>
+  /* The manual's palette and type, in one reading column. */
+  :root {
+    color-scheme: dark;
+    --bg: #1f1e1c;
+    --surface: #292825;
+    --surface-2: #33312d;
+    --terminal: #262624;
+    --line: #3a3834;
+    --line-strong: #4c4944;
+    --text: #f3f1ec;
+    --text-2: #bdb8ae;
+    --text-3: #8b867d;
+    --claude: #d97757;
+    --claude-strong: #c96442;
+    --green: #46c48a;
+    --claude-soft: rgba(217, 119, 87, 0.14);
+    --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 24px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.7 var(--ui); -webkit-font-smoothing: antialiased; }
+
+  a { color: var(--text); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--claude); }
+  a:focus-visible { outline: 2px solid var(--claude); outline-offset: 3px; border-radius: 4px; }
+  code, pre { font-family: var(--mono); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .top { display: flex; align-items: center; justify-content: space-between; padding-top: 28px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: 0.01em; text-decoration: none; color: var(--claude); }
+  .brand svg { width: 22px; height: 22px; }
+  .top nav { display: flex; gap: 22px; font-size: 15px; }
+  .top nav a { color: var(--text-2); text-decoration: none; }
+  .top nav a:hover { color: var(--text); }
+
+  article { max-width: 700px; margin: 0 auto; padding: 64px 24px 24px; }
+  h1 { margin: 0; font-size: clamp(32px, 5vw, 46px); line-height: 1.1; font-weight: 650; letter-spacing: -0.03em; text-wrap: balance; }
+  .sub { margin: 14px 0 0; font-size: 21px; line-height: 1.4; color: var(--text-2); text-wrap: balance; }
+  .meta { margin: 18px 0 40px; font-size: 14px; color: var(--text-3); }
+  h2 { margin: 44px 0 14px; font-size: clamp(23px, 3vw, 27px); line-height: 1.25; font-weight: 650; letter-spacing: -0.02em; }
+  p { margin: 0 0 16px; color: var(--text-2); }
+  p strong, li strong { color: var(--text); font-weight: 600; }
+  ul { margin: 0 0 18px; padding-left: 22px; color: var(--text-2); }
+  li { margin-bottom: 6px; }
+  pre { margin: 0 0 18px; padding: 14px 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 14.5px; line-height: 1.55; color: var(--text); }
+  :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--surface); font-size: 0.86em; color: var(--text); }
+  .table { margin: 0 0 18px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; color: var(--text-2); }
+  th { background: var(--surface); font-weight: 600; color: var(--text); }
+  td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.n { color: var(--text); }
+  tr:last-child td { border-bottom: 0; }
+  .note { margin: 0 0 18px; padding: 12px 16px; border-left: 2px solid var(--claude); border-radius: 0 8px 8px 0; background: var(--claude-soft); color: var(--text-2); }
+
+  /* Where things are on Windows: the window on one side, all the rest inside WSL. */
+  .wsl { display: grid; grid-template-columns: minmax(0, 1fr) 132px minmax(0, 1.5fr); align-items: center; margin: 30px 0; }
+  .wsl-side { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
+  .wsl-name { font-size: 13.5px; color: var(--text-3); }
+  .wsl-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 8px; font-size: 14.5px; line-height: 1.35; color: var(--text-2); text-align: center; }
+  .wsl-box small { display: block; font-size: 12.5px; color: var(--text-3); }
+  .wsl-box.main { border-color: var(--claude); background: var(--claude-soft); color: var(--text); font-weight: 600; }
+  .wsl-box.main small { font-weight: 400; color: var(--text-2); }
+  .wsl-row { display: flex; gap: 8px; }
+  .wsl-wire { position: relative; height: 2px; background: var(--claude); }
+  .wsl-wire span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 2px 8px; background: var(--bg); font: 12.5px var(--mono); color: var(--text-2); }
+
+  /* The steps of the install, each with its commands, copied with one click. */
+  ol.steps { margin: 22px 0 0; padding: 0; list-style: none; counter-reset: step; }
+  ol.steps > li { counter-increment: step; position: relative; margin: 0; padding: 0 0 26px 46px; }
+  ol.steps > li::before { position: absolute; left: 0; top: 1px; width: 28px; height: 28px; border: 1px solid var(--line-strong); border-radius: 50%; font: 12px/26px var(--mono); text-align: center; color: var(--text-2); content: counter(step); }
+  ol.steps p { margin: 0 0 10px; color: var(--text); }
+  ol.steps small { display: block; margin-top: 8px; font-size: 14.5px; line-height: 1.55; color: var(--text-3); }
+  .place { display: inline-block; margin-left: 6px; padding: 1px 9px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 13px; line-height: 1.5; color: var(--text-2); white-space: nowrap; }
+  ol.steps ul { margin: 12px 0 10px; font-size: 15.5px; line-height: 1.6; }
+  ol.steps small + .cmd-block { margin-top: 10px; }
+  ol.steps .done { margin: 10px 0 0; padding-left: 12px; border-left: 2px solid var(--green); font-size: 15.5px; line-height: 1.6; color: var(--text-2); }
+  .cmd-block { position: relative; }
+  .cmd-block pre { margin: 0; padding: 13px 88px 13px 16px; background: var(--terminal); font-size: 13.5px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .cmd-block button { position: absolute; top: 9px; right: 9px; min-width: 66px; padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-2); font: 600 12px var(--ui); color: var(--text-2); cursor: pointer; }
+  .cmd-block button:hover { border-color: var(--claude); color: var(--text); }
+  .cmd-block button:focus-visible, .button:focus-visible { outline: 2px solid var(--claude); outline-offset: 3px; }
+  .cmd-block button.copied { color: var(--green); }
+  .try { margin: 0 0 18px; padding-left: 22px; color: var(--text-2); }
+  .try li { margin-bottom: 9px; }
+  .button { display: inline-flex; align-items: center; padding: 11px 18px; border: 1px solid var(--claude-strong); border-radius: 10px; background: var(--claude-strong); color: #fff; font-weight: 600; font-size: 15.5px; text-decoration: none; }
+  .button:hover { border-color: var(--claude); background: var(--claude); }
+  .actions { margin: 22px 0 18px; }
+
+  footer.end { margin-top: 48px; padding: 28px 0 48px; border-top: 1px solid var(--line); font-size: 14px; color: var(--text-3); }
+  footer.end .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
+  footer.end a { color: var(--text-2); }
+
+  @media (max-width: 600px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 16px; }
+    article { padding: 40px 16px 16px; }
+    .sub { font-size: 18px; }
+    .top nav { gap: 16px; }
+    .wsl { grid-template-columns: minmax(0, 1fr); justify-items: stretch; }
+    .wsl-wire { width: 2px; height: 44px; margin: 0 auto; }
+    ol.steps > li { padding-left: 40px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap top">
+  <a class="brand" href="../../" aria-label="Forchetta, home">
+    <svg viewBox="0 0 18 18" aria-hidden="true"><g fill="#d97757"><rect x="5.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="7.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="10.1" y="1.5" width="1.3" height="6" rx=".65"/><rect x="12.6" y="1.5" width="1.3" height="6" rx=".65"/><rect x="5.1" y="6.4" width="8.8" height="2.6" rx="1.3"/><path d="M7.4 8.6h4.2l-1.5 2.8H8.9z"/><rect x="8.6" y="10.8" width="1.8" height="6.4" rx=".9"/></g></svg>
+    Forchetta
+  </a>
+  <nav aria-label="Site">
+    <a href="../../manual.html">Manual</a>
+    <a href="../../#install">Install</a>
+    <a href="https://github.com/alessiodonato/forchetta">GitHub</a>
+  </nav>
+</div>
+
+<main>
+<article>
+  <h1>Forchetta in WSL</h1>
+  <p class="sub">For who works in WSL already. If you use Claude Code on Windows itself, <a href="../">this is the guide for you</a>: no WSL, no Ubuntu.</p>
+  <p class="meta">Version 0.13.0-beta.2, November 2026. Its tests run on Ubuntu 24.04, its installer on 22.04, 24.04 and 26.04. It has not been tried in WSL on a Windows PC yet.</p>
+
+  <p>When Claude Code and your projects are inside WSL 2, the Linux that comes with Windows, Forchetta runs there too, next to them. You use it from a window of Edge or Chrome: the same page as on a Mac.</p>
+  <div class="wsl" role="img" aria-label="On Windows, a window of Edge or Chrome. Through localhost it reaches WSL 2, where Forchetta, tmux, Claude Code and your projects are.">
+    <div class="wsl-side"><span class="wsl-name">Windows</span><span class="wsl-box main">Edge or Chrome<small>the window of Forchetta</small></span></div>
+    <div class="wsl-wire"><span>localhost</span></div>
+    <div class="wsl-side"><span class="wsl-name">WSL 2, its Linux</span><span class="wsl-box main">Forchetta</span><span class="wsl-row"><span class="wsl-box">tmux</span><span class="wsl-box">Claude Code</span><span class="wsl-box">your projects</span></span></div>
+  </div>
+
+  <p class="note">One of the two, not both at once: they listen on the same port, and the second does not start.</p>
+
+  <h2 id="before">What you need</h2>
+  <ul>
+    <li><strong>Windows 11, or Windows 10 version 2004 or later</strong>, and an administrator once, for step 1.</li>
+    <li><strong>Edge or Chrome.</strong> Edge comes with Windows.</li>
+    <li><strong>Your account of Claude Code.</strong> You log in again inside Ubuntu, also if you use Claude Code on Windows already.</li>
+  </ul>
+  <p>Forchetta sees the sessions started <strong>inside Ubuntu</strong>. Those of PowerShell, or of Claude Code for Windows, don't show up. There is no app: no menu bar, and no shortcut from any program.</p>
+
+  <h2 id="start">Where to start</h2>
+  <p>Skip what you have already:</p>
+  <div class="table"><table>
+    <thead><tr><th>You have</th><th>Start from</th></tr></thead>
+    <tbody>
+      <tr><td>Neither WSL nor Ubuntu, or you don't know</td><td><a href="#step-1">Step 1</a></td></tr>
+      <tr><td>Ubuntu in WSL 2: in PowerShell, <code>wsl -l -v</code> lists it with 2 under VERSION</td><td><a href="#step-2">Step 2</a></td></tr>
+      <tr><td>Claude Code inside Ubuntu: there, <code>which claude</code> prints a path that doesn't start with <code>/mnt/</code></td><td><a href="#step-3">Step 3</a></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 id="install">Install</h2>
+  <p>Steps 1 to 3 are done once. Each says where its command goes.</p>
+  <ol class="steps">
+    <li id="step-1">
+      <p>WSL 2 and Ubuntu <span class="place">PowerShell, as administrator</span></p>
+      <small>In the Start menu type <strong>PowerShell</strong>, right-click it and choose <strong>Run as administrator</strong>. Then:</small>
+      <div class="cmd-block"><pre><code>wsl --install</code></pre><button type="button" data-copy="wsl --install" aria-label="Copy the command">Copy</button></div>
+      <ul>
+        <li>Restart Windows, then open <strong>Ubuntu</strong> from the Start menu.</li>
+        <li>The first time it asks for a name and a password. They are new, and only for Ubuntu; while you type the password nothing appears.</li>
+      </ul>
+      <p class="done">Done when Ubuntu shows a line that ends with <code>$</code>. That is the terminal of the next steps.</p>
+    </li>
+    <li id="step-2">
+      <p>Claude Code inside Ubuntu <span class="place">Ubuntu</span></p>
+      <div class="cmd-block"><pre><code>curl -fsSL https://claude.ai/install.sh | bash</code></pre><button type="button" data-copy="curl -fsSL https://claude.ai/install.sh | bash" aria-label="Copy the command">Copy</button></div>
+      <ul>
+        <li>Close the terminal and open Ubuntu again.</li>
+        <li>Run <code>claude</code> and log in. If no browser opens, open the address it shows. Then <code>/exit</code>.</li>
+      </ul>
+      <p class="done">Done when <code>which claude</code> prints a path that starts with <code>/home/</code>. One that starts with <code>/mnt/</code> is the Claude Code of Windows, which isn't enough.</p>
+    </li>
+    <li id="step-3">
+      <p>Forchetta <span class="place">Ubuntu</span></p>
+      <div class="cmd-block"><pre><code>curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.sh &amp;&amp;
+sh ~/forchetta-install.sh</code></pre><button type="button" data-copy="curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.sh &amp;&amp;&#10;sh ~/forchetta-install.sh" aria-label="Copy the command">Copy</button></div>
+      <ul>
+        <li>It downloads Forchetta and checks it. Without Node.js 22 it takes one from nodejs.org, checks it too, and keeps it only for Forchetta. Nothing here runs as root.</li>
+        <li>It lists the hooks it adds to <code>~/.claude/settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
+      </ul>
+      <p class="done">Done when it says <code>Ready. Open Forchetta in your browser with: forchetta open</code>.</p>
+      <small>If you built Forchetta from the source before, <a href="#before-source">do this first</a>.</small>
+    </li>
+    <li id="step-4">
+      <p>Open it <span class="place">Ubuntu, in a new terminal</span></p>
+      <div class="cmd-block"><pre><code>forchetta open</code></pre><button type="button" data-copy="forchetta open" aria-label="Copy the command">Copy</button></div>
+      <p class="done">Done when a window of Edge or Chrome shows Forchetta.</p>
+    </li>
+  </ol>
+  <p>On Linux it is the same from step 2, with <code>curl</code>, <code>tmux</code> and <code>lsof</code> of your system; the page opens in your browser. The Ubuntu of WSL has the three already.</p>
+
+  <h2 id="know">Every day</h2>
+  <ul>
+    <li><strong>One command.</strong> Open Ubuntu and run <code>forchetta open</code>. Leave that terminal open while the sessions work: Windows may stop WSL after the last one closes.</li>
+    <li><strong>Start a session</strong> with <strong>+ new</strong> in the window, or in Ubuntu, in the folder of the project, with <code>forchetta run claude</code>. One started with plain <code>claude</code> shows up too, but Forchetta can't write in it.</li>
+    <li><strong>Keep your projects in Ubuntu</strong>, in <code>~/projects</code>: under <code>/mnt/c</code> they work, but much slower. Clone them there again, or copy one: <code>mkdir -p ~/projects &amp;&amp; cp -r /mnt/c/Users/you/shop ~/projects/</code>. In the Explorer they are in <code>\\wsl.localhost\Ubuntu\home</code>.</li>
+    <li><strong>The shortcuts</strong> are with <code>Ctrl</code> in place of <code>⌘</code>.</li>
+  </ul>
+
+  <h2 id="wrong">If something goes wrong</h2>
+  <div class="table"><table>
+    <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td><code>wsl --install</code> only shows its help</td><td>WSL is there already. Install Ubuntu: <code>wsl --install -d Ubuntu</code></td></tr>
+      <tr><td>Error <code>0x80370102</code> or <code>0x80070003</code></td><td>Virtualization is off: turn it on in the BIOS of the PC, and the Windows feature <strong>Virtual Machine Platform</strong>, then restart. <a href="https://learn.microsoft.com/windows/wsl/troubleshooting">More from Microsoft</a></td></tr>
+      <tr><td><code>wsl -l -v</code> says 1 under VERSION</td><td>In PowerShell: <code>wsl --set-version Ubuntu 2</code>, with the name it lists</td></tr>
+      <tr><td><code>claude: command not found</code>, <code>forchetta: command not found</code></td><td>Close the terminal and open Ubuntu again. If it stays so, write the whole path: <code>~/.local/bin/claude</code>, <code>~/.local/bin/forchetta</code></td></tr>
+      <tr><td><code>tmux is missing</code></td><td><code>sudo apt install tmux</code>, then step 3 again. If it says <code>curl: command not found</code>, the same with <code>curl</code></td></tr>
+      <tr><td><code>only the one of Windows</code>, next to claude</td><td>Claude Code isn't inside Ubuntu yet: step 2, then <code>forchetta setup</code></td></tr>
+      <tr><td>You didn't answer <code>y</code> to the hooks</td><td><code>forchetta setup</code> asks again</td></tr>
+      <tr><td>No window opens</td><td><code>forchetta open --print</code> gives an address for your browser, good once, for two minutes</td></tr>
+      <tr><td>The window says to open it again</td><td><code>forchetta open</code>: it does after a restart of Forchetta</td></tr>
+      <tr><td>A session doesn't show up</td><td>It was started in PowerShell, or by Claude Code for Windows: start it in Ubuntu, or install <a href="../">Forchetta for Windows</a> in place of this one</td></tr>
+      <tr><td>Anything else</td><td><code>forchetta doctor</code> says what is not in place</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 id="update">Update</h2>
+  <p>Run step 3 of this page again: it names the last version. Then <code>forchetta open</code>.</p>
+  <p id="before-source"><strong>If you built it from the source before</strong>, close your sessions with <code>/exit</code>, then take its hooks away and stop it. After step 3, <code>~/forchetta</code> and <code>~/forchetta-node</code> can go, with the history that one kept.</p>
+  <div class="cmd-block"><pre><code>cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp; bin/forchetta daemon stop; cd ~</code></pre><button type="button" data-copy="cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp; bin/forchetta daemon stop; cd ~" aria-label="Copy the command">Copy</button></div>
+
+  <h2 id="safe">What keeps it safe</h2>
+  <ul>
+    <li><strong>It listens only on your PC</strong>, and every request needs a token. The address that opens the page holds a code good once, for two minutes.</li>
+    <li><strong>The window has a profile of its own</strong> in Edge or Chrome, without your extensions, which could read your terminals. If it can't have one, <code>forchetta open</code> tells you. The page asks the browser not to translate it nor to check its spelling, which some do on a server.</li>
+    <li><strong>Its data is in a folder only your user can open.</strong> On a disk where that isn't possible, Forchetta doesn't start. No telemetry.</li>
+    <li><strong>GitHub builds it from the source</strong>, which you can read, and signs which commit it comes from. With the <a href="https://cli.github.com">GitHub CLI</a> signed in, the installer checks that too. Each package it uses must match the hash in the repository.</li>
+  </ul>
+  <p>What it can't protect you from: a program that runs as you, in Windows or in WSL, can read your files, those of Forchetta too. And Claude Code in WSL can start programs of Windows, like <code>powershell.exe</code>: the guard doesn't see what they change.</p>
+  <p>If you find a way around any of this, please <a href="https://github.com/alessiodonato/forchetta/security/advisories/new">tell me in private</a>. <a href="https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md">More on its security</a>.</p>
+
+  <h2 id="try">What to try</h2>
+  <ol class="try">
+    <li>Does the window open by itself?</li>
+    <li><strong>+ new</strong>, then <strong>session</strong>: choose a folder with the button and start it. Do you see its terminal? Can you type in it?</li>
+    <li>Does <code>Ctrl+V</code> paste in the terminal? If you select text with the mouse, can you paste it in Notepad?</li>
+    <li>Do <code>Ctrl+K</code> and <code>Ctrl+N</code> work?</li>
+    <li>In Settings, <strong>allow them</strong> turns on the notifications. When a session asks for a permission and the window is behind, does one come? Can you answer from the box?</li>
+    <li>In Ubuntu, does a session started with <code>forchetta run claude</code> show up in the window?</li>
+    <li>Close the window and run <code>forchetta open</code> again: are the sessions still there?</li>
+  </ol>
+
+  <h2 id="tell">Say how it went</h2>
+  <p>Also when everything works: it tells me on which Windows. If something doesn't, this command writes a file that helps, and <code>explorer.exe .</code> opens its folder:</p>
+  <div class="cmd-block"><pre><code>forchetta doctor --bundle</code></pre><button type="button" data-copy="forchetta doctor --bundle" aria-label="Copy the command">Copy</button></div>
+  <p style="margin-top: 16px">Your names of Ubuntu and of Windows, the name of the PC, projects, e-mails and tokens are replaced in it. Look inside before you attach it: an issue on GitHub is public.</p>
+  <p class="actions"><a class="button" href="https://github.com/alessiodonato/forchetta/issues/new?title=Windows%3A%20&amp;body=Windows%20version%3A%0A%60wsl%20-l%20-v%60%20%28in%20PowerShell%29%3A%0A%60lsb_release%20-d%60%20%28in%20Ubuntu%29%3A%0A%0AWhat%20worked%3A%0A%0AWhat%20did%20not%2C%20and%20the%20last%20error%3A%0A%0A%28If%20you%20can%2C%20attach%20the%20file%20of%20%60forchetta%20doctor%20--bundle%60.%20Names%2C%20paths%20and%20tokens%20are%20replaced%2C%20but%20look%20inside%20first%3A%20an%20issue%20is%20public.%29%0A">Write it on GitHub</a></p>
+  <p>Questions and first impressions are welcome in the <a href="https://github.com/alessiodonato/forchetta/discussions">discussions</a> too.</p>
+
+  <h2 id="remove">Remove it</h2>
+  <p>Close your sessions first, with <code>/exit</code>. Then this takes its hooks out of your settings, gives you back your status line, stops it and deletes its folder, with its data:</p>
+  <div class="cmd-block"><pre><code>forchetta hooks uninstall --yes &amp;&amp; forchetta daemon stop &amp;&amp;
+rm -rf ~/.local/lib/forchetta ~/.local/lib/forchetta-node ~/.local/share/forchetta ~/.local/bin/forchetta</code></pre><button type="button" data-copy="forchetta hooks uninstall --yes &amp;&amp; forchetta daemon stop &amp;&amp;&#10;rm -rf ~/.local/lib/forchetta ~/.local/lib/forchetta-node ~/.local/share/forchetta ~/.local/bin/forchetta" aria-label="Copy the command">Copy</button></div>
+  <p style="margin-top: 16px">The profile of its window is in Windows: close it, then delete the folder <code>%LOCALAPPDATA%\Forchetta</code>.</p>
+</article>
+</main>
+
+<footer class="end">
+  <div class="wrap">
+    <span>Forchetta is Italian for fork. Apache 2.0.</span>
+    <span><a href="../../">Home</a>&nbsp;&nbsp;&nbsp;<a href="../../manual.html">Manual</a>&nbsp;&nbsp;&nbsp;<a href="../../changelog/">Changelog</a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/alessiodonato/forchetta">Source on GitHub</a></span>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('[data-copy]').forEach(function (button) {
+    var timer;
+    button.addEventListener('click', function () {
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(button.getAttribute('data-copy')).then(function () {
+        button.classList.add('copied');
+        button.textContent = 'Copied';
+        clearTimeout(timer);
+        timer = setTimeout(function () { button.classList.remove('copied'); button.textContent = 'Copy'; }, 1600);
+      }, function () {});
+    });
+  });
+</script>
+</body>
+</html>

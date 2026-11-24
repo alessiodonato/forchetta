@@ -76,6 +76,12 @@
   .branch::after { position: absolute; top: var(--node); bottom: 28px; left: calc(var(--lane) - 1px); width: 2px; background: var(--trunk); content: ''; }
   .join::after { position: absolute; top: -28px; left: var(--main); width: calc(var(--lane) - var(--main) + 1px); height: calc(var(--node) + 29px); border: solid var(--trunk); border-width: 0 2px 2px 0; border-bottom-right-radius: 26px; content: ''; }
   .branch > .node, .join > .node { z-index: 1; }
+  /* A version of the branch that main has not come to yet, the last of main next to it, and the one the line goes on from. */
+  .log > li.ahead::before { display: none; }
+  .branch.ahead::after { bottom: 0; }
+  .log > li.tip::before { top: var(--node); }
+  .beside::after { position: absolute; top: 0; bottom: 0; left: calc(var(--lane) - 1px); width: 2px; background: var(--trunk); content: ''; }
+  .branch.along::after { top: 0; }
 
   .version { margin: 0; font-variant-numeric: tabular-nums; line-height: 1.4; }
   .version strong { display: block; font-size: 16px; font-weight: 600; color: var(--text-2); }
@@ -143,7 +149,22 @@
 <p class="sub">The versions that changed what Forchetta does, newest first, with the commits that did it.</p>
 
 <ol class="log">
-  <li id="v0.12.7">
+  <li class="big branch ahead" id="v0.13.0-beta.2">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.13.0-beta.2">0.13.0-beta.2</a></strong><time datetime="2026-11-24">24 Nov 2026</time> <span class="on">branch <code>windows</code></span></p>
+    <div class="what">
+      <h2>On Windows itself</h2>
+      <p>No WSL, no Ubuntu, no administrator: one command in PowerShell. Forchetta runs next to the Claude Code you have, which sees what it sees now, devices connected to the PC included. Each session it starts has a host of its own, in place of tmux. The guard reads PowerShell, and the paths of Windows. Its tests run on three Windows; no one has used it on a PC of their own yet.</p>
+      <p class="more"><a href="../windows/">How to install the beta</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/bf114dafbf408e4611d7f39f84e60063ad879994"><code>bf114da</code></a><span>Windows with no WSL: the sessions in hosts of their own, the hooks with no shell</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/1dd37e7094ae10fd889b7d97148604b853200f4e"><code>1dd37e7</code></a><span>The installer for Windows, its archive, and the tests as Windows has them</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/4f91ce611abf1a59eafe4e108bfab0d76be3be11"><code>4f91ce6</code></a><span>A permission waits for the daemon to know its session</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/6915fb124eeb38132d9ef409d7e448b9607ce0c0"><code>6915fb1</code></a><span>The guides for Windows and for WSL</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="tip beside" id="v0.12.7">
     <span class="node" aria-hidden="true"></span>
     <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.12.7">0.12.7</a></strong><time datetime="2026-11-23">23 Nov 2026</time></p>
     <div class="what">
@@ -155,13 +176,12 @@
       </ul>
     </div>
   </li>
-  <li class="big branch" id="v0.13.0-beta.1">
+  <li class="big branch along" id="v0.13.0-beta.1">
     <span class="node" aria-hidden="true"></span>
     <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.13.0-beta.1">0.13.0-beta.1</a></strong><time datetime="2026-11-23">23 Nov 2026</time> <span class="on">branch <code>windows</code></span></p>
     <div class="what">
       <h2>Windows and Linux, to try</h2>
-      <p>Forchetta runs on Linux, and on Windows inside WSL 2, where it opens in a window of Edge or Chrome. GitHub builds the archive from the source and signs it, and the installer takes no other. It has not been tried on a Windows PC yet: that is what the beta is for.</p>
-      <p class="more"><a href="../windows/">How to install the beta</a></p>
+      <p>Forchetta runs on Linux, and on Windows inside WSL 2, where it opens in a window of Edge or Chrome. GitHub builds the archive from the source and signs it, and the installer takes no other.</p>
       <ul class="commits" aria-label="Commits">
         <li><a href="https://github.com/alessiodonato/forchetta/commit/23d138e324d9b5615371585cb1d20f5ecc54a3b1"><code>23d138e</code></a><span>The archive for Linux and Windows is made by GitHub, from a commit, and says so</span></li>
         <li><a href="https://github.com/alessiodonato/forchetta/commit/97caddf8c38f986a530dcd72c8ab97a139aba9e0"><code>97caddf</code></a><span>On Linux and Windows, what was less safe than on a Mac</span></li>

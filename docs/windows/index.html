@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Forchetta on Windows, a beta</title>
-<meta name="description" content="Forchetta on Windows runs inside WSL 2 and opens in a window of Edge or Chrome. How to install the beta, what to try, and how to say how it went.">
+<meta name="description" content="Forchetta on Windows, with no WSL: next to the Claude Code you have, in a window of Edge or Chrome. How to install the beta, what to try, and how to say how it went.">
 <meta property="og:title" content="Forchetta on Windows, a beta">
-<meta property="og:description" content="It runs inside WSL 2 and opens in a window of Edge or Chrome. It needs people to try it.">
+<meta property="og:description" content="Next to the Claude Code you have, with no WSL. It needs people to try it.">
 <meta property="og:image" content="https://forchetta.dev/img/social.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
@@ -73,7 +73,7 @@
   tr:last-child td { border-bottom: 0; }
   .note { margin: 0 0 18px; padding: 12px 16px; border-left: 2px solid var(--claude); border-radius: 0 8px 8px 0; background: var(--claude-soft); color: var(--text-2); }
 
-  /* Where things are on Windows: the window on one side, all the rest inside WSL. */
+  /* Where things are: the window on one side, all the rest on the other. */
   .wsl { display: grid; grid-template-columns: minmax(0, 1fr) 132px minmax(0, 1.5fr); align-items: center; margin: 30px 0; }
   .wsl-side { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
   .wsl-name { font-size: 13.5px; color: var(--text-3); }
@@ -140,139 +140,118 @@
 <article>
   <h1>Forchetta on Windows</h1>
   <p class="sub">A beta that needs people to try it.</p>
-  <p class="meta">Version 0.13.0-beta.1, 23 November 2026. The tests pass on macOS and on Linux. It has not been tried on a Windows PC yet.</p>
+  <p class="meta">Version 0.13.0-beta.2, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. No one has used it on a PC of their own yet.</p>
 
-  <p>Forchetta runs its Claude Code sessions in tmux, which Windows doesn't have. So on Windows it runs inside WSL 2, the Linux that comes with it, next to Claude Code and your projects. You use it from a window of Edge or Chrome: the same page as on a Mac.</p>
-  <div class="wsl" role="img" aria-label="On Windows, a window of Edge or Chrome. Through localhost it reaches WSL 2, where Forchetta, tmux, Claude Code and your projects are.">
-    <div class="wsl-side"><span class="wsl-name">Windows</span><span class="wsl-box main">Edge or Chrome<small>the window of Forchetta</small></span></div>
-    <div class="wsl-wire"><span>localhost</span></div>
-    <div class="wsl-side"><span class="wsl-name">WSL 2, its Linux</span><span class="wsl-box main">Forchetta</span><span class="wsl-row"><span class="wsl-box">tmux</span><span class="wsl-box">Claude Code</span><span class="wsl-box">your projects</span></span></div>
+  <p>Forchetta runs on Windows itself: no WSL, no Ubuntu, no administrator. The Claude Code it shows is the one you have, with your account and your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use Forchetta from a window of Edge or Chrome: the same page as on a Mac.</p>
+  <div class="wsl" role="img" aria-label="All on your PC: a window of Edge or Chrome reaches Forchetta on 127.0.0.1. With it are Claude Code, your terminals and your projects.">
+    <div class="wsl-side"><span class="wsl-name">The window</span><span class="wsl-box main">Edge or Chrome<small>no tabs, no extensions</small></span></div>
+    <div class="wsl-wire"><span>127.0.0.1</span></div>
+    <div class="wsl-side"><span class="wsl-name">Your PC</span><span class="wsl-box main">Forchetta</span><span class="wsl-row"><span class="wsl-box">Claude Code</span><span class="wsl-box">your terminals</span><span class="wsl-box">your projects</span></span></div>
   </div>
+  <p>Do you work inside WSL? <a href="wsl/">There is a guide for that</a> too.</p>
 
   <h2 id="before">What you need</h2>
   <ul>
-    <li><strong>Windows 11, or Windows 10 version 2004 or later</strong>, and an administrator once, for step 1.</li>
+    <li><strong>Windows 11, or Windows 10 version 1809 or later</strong>, on Intel, AMD or ARM.</li>
+    <li><strong>Claude Code for Windows</strong>, with your account. Step 1 installs it.</li>
     <li><strong>Edge or Chrome.</strong> Edge comes with Windows.</li>
-    <li><strong>Your account of Claude Code.</strong> You log in again inside Ubuntu, also if you use Claude Code on Windows already.</li>
+    <li><strong>Git for Windows</strong>, if you use git: without it there are no diffs and no worktrees, and the guard doesn't look at git commands.</li>
   </ul>
-  <p>Forchetta sees the sessions started <strong>inside Ubuntu</strong>. Those of PowerShell, or of Claude Code for Windows, don't show up. There is no app: no menu bar, and no shortcut from any program.</p>
-
-  <h2 id="start">Where to start</h2>
-  <p>Skip what you have already:</p>
-  <div class="table"><table>
-    <thead><tr><th>You have</th><th>Start from</th></tr></thead>
-    <tbody>
-      <tr><td>Neither WSL nor Ubuntu, or you don't know</td><td><a href="#step-1">Step 1</a></td></tr>
-      <tr><td>Ubuntu in WSL 2: in PowerShell, <code>wsl -l -v</code> lists it with 2 under VERSION</td><td><a href="#step-2">Step 2</a></td></tr>
-      <tr><td>Claude Code inside Ubuntu: there, <code>which claude</code> prints a path that doesn't start with <code>/mnt/</code></td><td><a href="#step-3">Step 3</a></td></tr>
-    </tbody>
-  </table></div>
+  <p>Node.js is not needed: without it, the installer takes one only for Forchetta.</p>
 
   <h2 id="install">Install</h2>
-  <p>Steps 1 to 3 are done once. Each says where its command goes.</p>
+  <p>In <strong>PowerShell</strong>, opened as usual and not as administrator: type its name in the Start menu.</p>
   <ol class="steps">
     <li id="step-1">
-      <p>WSL 2 and Ubuntu <span class="place">PowerShell, as administrator</span></p>
-      <small>In the Start menu type <strong>PowerShell</strong>, right-click it and choose <strong>Run as administrator</strong>. Then:</small>
-      <div class="cmd-block"><pre><code>wsl --install</code></pre><button type="button" data-copy="wsl --install" aria-label="Copy the command">Copy</button></div>
+      <p>Claude Code <span class="place">PowerShell</span></p>
+      <small>Skip it if <code>claude --version</code> prints a version.</small>
+      <div class="cmd-block"><pre><code>irm https://claude.ai/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://claude.ai/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
       <ul>
-        <li>Restart Windows, then open <strong>Ubuntu</strong> from the Start menu.</li>
-        <li>The first time it asks for a name and a password. They are new, and only for Ubuntu; while you type the password nothing appears.</li>
+        <li>Open PowerShell again, run <code>claude</code> and log in. Then <code>/exit</code>.</li>
       </ul>
-      <p class="done">Done when Ubuntu shows a line that ends with <code>$</code>. That is the terminal of the next steps.</p>
+      <p class="done">Done when <code>claude --version</code> prints a version.</p>
     </li>
     <li id="step-2">
-      <p>Claude Code inside Ubuntu <span class="place">Ubuntu</span></p>
-      <div class="cmd-block"><pre><code>curl -fsSL https://claude.ai/install.sh | bash</code></pre><button type="button" data-copy="curl -fsSL https://claude.ai/install.sh | bash" aria-label="Copy the command">Copy</button></div>
+      <p>Forchetta <span class="place">PowerShell</span></p>
+      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
       <ul>
-        <li>Close the terminal and open Ubuntu again.</li>
-        <li>Run <code>claude</code> and log in. If no browser opens, open the address it shows. Then <code>/exit</code>.</li>
+        <li>It downloads Forchetta and checks it. Without Node.js 22 it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
+        <li>It lists the hooks it adds to <code>.claude\settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
       </ul>
-      <p class="done">Done when <code>which claude</code> prints a path that starts with <code>/home/</code>. One that starts with <code>/mnt/</code> is the Claude Code of Windows, which isn't enough.</p>
+      <p class="done">Done when it says <code>Ready. Open Forchetta with: forchetta open</code>.</p>
     </li>
     <li id="step-3">
-      <p>Forchetta <span class="place">Ubuntu</span></p>
-      <div class="cmd-block"><pre><code>curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &amp;&amp;
-sh ~/forchetta-install.sh</code></pre><button type="button" data-copy="curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &amp;&amp;&#10;sh ~/forchetta-install.sh" aria-label="Copy the command">Copy</button></div>
-      <ul>
-        <li>It downloads Forchetta and checks it. Without Node.js 22 it takes one from nodejs.org, checks it too, and keeps it only for Forchetta. Nothing here runs as root.</li>
-        <li>It lists the hooks it adds to <code>~/.claude/settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
-      </ul>
-      <p class="done">Done when it says <code>Ready. Open Forchetta in your browser with: forchetta open</code>.</p>
-      <small>If you built Forchetta from the source before, <a href="#before-source">do this first</a>.</small>
-    </li>
-    <li id="step-4">
-      <p>Open it <span class="place">Ubuntu, in a new terminal</span></p>
+      <p>Open it <span class="place">PowerShell, or the Start menu</span></p>
       <div class="cmd-block"><pre><code>forchetta open</code></pre><button type="button" data-copy="forchetta open" aria-label="Copy the command">Copy</button></div>
-      <p class="done">Done when a window of Edge or Chrome shows Forchetta.</p>
+      <p class="done">Done when a window shows Forchetta. The sessions open already appear at their next step.</p>
     </li>
   </ol>
-  <p>On Linux it is the same from step 2, with <code>curl</code>, <code>tmux</code> and <code>lsof</code> of your system; the page opens in your browser. The Ubuntu of WSL has the three already.</p>
 
   <h2 id="know">Every day</h2>
   <ul>
-    <li><strong>One command.</strong> Open Ubuntu and run <code>forchetta open</code>. Leave that terminal open while the sessions work: Windows may stop WSL after the last one closes.</li>
-    <li><strong>Start a session</strong> with <strong>+ new</strong> in the window, or in Ubuntu, in the folder of the project, with <code>forchetta run claude</code>. One started with plain <code>claude</code> shows up too, but Forchetta can't write in it.</li>
-    <li><strong>Keep your projects in Ubuntu</strong>, in <code>~/projects</code>: under <code>/mnt/c</code> they work, but much slower. Clone them there again, or copy one: <code>mkdir -p ~/projects &amp;&amp; cp -r /mnt/c/Users/you/shop ~/projects/</code>. In the Explorer they are in <code>\\wsl.localhost\Ubuntu\home</code>.</li>
-    <li><strong>The shortcuts</strong> are with <code>Ctrl</code> in place of <code>⌘</code>.</li>
+    <li><strong>Open it</strong> with <strong>Forchetta</strong> in the Start menu, or <code>forchetta open</code>.</li>
+    <li><strong>Your sessions show up by themselves</strong>, wherever you start them: PowerShell, Windows Terminal, Git Bash, VS Code. You can answer their permissions from the box, and the guard keeps them off each other's files.</li>
+    <li><strong>To type into one from Forchetta</strong>, start it there: <strong>+ new</strong> in the window, or <code>forchetta run claude</code> in the folder of the project. Closing the window or the terminal leaves it running; <code>/exit</code> ends it. <code>Ctrl-b</code> <code>d</code> leaves it from the terminal.</li>
+    <li><strong>In its terminal</strong>, drag to select, <code>Ctrl</code><code>C</code> to copy, <code>Ctrl</code><code>V</code> to paste. The shortcuts are with <code>Ctrl</code> in place of <code>⌘</code>.</li>
   </ul>
+  <p>What a Mac has and this has not: the menu bar, the shortcut from any program, and a daemon that starts at login. Here Forchetta starts when you open it.</p>
 
   <h2 id="wrong">If something goes wrong</h2>
   <div class="table"><table>
     <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
     <tbody>
-      <tr><td><code>wsl --install</code> only shows its help</td><td>WSL is there already. Install Ubuntu: <code>wsl --install -d Ubuntu</code></td></tr>
-      <tr><td>Error <code>0x80370102</code> or <code>0x80070003</code></td><td>Virtualization is off: turn it on in the BIOS of the PC, and the Windows feature <strong>Virtual Machine Platform</strong>, then restart. <a href="https://learn.microsoft.com/windows/wsl/troubleshooting">More from Microsoft</a></td></tr>
-      <tr><td><code>wsl -l -v</code> says 1 under VERSION</td><td>In PowerShell: <code>wsl --set-version Ubuntu 2</code>, with the name it lists</td></tr>
-      <tr><td><code>claude: command not found</code>, <code>forchetta: command not found</code></td><td>Close the terminal and open Ubuntu again. If it stays so, write the whole path: <code>~/.local/bin/claude</code>, <code>~/.local/bin/forchetta</code></td></tr>
-      <tr><td><code>tmux is missing</code></td><td><code>sudo apt install tmux</code>, then step 3 again. If it says <code>curl: command not found</code>, the same with <code>curl</code></td></tr>
-      <tr><td><code>only the one of Windows</code>, next to claude</td><td>Claude Code isn't inside Ubuntu yet: step 2, then <code>forchetta setup</code></td></tr>
+      <tr><td><code>'irm' is not recognized</code></td><td>That is the Command Prompt: open <strong>PowerShell</strong></td></tr>
+      <tr><td><code>forchetta</code> or <code>claude</code> is not recognized</td><td>Open a new terminal. If it stays so, write the whole path: <code>&amp; "$HOME\.local\bin\forchetta.cmd" open</code></td></tr>
+      <tr><td><code>claude</code>: <code>not found</code>, in the setup</td><td>Step 1, then <code>forchetta setup</code></td></tr>
+      <tr><td><code>Terminals</code>: <code>they cannot open</code></td><td>Smart App Control, in some Windows 11, may not let in the part that opens them: it is of an open-source package, and not signed. Leave it as it is: your sessions show up from your own terminals, with the guard and the permissions</td></tr>
+      <tr><td>The status line stays as it was</td><td>Open a new terminal, then <code>forchetta setup</code></td></tr>
       <tr><td>You didn't answer <code>y</code> to the hooks</td><td><code>forchetta setup</code> asks again</td></tr>
       <tr><td>No window opens</td><td><code>forchetta open --print</code> gives an address for your browser, good once, for two minutes</td></tr>
       <tr><td>The window says to open it again</td><td><code>forchetta open</code>: it does after a restart of Forchetta</td></tr>
-      <tr><td>A session doesn't show up</td><td>It was started in PowerShell, or by Claude Code for Windows: start it in Ubuntu</td></tr>
+      <tr><td>A session doesn't show up</td><td>Open before the install, it does at its next step. Started inside WSL, it has <a href="wsl/">its own guide</a></td></tr>
       <tr><td>Anything else</td><td><code>forchetta doctor</code> says what is not in place</td></tr>
     </tbody>
   </table></div>
 
   <h2 id="update">Update</h2>
-  <p>Run step 3 of this page again: it names the last version. Then <code>forchetta open</code>.</p>
-  <p id="before-source"><strong>If you built it from the source before</strong>, close your sessions with <code>/exit</code>, then take its hooks away and stop it. After step 3, <code>~/forchetta</code> and <code>~/forchetta-node</code> can go, with the history that one kept.</p>
-  <div class="cmd-block"><pre><code>cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp; bin/forchetta daemon stop; cd ~</code></pre><button type="button" data-copy="cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp; bin/forchetta daemon stop; cd ~" aria-label="Copy the command">Copy</button></div>
+  <p>Run step 2 of this page again: it names the last version. The sessions at work go on.</p>
 
   <h2 id="safe">What keeps it safe</h2>
   <ul>
     <li><strong>It listens only on your PC</strong>, and every request needs a token. The address that opens the page holds a code good once, for two minutes.</li>
-    <li><strong>The window has a profile of its own</strong> in Edge or Chrome, without your extensions, which could read your terminals. If it can't have one, <code>forchetta open</code> tells you. The page asks the browser not to translate it nor to check its spelling, which some do on a server.</li>
-    <li><strong>Its data is in a folder only your user can open.</strong> On a disk where that isn't possible, Forchetta doesn't start. No telemetry.</li>
-    <li><strong>GitHub builds it from the source</strong>, which you can read, and signs which commit it comes from. With the <a href="https://cli.github.com">GitHub CLI</a> signed in, the installer checks that too. Each package it uses must match the hash in the repository.</li>
+    <li><strong>The hooks and the sessions talk to it on pipes of Windows</strong> with a name made at random and a key. Each end proves to the other that it has the key before anything passes: a program that takes the place of Forchetta gets nothing, and neither does one that calls it.</li>
+    <li><strong>The window has a profile of its own</strong> in Edge or Chrome, without your extensions, which could read your terminals. If it can't have one, <code>forchetta open</code> tells you.</li>
+    <li><strong>Its data is in your user folder</strong>, which other users of the PC can't open. No telemetry.</li>
+    <li><strong>No program of mine to trust.</strong> What runs is Node.js, with the code of Forchetta, which you can read. GitHub builds it from the source and signs which commit it comes from; the installer takes that archive and no other.</li>
   </ul>
-  <p>What it can't protect you from: a program that runs as you, in Windows or in WSL, can read your files, those of Forchetta too. And Claude Code in WSL can start programs of Windows, like <code>powershell.exe</code>: the guard doesn't see what they change.</p>
+  <p>What it can't protect you from: a program that runs as you can read your files, those of Forchetta too. And the guard reads the commands of Bash and of PowerShell, not what a script does by itself.</p>
   <p>If you find a way around any of this, please <a href="https://github.com/alessiodonato/forchetta/security/advisories/new">tell me in private</a>. <a href="https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md">More on its security</a>.</p>
 
   <h2 id="try">What to try</h2>
   <ol class="try">
-    <li>Does the window open by itself?</li>
-    <li><strong>+ new</strong>, then <strong>session</strong>: choose a folder with the button and start it. Do you see its terminal? Can you type in it?</li>
-    <li>Does <code>Ctrl+V</code> paste in the terminal? If you select text with the mouse, can you paste it in Notepad?</li>
-    <li>Do <code>Ctrl+K</code> and <code>Ctrl+N</code> work?</li>
-    <li>In Settings, <strong>allow them</strong> turns on the notifications. When a session asks for a permission and the window is behind, does one come? Can you answer from the box?</li>
-    <li>In Ubuntu, does a session started with <code>forchetta run claude</code> show up in the window?</li>
-    <li>Close the window and run <code>forchetta open</code> again: are the sessions still there?</li>
+    <li>Does the window open by itself, from the Start menu too?</li>
+    <li>Start <code>claude</code> in a terminal as you always do: does its box come?</li>
+    <li><strong>+ new</strong>, then <strong>session</strong>: choose a folder with the button and start it. Do you see its terminal? Can you type in it, paste with <code>Ctrl+V</code>, and paste in Notepad what you select?</li>
+    <li>When a session asks for a permission, can you answer from the box? Behind another window, does a notification come? (Settings, <strong>allow them</strong>.)</li>
+    <li>Two sessions in one folder: ask the second to change the file the first is changing. Is it stopped? And with a command, in PowerShell?</li>
+    <li>If Claude talks to devices connected to your PC, does it still reach them, also from a session of <strong>+ new</strong>?</li>
+    <li>Close the window and open it again: are the sessions still there?</li>
   </ol>
 
   <h2 id="tell">Say how it went</h2>
-  <p>Also when everything works: it tells me on which Windows. If something doesn't, this command writes a file that helps, and <code>explorer.exe .</code> opens its folder:</p>
+  <p>Also when everything works: it tells me on which Windows. If something doesn't, this command writes a file that helps, and <code>explorer .</code> opens its folder:</p>
   <div class="cmd-block"><pre><code>forchetta doctor --bundle</code></pre><button type="button" data-copy="forchetta doctor --bundle" aria-label="Copy the command">Copy</button></div>
-  <p style="margin-top: 16px">Your names of Ubuntu and of Windows, the name of the PC, projects, e-mails and tokens are replaced in it. Look inside before you attach it: an issue on GitHub is public.</p>
-  <p class="actions"><a class="button" href="https://github.com/alessiodonato/forchetta/issues/new?title=Windows%3A%20&amp;body=Windows%20version%3A%0A%60wsl%20-l%20-v%60%20%28in%20PowerShell%29%3A%0A%60lsb_release%20-d%60%20%28in%20Ubuntu%29%3A%0A%0AWhat%20worked%3A%0A%0AWhat%20did%20not%2C%20and%20the%20last%20error%3A%0A%0A%28If%20you%20can%2C%20attach%20the%20file%20of%20%60forchetta%20doctor%20--bundle%60.%20Names%2C%20paths%20and%20tokens%20are%20replaced%2C%20but%20look%20inside%20first%3A%20an%20issue%20is%20public.%29%0A">Write it on GitHub</a></p>
+  <p style="margin-top: 16px">Your name of Windows, the name of the PC, projects, e-mails and tokens are replaced in it. Look inside before you attach it: an issue on GitHub is public.</p>
+  <p class="actions"><a class="button" href="https://github.com/alessiodonato/forchetta/issues/new?title=Windows%3A%20&amp;body=Windows%20version%20%28%60winver%60%29%3A%0AGit%20for%20Windows%20installed%20%28yes%2Fno%29%3A%0A%0AWhat%20worked%3A%0A%0AWhat%20did%20not%2C%20and%20the%20last%20error%3A%0A%0A%28If%20you%20can%2C%20attach%20the%20file%20of%20%60forchetta%20doctor%20--bundle%60.%20Names%2C%20paths%20and%20tokens%20are%20replaced%2C%20but%20look%20inside%20first%3A%20an%20issue%20is%20public.%29%0A">Write it on GitHub</a></p>
   <p>Questions and first impressions are welcome in the <a href="https://github.com/alessiodonato/forchetta/discussions">discussions</a> too.</p>
 
   <h2 id="remove">Remove it</h2>
-  <p>Close your sessions first, with <code>/exit</code>. Then this takes its hooks out of your settings, gives you back your status line, stops it and deletes its folder, with its data:</p>
-  <div class="cmd-block"><pre><code>forchetta hooks uninstall --yes &amp;&amp; forchetta daemon stop &amp;&amp;
-rm -rf ~/.local/lib/forchetta ~/.local/lib/forchetta-node ~/.local/share/forchetta ~/.local/bin/forchetta</code></pre><button type="button" data-copy="forchetta hooks uninstall --yes &amp;&amp; forchetta daemon stop &amp;&amp;&#10;rm -rf ~/.local/lib/forchetta ~/.local/lib/forchetta-node ~/.local/share/forchetta ~/.local/bin/forchetta" aria-label="Copy the command">Copy</button></div>
-  <p style="margin-top: 16px">The profile of its window is in Windows: close it, then delete the folder <code>%LOCALAPPDATA%\Forchetta</code>.</p>
+  <p>Close its window and your sessions first, with <code>/exit</code>. Then, in PowerShell, this takes its hooks out of your settings, gives you back your status line, stops it and deletes its folders, with its data:</p>
+  <div class="cmd-block"><pre><code>forchetta hooks uninstall --yes
+forchetta daemon stop
+cmd /c rmdir "$HOME\.local\lib\forchetta"
+Remove-Item -Recurse -Force "$HOME\.local\lib\forchetta-versions", "$HOME\.local\lib\forchetta-node", "$HOME\.local\share\forchetta" -ErrorAction SilentlyContinue
+Remove-Item "$HOME\.local\bin\forchetta*", "$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk" -ErrorAction SilentlyContinue</code></pre><button type="button" data-copy="forchetta hooks uninstall --yes&#10;forchetta daemon stop&#10;cmd /c rmdir &quot;$HOME\.local\lib\forchetta&quot;&#10;Remove-Item -Recurse -Force &quot;$HOME\.local\lib\forchetta-versions&quot;, &quot;$HOME\.local\lib\forchetta-node&quot;, &quot;$HOME\.local\share\forchetta&quot; -ErrorAction SilentlyContinue&#10;Remove-Item &quot;$HOME\.local\bin\forchetta*&quot;, &quot;$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk&quot; -ErrorAction SilentlyContinue" aria-label="Copy the command">Copy</button></div>
 </article>
 </main>
 

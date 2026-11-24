@@ -550,7 +550,7 @@
 
   .demo-note { margin: 14px 0 0; font-size: 13.5px; color: var(--text-3); }
 
-  /* Where things are on Windows: the window on one side, all the rest inside WSL. */
+  /* Where things are on Windows: the window on one side, all the rest on the other. */
   .wsl { display: grid; grid-template-columns: minmax(0, 1fr) 132px minmax(0, 1.5fr); align-items: center; margin: 30px 0; }
   .wsl-side { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
   .wsl-name { font-size: 13.5px; color: var(--text-3); }
@@ -884,13 +884,13 @@
 
     <section class="part text" id="windows" aria-labelledby="windows-title">
       <h2 id="windows-title">On Windows, a beta</h2>
-      <p>Forchetta runs its sessions in tmux, which Windows doesn't have. So on Windows it runs inside WSL 2, the Linux that comes with it, next to Claude Code and your projects. You use it from a window of Edge or Chrome: the same page as on a Mac.</p>
-      <div class="wsl" role="img" aria-label="On Windows, a window of Edge or Chrome. Through localhost it reaches WSL 2, where Forchetta, tmux, Claude Code and your projects are.">
-        <div class="wsl-side"><span class="wsl-name">Windows</span><span class="wsl-box main">Edge or Chrome<small>the window of Forchetta</small></span></div>
-        <div class="wsl-wire"><span>localhost</span></div>
-        <div class="wsl-side"><span class="wsl-name">WSL 2, its Linux</span><span class="wsl-box main">Forchetta</span><span class="wsl-row"><span class="wsl-box">tmux</span><span class="wsl-box">Claude Code</span><span class="wsl-box">your projects</span></span></div>
+      <p>Forchetta runs on Windows itself: no WSL, no Ubuntu, no administrator. The Claude Code it shows is the one you have, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use it from a window of Edge or Chrome: the same page as on a Mac.</p>
+      <div class="wsl" role="img" aria-label="All on your PC: a window of Edge or Chrome reaches Forchetta on 127.0.0.1. With it are Claude Code, your terminals and your projects.">
+        <div class="wsl-side"><span class="wsl-name">The window</span><span class="wsl-box main">Edge or Chrome<small>no tabs, no extensions</small></span></div>
+        <div class="wsl-wire"><span>127.0.0.1</span></div>
+        <div class="wsl-side"><span class="wsl-name">Your PC</span><span class="wsl-box main">Forchetta</span><span class="wsl-row"><span class="wsl-box">Claude Code</span><span class="wsl-box">your terminals</span><span class="wsl-box">your projects</span></span></div>
       </div>
-      <p><strong>It needs people to try it.</strong> The tests pass on macOS and on Linux, but it has not been tried on a Windows PC yet. GitHub builds it from the source and signs it; installing it is one command inside Ubuntu, and it asks before it changes your settings. The same version runs on Linux, in your browser.</p>
+      <p><strong>It needs people to try it.</strong> Its tests run on Windows with the real Claude Code, but no one has used it on a PC of their own yet. GitHub builds it from the source and signs it; installing it is one command in PowerShell, and it asks before it changes your settings. <a href="windows/wsl/">In WSL</a>, and on Linux, the same version.</p>
       <div class="actions">
         <a class="button primary" href="windows/">Try it on Windows</a>
         <a class="button" href="windows/#tell">Say how it went</a>
