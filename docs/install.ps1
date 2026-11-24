@@ -174,7 +174,7 @@
   }
 
   function Install-Forchetta {
-    if ([Environment]::OSVersion.Platform -ne 'Win32NT') { Stop-Here 'this is for Windows' 'on Linux: curl -fsSL https://forchetta.dev/install.sh | sh' }
+    if ([Environment]::OSVersion.Platform -ne 'Win32NT') { Stop-Here 'this is for Windows' 'for Linux see https://github.com/alessiodonato/forchetta#install' }
     if ([Environment]::OSVersion.Version.Build -lt 17763) { Stop-Here 'Forchetta needs Windows 10 1809 or later' }
     if (-not (Test-Path -LiteralPath $Tar)) { Stop-Here "$Tar is missing" }
     $arch = switch ("$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)") {
