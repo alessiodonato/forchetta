@@ -851,7 +851,11 @@ function main(): void {
     const known = interactiveByPid.get(pid);
     if (known) return known;
     if (interactiveByPid.size > 500) interactiveByPid.clear();
-    const asked = readCommandLine(pid).then(isInteractiveCommand);
+    const asked = readCommandLine(pid).then((line) => {
+      // Not told this time: asked again at the next permission.
+      if (line === undefined) interactiveByPid.delete(pid);
+      return isInteractiveCommand(line);
+    });
     interactiveByPid.set(pid, asked);
     return asked;
   };
