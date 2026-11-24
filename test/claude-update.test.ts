@@ -51,7 +51,8 @@ describe('what claude update did', () => {
   });
 });
 
-describe('ClaudeUpdates', () => {
+// A claude that is a shell script: not on Windows.
+describe.skipIf(process.platform === 'win32')('ClaudeUpdates', () => {
   let temp: ReturnType<typeof tempDir>;
   let resultFile: string;
   let handledFile: string;

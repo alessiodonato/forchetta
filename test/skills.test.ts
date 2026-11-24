@@ -133,7 +133,7 @@ describe('the cache of skills', () => {
     expect(root).toBe(join(temp.dir, 'cache-four', 'agents', 'crew-1', 'senior-dev'));
     expect(JSON.parse(readFileSync(join(root, '.claude-plugin', 'plugin.json'), 'utf8'))).toMatchObject({ name: 'forchetta-skills' });
     expect(cache.linked(root).sort()).toEqual(['alpha', 'beta']);
-    expect(readlinkSync(join(root, 'skills', 'alpha'))).toBe(cache.folderOf(source.catalog('alpha')!));
+    expect(readlinkSync(join(root, 'skills', 'alpha')).replaceAll('\\', '/')).toBe(cache.folderOf(source.catalog('alpha')!));
     expect(cache.plugin('crew-1/Senior Dev', ['beta'])).toBe(root);
     expect(cache.linked(root)).toEqual(['beta']);
     expect(cache.plugin('crew-1/Senior Dev', [])).toBeUndefined();

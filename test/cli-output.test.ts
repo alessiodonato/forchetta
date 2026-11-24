@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
+import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { flushingOutput } from '../src/cli/output.ts';
 import { tempDir } from './helpers.ts';
@@ -12,7 +13,7 @@ afterAll(() => temp.cleanup());
 /** A process that writes `size` characters through flushingOutput, then exits with 3: what reaches its reader. */
 function child(size: number, onData?: (chunk: Buffer, stop: () => void) => void): Promise<{ length: number; code: number | null; stderr: string }> {
   const script = join(temp.dir, `child-${size}.ts`);
-  writeFileSync(script, `import { flushingOutput } from ${JSON.stringify(join(process.cwd(), 'src/cli/output.ts'))};\nconst out = flushingOutput();\nout.stdout('x'.repeat(${size}));\nout.stdout('\\nend\\n');\nout.exit(3);\n`);
+  writeFileSync(script, `import { flushingOutput } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'src/cli/output.ts')).href)};\nconst out = flushingOutput();\nout.stdout('x'.repeat(${size}));\nout.stdout('\\nend\\n');\nout.exit(3);\n`);
   return new Promise((resolve) => {
     const proc = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', script], { stdio: ['ignore', 'pipe', 'pipe'] });
     let length = 0;

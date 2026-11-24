@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { dirname, homedir, join, WINDOWS } from '../shared/fspath.ts';
-import { type Config, detectArricurdai, loadConfig, saveConfig, which } from '../shared/config.ts';
+import { type Config, detectArricurdai, loadConfig, resolveTool, saveConfig, which } from '../shared/config.ts';
 import { UserError } from '../shared/errors.ts';
 import { hookTargets, statusTargets } from '../shared/hook-targets.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, stablePath } from '../shared/paths.ts';
@@ -118,7 +118,7 @@ function withToolPaths(config: Config, settingsText: string | undefined): Config
     ...config,
     paths: {
       // node of Homebrew lives in a folder per version: its opt path survives `brew upgrade node`.
-      node: stablePath(config.paths.node ?? process.execPath),
+      node: stablePath(config.paths.node ?? resolveTool('node', config)),
       // No tmux on Windows: each session has a host of its own.
       ...(WINDOWS ? {} : { tmux: config.paths.tmux ?? which('tmux') }),
       claude: config.paths.claude ?? which('claude'),

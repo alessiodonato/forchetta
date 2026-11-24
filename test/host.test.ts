@@ -163,8 +163,10 @@ describe('a session in its host', () => {
 
 describe('what does not start', () => {
   it('says why', async () => {
-    const result = await sessions.start({ session: session(), agentId: randomUUID(), file: join(temp.dir, 'no-such-program'), args: [], cwd: temp.dir, env: {}, cols: 80, rows: 24 });
-    expect(result).toHaveProperty('error');
+    const name = session();
+    const result = await sessions.start({ session: name, agentId: randomUUID(), file: join(temp.dir, 'no-such-program'), args: [], cwd: temp.dir, env: {}, cols: 80, rows: 24 });
+    // Windows refuses it; elsewhere it may start for a moment, and is gone: the daemon watches for that (spawn.ts).
+    if (!('error' in result)) expect(await until(async () => (await sessions.run('has-session', ['-t', name])).code === 1)).toBe(true);
   });
 
   it('a command line longer than Windows takes', async () => {

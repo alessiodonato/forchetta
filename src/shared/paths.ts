@@ -39,6 +39,12 @@ function findRoot(): string {
  * the folder the app runs, the path of node) uses the second, so that `brew upgrade` does not break it.
  */
 export function stablePath(path: string, exists: (path: string) => boolean = existsSync): string {
+  // On Windows docs/install.ps1 keeps each version in a folder of its own, with a junction to the one that counts.
+  const version = /^(.*)\/forchetta-versions\/[^/]+(\/.*)?$/.exec(path);
+  if (version) {
+    const current = `${version[1]}/forchetta${version[2] ?? ''}`;
+    return exists(current) ? current : path;
+  }
   const match = /^(.*)\/Cellar\/([^/]+)\/[^/]+(\/.*)?$/.exec(path);
   if (!match) return path;
   const candidate = `${match[1]}/opt/${match[2]}${match[3] ?? ''}`;

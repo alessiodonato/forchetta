@@ -39,7 +39,7 @@ describe('forchetta ls', () => {
     const lines = text.trimEnd().split('\n');
     expect(lines[0]).toMatch(/^PROJECT\s+STATE\s+ACTIVITY\s+CONTEXT\s+CACHE\s+LAST\s+CONTROL\s+PID\s+SESSION$/);
     expect(lines[1]).toMatch(/^progetto\s+working\s+.*357k ≈36%\s+42 min\s+12 s\s+read only\s+123\s+abcdef12$/);
-    expect(lines[2]).toMatch(/waiting\s+.*—\s+—\s+3 min\s+tmux\s+—\s+—$/);
+    expect(lines[2]).toMatch(/waiting\s+.*—\s+—\s+3 min\s+(?:tmux|forchetta)\s+—\s+—$/);
     expect(lines.at(-1)).toBe('2 sessions running · 1 waits for you');
     expect(renderList([], NOW, 100, plain)).toBe('No Claude Code session running.\n');
   });

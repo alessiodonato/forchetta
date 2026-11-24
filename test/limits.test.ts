@@ -4,7 +4,7 @@ import { Limits, type RateLimits, rateLimitsOf, runsOutAt } from '../src/daemon/
 import { Registry } from '../src/daemon/registry.ts';
 import { createDaemonServer, STATUS_PATH } from '../src/daemon/server.ts';
 import { limitParts, LIMITS_PACE_FRESH_MS } from '../src/shared/present.ts';
-import { http, sleep, tempDir } from './helpers.ts';
+import { hooksAt, http, sleep, tempDir } from './helpers.ts';
 
 // The limits of the Claude plan, from `rate_limits` of the status line: the share of the 5-hour and weekly windows,
 // when they reset, and when the 5-hour one runs out at the pace of the last half hour.
@@ -48,7 +48,7 @@ describe('the status line route', () => {
     const server = createDaemonServer({ registry, token: 'c'.repeat(64), port: () => 0, log: () => {}, info: () => ({}), onShutdown: () => {}, onRateLimits: (limits) => taken.push(limits) });
     // The status line talks on the socket of the hooks, as bin/forchetta-statusline does.
     const temp = tempDir('limits');
-    const socket = join(temp.dir, 'hooks.sock');
+    const socket = hooksAt(temp.dir);
     await new Promise<void>((resolve) => server.hooks.listen(socket, resolve));
     try {
       const body = JSON.stringify({ ...STATUS_INPUT, cost: { total_cost_usd: 0.5 } });

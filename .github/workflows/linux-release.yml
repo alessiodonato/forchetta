@@ -96,16 +96,24 @@ jobs:
           name: linux-archive
           path: release
 
-      - name: They are the three files that were made, and nothing else
+      - name: They are the six files that were made, and nothing else
         env:
           ARCHIVE: ${{ needs.build.outputs.archive }}
           INSTALLER: ${{ needs.build.outputs.installer }}
+          WINDOWS: ${{ needs.build.outputs.windows }}
+          WINDOWS_INSTALLER: ${{ needs.build.outputs.windows-installer }}
         run: |
           name="forchetta-${GITHUB_REF_NAME#v}-linux.tar.gz"
-          test "$(ls -A release)" = "$(printf '%s\n' "$name" "$name.sha256" install.sh)"
-          for file in "release/$name" "release/$name.sha256" release/install.sh; do
+          windows="forchetta-${GITHUB_REF_NAME#v}-windows.tar.gz"
+          test "$(LC_ALL=C ls -A release)" = "$(printf '%s\n' "$name" "$name.sha256" "$windows" "$windows.sha256" install.ps1 install.sh)"
+          for file in "release/$name" "release/$name.sha256" "release/$windows" "release/$windows.sha256" release/install.ps1 release/install.sh; do
             if [ ! -f "$file" ] || [ -L "$file" ]; then echo "$file is not a file"; exit 1; fi
           done
+          echo "$WINDOWS  release/$windows" | sha256sum -c
+          echo "$WINDOWS_INSTALLER  release/install.ps1" | sha256sum -c
+          test "$(cat "release/$windows.sha256")" = "$WINDOWS  $windows"
+          tr -d '\r' < release/install.ps1 | grep -qx "  \$PinnedVersion = '${GITHUB_REF_NAME#v}'"
+          tr -d '\r' < release/install.ps1 | grep -qx "  \$PinnedSha256 = '$WINDOWS'"
           echo "$ARCHIVE  release/$name" | sha256sum -c
           echo "$INSTALLER  release/install.sh" | sha256sum -c
           test "$(cat "release/$name.sha256")" = "$ARCHIVE  $name"
@@ -116,6 +124,8 @@ jobs:
         with:
           subject-path: |
             release/forchetta-*-linux.tar.gz
+            release/forchetta-*-windows.tar.gz
+            release/install.ps1
             release/install.sh
 
       - name: Put them in the release
@@ -123,7 +133,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=${GITHUB_REF_NAME#v}
-          files=("release/forchetta-$version-linux.tar.gz" "release/forchetta-$version-linux.tar.gz.sha256" release/install.sh)
+          files=("release/forchetta-$version-linux.tar.gz" "release/forchetta-$version-linux.tar.gz.sha256" "release/forchetta-$version-windows.tar.gz" "release/forchetta-$version-windows.tar.gz.sha256" release/install.ps1 release/install.sh)
           if found=$(gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>&1); then
             gh release upload "$GITHUB_REF_NAME" "${files[@]}" -R "$GITHUB_REPOSITORY"
           elif [ "$found" = 'release not found' ]; then

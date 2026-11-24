@@ -21,6 +21,9 @@ export function outsideGitDir(name: string): { dir: string; cleanup: () => void 
   return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
+/** Where a server of a test listens for the hooks: a socket in a folder, a pipe on Windows. */
+export const hooksAt = (dir: string): string => (process.platform === 'win32' ? `\\\\.\\pipe\\forchetta-test-${randomUUID()}` : join(dir, 'hooks.sock'));
+
 export interface Reply {
   status: number;
   body: string;

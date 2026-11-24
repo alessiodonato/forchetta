@@ -131,7 +131,8 @@ describe('starting a team', () => {
     const { start } = fake();
     const result = await new Crews(dir).create(checked(spec()), start, 1000);
     const file = join(dir, `${result.crewId}.json`);
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    // Windows has no such permissions: the folder is of its user (src/shared/paths.ts).
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(file, 'utf8')).agents).toEqual({ lead: 'agent-1', tester: 'agent-2', formatter: 'agent-3' });
     const again = new Crews(dir);
     expect(again.get(result.crewId!)?.name).toBe('checkout');
@@ -614,7 +615,8 @@ describe('templates of teams', () => {
     expect(store.delete('MINE')).toEqual({ ok: true });
     expect(store.delete('feature squad')).toMatchObject({ ok: false });
     expect(new CrewTemplates(file).list().filter((template) => !template.builtin)).toEqual([]);
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    // Windows has no such permissions: the folder is of its user (src/shared/paths.ts).
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
     expect('error' in cleanTemplate({ name: '', lead: { kind: 'you' }, members: [{ name: 'a' }] })).toBe(true);
   });
 });

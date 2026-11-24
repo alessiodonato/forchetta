@@ -3,14 +3,14 @@
 //
 //   node scripts/dev/windows-e2e.mjs [folder of Forchetta]
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import { fakeApi } from './fake-api.mjs';
 
-const root = resolve(process.argv[2] ?? fileURLToPath(new URL('../..', import.meta.url)));
+const source = resolve(process.argv[2] ?? fileURLToPath(new URL('../..', import.meta.url)));
 const slashes = (path) => path.replaceAll('\\', '/');
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 let bad = 0;
@@ -32,6 +32,11 @@ const claude = process.env.CLAUDE_BIN ?? spawnSync('where.exe', ['claude.exe'], 
 const home = join(realpathSync.native(mkdtempSync(join(tmpdir(), 'fk e2e-'))), 'Ada Lovelace');
 const project = join(home, 'my shop');
 mkdirSync(project, { recursive: true });
+// As the installer puts it: outside git, next to its data.
+const root = join(home, '.local', 'lib', 'forchetta');
+for (const part of ['package.json', 'dist', 'bin']) cpSync(join(source, part), join(root, part), { recursive: true });
+const pty = realpathSync(join(source, 'node_modules', 'node-pty'));
+for (const part of ['package.json', 'lib', `prebuilds/win32-${process.arch}`]) cpSync(join(pty, part), join(root, 'node_modules', 'node-pty', part), { recursive: true });
 spawnSync('git', ['init', '-q', project]);
 const api = await fakeApi();
 const key = 'sk-ant-api03-a-key-made-up-for-a-test-00000000000000000000';

@@ -38,7 +38,8 @@ describe('the ledger', () => {
     ledger.cost(session, whoOf(session), T + 3000);
     const costs = readLedger(dir, 0).map((entry) => (entry.kind === 'cost' ? entry.usd : undefined));
     expect(costs).toEqual([0.5, 0.3, 0.1]);
-    expect(statSync(ledgerFile(dir, T)).mode & 0o777).toBe(0o600);
+    // Windows has no such permissions: the folder is of its user (src/shared/paths.ts).
+    if (process.platform !== 'win32') expect(statSync(ledgerFile(dir, T)).mode & 0o777).toBe(0o600);
     expect(ledgerFile(dir, T)).toMatch(/2026-11\.jsonl$/);
   });
 

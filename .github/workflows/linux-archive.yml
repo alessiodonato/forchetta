@@ -1,7 +1,7 @@
 name: Archive for Linux and Windows
 
-# Makes the archive that docs/install.sh installs on Linux, and on Windows inside WSL 2, and tries it. Here and nowhere
-# else: no binary of it comes from the computer of a person. It only reads the repository: linux-release.yml calls it and
+# Makes the archives that docs/install.sh installs on Linux (and on Windows inside WSL 2) and docs/install.ps1 on Windows,
+# and tries them. Here and nowhere else: no binary of them comes from the computer of a person. It only reads the repository: linux-release.yml calls it and
 # publishes what it makes, CI calls it to try it. The actions are at a fixed commit, and no cache is used: what comes out
 # runs on the computers of others.
 on:
@@ -13,6 +13,12 @@ on:
       installer:
         description: The sha256 of its install.sh
         value: ${{ jobs.archive.outputs.installer }}
+      windows:
+        description: The sha256 of the archive for Windows
+        value: ${{ jobs.archive.outputs.windows }}
+      windows-installer:
+        description: The sha256 of its install.ps1
+        value: ${{ jobs.archive.outputs.windows-installer }}
 
 permissions:
   contents: read
@@ -86,6 +92,8 @@ jobs:
     outputs:
       archive: ${{ steps.sums.outputs.archive }}
       installer: ${{ steps.sums.outputs.installer }}
+      windows: ${{ steps.sums.outputs.windows }}
+      windows-installer: ${{ steps.sums.outputs.windows-installer }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,6 +123,7 @@ jobs:
         run: |
           pnpm build
           sh scripts/package-linux.sh
+          sh scripts/package-windows.sh
           cp -R build/release first
 
       # The page and the daemon built again, and packed: the same bytes. The terminals are those of the job before.
@@ -122,15 +131,27 @@ jobs:
         run: |
           pnpm build
           sh scripts/package-linux.sh
+          sh scripts/package-windows.sh
           diff -r first build/release
 
       - name: Nothing of a Mac is in it, nor of who made it
         run: |
           tar -tvzf first/*-linux.tar.gz | tee list.txt
           test -s list.txt
-          if grep -E 'darwin|native/|\.swift|build-app|\.map$' list.txt; then exit 1; fi
+          if grep -E 'darwin|win32|windows|\.cmd$|native/|\.swift|build-app|\.map$' list.txt; then exit 1; fi
           # Every file of root, none that others can write.
           if awk '{ print $1, $2 }' list.txt | grep -v -E '^[d-][rwx-]{4}-[rwx-]{2}-[x-] 0/0$'; then exit 1; fi
+
+      # What runs on Windows is Node.js, and the code of Forchetta: of programs there are only the console of Microsoft and
+      # the two binaries of node-pty, as npm gives them.
+      - name: Nothing else is in the one for Windows
+        run: |
+          tar -tzf first/*-windows.tar.gz | tee list.txt
+          if grep -E 'darwin|linux|native/|\.swift|build-app|\.map$|\.pdb$|winpty' list.txt; then exit 1; fi
+          grep -E '\.(exe|dll|node)$' list.txt | sed 's/^[^/]*//' | sort > binaries.txt
+          for arch in arm64 x64; do
+            for file in conpty.node conpty/OpenConsole.exe conpty/conpty.dll conpty_console_list.node; do echo "/node_modules/node-pty/prebuilds/win32-$arch/$file"; done
+          done | sort | diff - binaries.txt
 
       # For who publishes them: the files themselves pass through jobs that could change them.
       - name: Their checksums
@@ -138,6 +159,8 @@ jobs:
         run: |
           echo "archive=$(sha256sum first/*-linux.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "installer=$(sha256sum first/install.sh | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "windows=$(sha256sum first/*-windows.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "windows-installer=$(sha256sum first/install.ps1 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -198,3 +221,76 @@ jobs:
           cat "$RUNNER_TEMP/refused"
           grep -q 'not the one of the release' "$RUNNER_TEMP/refused"
           test ! -e "$RUNNER_TEMP/other/.local"
+
+  # The same on Windows, in the PowerShell every Windows has, in a home with a space in its name.
+  install-windows:
+    name: Install on ${{ matrix.os }}
+    needs: archive
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025, windows-11-arm]
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-archive
+          path: release
+
+      # With no Node.js in the PATH: the installer takes its own, from nodejs.org.
+      - name: Install and open
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = [regex]::Match((Get-Content -Raw release\install.ps1), "PinnedVersion = '([^']+)'").Groups[1].Value
+          if (-not $version) { throw 'no version' }
+          $userHome = Join-Path $env:RUNNER_TEMP 'Ada Lovelace'
+          $there = Join-Path $env:RUNNER_TEMP "releases\download\v$version"
+          New-Item -ItemType Directory -Force $there, $userHome | Out-Null
+          Copy-Item release\forchetta-* $there
+          $env:USERPROFILE = $userHome
+          $env:Path = (($env:Path -split ';') | Where-Object { $_ -and -not (Test-Path (Join-Path $_ 'node.exe')) }) -join ';'
+          if (Get-Command node -ErrorAction SilentlyContinue) { throw 'there is a Node.js here: this must try without' }
+          $env:FORCHETTA_RELEASES = Join-Path $env:RUNNER_TEMP 'releases'
+          $env:FORCHETTA_NO_SETUP = '1'
+          Get-Content -Raw release\install.ps1 | Invoke-Expression
+          $forchetta = Join-Path $userHome '.local\bin\forchetta.cmd'
+          if ((& $forchetta --version) -ne $version) { throw 'the command does not answer' }
+          if ((forchetta --version) -ne $version) { throw 'it is not in the PATH of this terminal' }
+          & $forchetta setup --yes
+          if ($LASTEXITCODE -ne 0) { throw 'setup' }
+          $settings = Get-Content -Raw (Join-Path $userHome '.claude\settings.json')
+          if ($settings -notmatch 'Ada Lovelace/\.local/lib/forchetta/dist/windows/forchetta-hooks\.js') { throw $settings }
+          if ($settings -match 'forchetta-versions') { throw 'the hooks name a version' }
+          if ((& $forchetta open --print) -notmatch '^http://127\.0\.0\.1:47821/#open=') { throw 'open' }
+          if (-not (Test-Path (Join-Path $userHome '.local\share\forchetta\hooks-pipe.json'))) { throw 'no pipe' }
+          # Again, with everything in use: the same version, and then as a newer one would be.
+          Get-Content -Raw release\install.ps1 | Invoke-Expression
+          if ((& $forchetta --version) -ne $version) { throw 'after the second time' }
+          & $forchetta daemon stop
+          $path = (Get-Item HKCU:\Environment).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+          if (($path -split ';' | Where-Object { $_ -eq (Join-Path $userHome '.local\bin') }).Count -gt 1) { throw "twice in the PATH: $path" }
+          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'Forchetta.lnk'))) { throw 'no shortcut' }
+
+      - name: A changed archive is refused
+        run: |
+          $version = [regex]::Match((Get-Content -Raw release\install.ps1), "PinnedVersion = '([^']+)'").Groups[1].Value
+          $there = Join-Path $env:RUNNER_TEMP "releases\download\v$version"
+          # Another archive, whole, and with a checksum of its own next to it: the one in the installer counts.
+          Add-Content -Path (Join-Path $there "forchetta-$version-windows.tar.gz") -Value 'changed'
+          $hash = (Get-FileHash (Join-Path $there "forchetta-$version-windows.tar.gz")).Hash.ToLower()
+          Set-Content -Path (Join-Path $there "forchetta-$version-windows.tar.gz.sha256") -Value "$hash  forchetta-$version-windows.tar.gz"
+          $other = Join-Path $env:RUNNER_TEMP 'other'
+          New-Item -ItemType Directory $other | Out-Null
+          $env:USERPROFILE = $other
+          $env:FORCHETTA_RELEASES = Join-Path $env:RUNNER_TEMP 'releases'
+          $env:FORCHETTA_NO_SETUP = '1'
+          $env:FORCHETTA_EXIT = '1'
+          $out = powershell -NoProfile -ExecutionPolicy Bypass -File release\install.ps1 *>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 1 -or $out -notmatch 'not the one of the release') { throw 'it was not refused' }
+          if (Test-Path (Join-Path $other '.local\lib\forchetta')) { throw 'something was installed' }
+          exit 0

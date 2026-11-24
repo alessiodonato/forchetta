@@ -94,7 +94,8 @@ describe('the record of the changes', () => {
     const byFile = new Patches(dir).byFile(id);
     expect([...byFile.keys()]).toEqual(['/p/app/a.txt', '/p/app/b.txt']);
     expect(byFile.get('/p/app/a.txt')!.map((edit) => edit.at)).toEqual([1, 3]);
-    expect(statSync(join(dir, `${id}.jsonl`)).mode & 0o777).toBe(0o600);
+    // Windows has no such permissions: the folder is of its user (src/shared/paths.ts).
+    if (process.platform !== 'win32') expect(statSync(join(dir, `${id}.jsonl`)).mode & 0o777).toBe(0o600);
     patches.forget([id]);
     expect(existsSync(join(dir, `${id}.jsonl`))).toBe(false);
     // A name that is not an agent id writes nothing.

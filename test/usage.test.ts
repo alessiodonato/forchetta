@@ -213,7 +213,8 @@ describe('status line in the settings', () => {
   });
 });
 
-describe('bin/forchetta-statusline', () => {
+// On Windows src/hook/main.ts (test/windows.test.ts).
+describe.skipIf(process.platform === 'win32')('bin/forchetta-statusline', () => {
   const temp = tempDir('statusline');
   afterAll(() => temp.cleanup());
 

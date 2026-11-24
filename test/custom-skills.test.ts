@@ -80,7 +80,7 @@ describe('a skill of yours', () => {
     expect(cleanSkills(['my-review', 'pdf'])).toEqual({ skills: ['my-review', 'pdf'] });
     expect(await cache.ensure(['my-review'])).toEqual({ failed: [] });
     const plugin = cache.plugin('team/agent', ['my-review'])!;
-    expect(readlinkSync(join(plugin, 'skills', 'my-review'))).toBe(folder);
+    expect(readlinkSync(join(plugin, 'skills', 'my-review')).replaceAll('\\', '/')).toBe(folder);
     // The same name again, a folder with no SKILL.md, nothing at all.
     expect(await skills.add(folder)).toEqual({ ok: false, error: 'there is a skill called my-review already' });
     mkdirSync(join(folder, '..', 'empty'));

@@ -4,14 +4,14 @@ import { Registry } from '../src/daemon/registry.ts';
 import { OpenCodes } from '../src/daemon/open-codes.ts';
 import { createDaemonServer, GUARD_PATH, HOOK_PATH, hookMeta, OPEN_PATH } from '../src/daemon/server.ts';
 import { join } from 'node:path';
-import { http, tempDir } from './helpers.ts';
+import { hooksAt, http, tempDir } from './helpers.ts';
 
 const TOKEN = 'a'.repeat(64);
 let server: ReturnType<typeof createDaemonServer>;
 let port = 0;
 const temp = tempDir('server');
 /** The socket of the hooks, as the daemon opens it in its private folder. */
-const hooks = join(temp.dir, 'hooks.sock');
+const hooks = hooksAt(temp.dir);
 let registry: Registry;
 let shutdowns = 0;
 

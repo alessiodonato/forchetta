@@ -52,7 +52,7 @@ describe('the archive for Linux and Windows', () => {
     expect(Object.keys(parts(archive, 0))).toEqual(['name', 'on', 'permissions', 'defaults', 'jobs']);
     expect(Object.keys(parts(release, 0))).toEqual(['name', 'on', 'permissions', 'defaults', 'concurrency', 'jobs']);
     for (const text of [archive, release]) expect(parts(text, 0).permissions).toBe('\n  contents: read');
-    expect(Object.keys(jobs(archive))).toEqual(['terminals', 'archive', 'install']);
+    expect(Object.keys(jobs(archive))).toEqual(['terminals', 'archive', 'install', 'install-windows']);
     expect(Object.keys(jobs(release))).toEqual(['check', 'test', 'build', 'publish']);
     expect(archive).not.toMatch(/write|permissions:[^]*permissions:|secrets/);
     for (const name of ['check', 'test', 'build']) expect(jobs(release)[name]).not.toMatch(/permissions|write|secrets|environment/);
@@ -69,7 +69,7 @@ describe('the archive for Linux and Windows', () => {
 
   // The two jobs that decide what gets out, word for word: to change one, read it again, then change its sum here.
   it('the jobs that check the tag, sign and publish are those that were reviewed', () => {
-    expect({ check: sha(jobs(release).check!), publish: sha(jobs(release).publish!) }).toEqual({ check: '8753fef882cb72fe', publish: '476c24e2f0c096b0' });
+    expect({ check: sha(jobs(release).check!), publish: sha(jobs(release).publish!) }).toEqual({ check: '8753fef882cb72fe', publish: 'c188d41241b314ee' });
   });
 
   it('the one that publishes takes only the files that were made, runs nothing of theirs, and writes over none', () => {
@@ -77,7 +77,7 @@ describe('the archive for Linux and Windows', () => {
     expect([...publish.matchAll(/uses: ([\w/-]+)@/g)].map((match) => match[1])).toEqual(['actions/download-artifact', 'actions/attest']);
     expect(publish.indexOf('sha256sum -c')).toBeGreaterThan(publish.indexOf('actions/download-artifact'));
     expect(publish.indexOf('actions/attest')).toBeGreaterThan(publish.lastIndexOf('sha256sum -c'));
-    for (const name of ['ARCHIVE', 'INSTALLER']) expect(publish).toContain(`echo "$${name}  release/`);
+    for (const name of ['ARCHIVE', 'INSTALLER', 'WINDOWS', 'WINDOWS_INSTALLER']) expect(publish).toContain(`echo "$${name}  release/`);
     expect(publish).not.toMatch(/working-directory|\bcd |--clobber|delete|pnpm|npm |npx|node |python|\bsh |\bbash (?!$)|GH_REPO|run-id/m);
     // gh asks git about the folder it is in, unless it is told the repository.
     for (const line of publish.match(/gh release .*/g)!) expect(line).toContain('-R "$GITHUB_REPOSITORY"');
@@ -87,11 +87,13 @@ describe('the archive for Linux and Windows', () => {
   it('a pipe that fails stops the step, and nothing of the outside is written into a script', () => {
     for (const text of [archive, release]) {
       expect(parts(text, 0).defaults).toBe('\n  run:\n    shell: bash');
-      expect(text.match(/shell:/g)).toHaveLength(1);
-      const known = ['matrix.arch', 'matrix.os', 'github.ref', 'github.token', 'steps.sums.outputs.archive', 'steps.sums.outputs.installer', 'jobs.archive.outputs.archive', 'jobs.archive.outputs.installer', 'needs.build.outputs.archive', 'needs.build.outputs.installer'];
+      // In bash, but for the job that installs on Windows, in the PowerShell of Windows: there an error stops the step too.
+      expect(text.match(/shell: .*/g)).toEqual(text === archive ? ['shell: bash', 'shell: powershell'] : ['shell: bash']);
+      if (text === archive) expect(jobs(text)['install-windows']).toContain('shell: powershell');
+      const known = ['matrix.arch', 'matrix.os', 'github.ref', 'github.token', 'steps.sums.outputs.archive', 'steps.sums.outputs.installer', 'steps.sums.outputs.windows', 'steps.sums.outputs.windows-installer', 'jobs.archive.outputs.archive', 'jobs.archive.outputs.installer', 'jobs.archive.outputs.windows', 'jobs.archive.outputs.windows-installer', 'needs.build.outputs.archive', 'needs.build.outputs.installer', 'needs.build.outputs.windows', 'needs.build.outputs.windows-installer'];
       for (const [, expression] of text.matchAll(/\$\{\{\s*([^}]+?)\s*\}\}/g)) expect(known).toContain(expression);
       // Only where a value goes, never in the lines of a script.
-      for (const line of text.split('\n').filter((line) => line.includes('${{'))) expect(line).toMatch(/^ *(?:- )?(?:name|group|value|archive|installer|runs-on|ARCHIVE|INSTALLER|GH_TOKEN): /);
+      for (const line of text.split('\n').filter((line) => line.includes('${{'))) expect(line).toMatch(/^ *(?:- )?(?:name|group|value|archive|installer|windows|windows-installer|runs-on|ARCHIVE|INSTALLER|WINDOWS|WINDOWS_INSTALLER|GH_TOKEN): /);
       for (const line of text.match(/run: .*/g) ?? []) expect(line).not.toContain('${{');
     }
   });

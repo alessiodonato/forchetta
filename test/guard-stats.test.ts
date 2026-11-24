@@ -39,7 +39,8 @@ describe('the counts', () => {
     now = NOV_17;
     // The counts started yesterday, within the week: the week says since when.
     expect(stats.info()).toEqual({ days: 7, counts: { held: 2, tests: 1, git: 1 }, today: { held: 2, tests: 1 }, since: '2026-11-16', byDay: [0, 0, 0, 0, 0, 1, 3] });
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    // Windows has no such permissions: the folder is of its user (src/shared/paths.ts).
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
     // A new daemon finds them.
     expect(new GuardStats(file, { now: () => now }).info().counts).toEqual({ held: 2, tests: 1, git: 1 });
   });

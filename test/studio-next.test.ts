@@ -111,7 +111,7 @@ describe('the tools of an agent', () => {
     expect(Object.keys((teamMcpConfig(undefined, 'a1', '/F/var', [], tools.servers) as { mcpServers: object }).mcpServers)).toEqual(['playwright', 'chrome-devtools']);
   });
 
-  it('forchetta-start gives each rule as an argument of its own, globs untouched, and the strict MCP option', () => {
+  it.skipIf(process.platform === 'win32')('forchetta-start gives each rule as an argument of its own, globs untouched, and the strict MCP option', () => {
     const fake = join(temp.dir, 'claude-args');
     spawnSync('/bin/sh', ['-c', `printf '#!/bin/sh\\nfor a in "$@"; do printf "[%%s]\\\\n" "$a"; done\\n' > '${fake}' && chmod +x '${fake}'`]);
     const run = spawnSync('/bin/sh', [join(ROOT, 'bin', 'forchetta-start'), fake], {

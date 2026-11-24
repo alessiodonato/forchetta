@@ -26,7 +26,8 @@ describe('a data file', () => {
     writeDataJson(file, [1, 2]);
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([1, 2]);
     expect(JSON.parse(readFileSync(`${file}.bak`, 'utf8'))).toEqual([1]);
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    // Windows has no such permissions: the folder is of its user (src/shared/paths.ts).
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
     // No temporary file left behind.
     expect(readdirSync(join(file, '..')).sort()).toEqual(['templates.json', 'templates.json.bak']);
   });
