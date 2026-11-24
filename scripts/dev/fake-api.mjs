@@ -44,14 +44,16 @@ export function fakeApi() {
       const block = use ? { type: 'tool_use', id: `toolu_${Math.random().toString(36).slice(2, 14)}`, name: use.name, input: {} } : { type: 'text', text: '' };
       const delta = use ? { type: 'input_json_delta', partial_json: JSON.stringify(use.input) } : { type: 'text_delta', text: reply };
       const usage = { input_tokens: 10, output_tokens: 5 };
+      // Each answer its own: Claude Code joins those with the same id.
+      const id = `msg_${Math.random().toString(36).slice(2, 14)}`;
       if (res.destroyed) return undefined;
       if (!ask.stream) {
         res.writeHead(200, { 'content-type': 'application/json' });
-        return res.end(JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', model: ask.model, content: [use ? { ...block, input: use.input } : { type: 'text', text: reply }], stop_reason: use ? 'tool_use' : 'end_turn', stop_sequence: null, usage }));
+        return res.end(JSON.stringify({ id, type: 'message', role: 'assistant', model: ask.model, content: [use ? { ...block, input: use.input } : { type: 'text', text: reply }], stop_reason: use ? 'tool_use' : 'end_turn', stop_sequence: null, usage }));
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const send = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
-      send('message_start', { message: { id: 'msg_1', type: 'message', role: 'assistant', model: ask.model, content: [], stop_reason: null, stop_sequence: null, usage } });
+      send('message_start', { message: { id, type: 'message', role: 'assistant', model: ask.model, content: [], stop_reason: null, stop_sequence: null, usage } });
       send('content_block_start', { index: 0, content_block: block });
       send('content_block_delta', { index: 0, delta });
       send('content_block_stop', { index: 0 });
