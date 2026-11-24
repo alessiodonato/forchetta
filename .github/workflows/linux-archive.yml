@@ -249,7 +249,8 @@ jobs:
           if (-not $version) { throw 'no version' }
           $userHome = Join-Path $env:RUNNER_TEMP 'Ada Lovelace'
           $there = Join-Path $env:RUNNER_TEMP "releases\download\v$version"
-          New-Item -ItemType Directory -Force $there, $userHome | Out-Null
+          # A home has its Start menu.
+          New-Item -ItemType Directory -Force $there, $userHome, (Join-Path $userHome 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs') | Out-Null
           Copy-Item release\forchetta-* $there
           $env:USERPROFILE = $userHome
           $env:Path = (($env:Path -split ';') | Where-Object { $_ -and -not (Test-Path (Join-Path $_ 'node.exe')) }) -join ';'
@@ -273,7 +274,7 @@ jobs:
           & $forchetta daemon stop
           $path = (Get-Item HKCU:\Environment).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
           if (($path -split ';' | Where-Object { $_ -eq (Join-Path $userHome '.local\bin') }).Count -gt 1) { throw "twice in the PATH: $path" }
-          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'Forchetta.lnk'))) { throw 'no shortcut' }
+          if (-not (Get-ChildItem -Recurse -Filter Forchetta.lnk (Join-Path $userHome 'AppData'), (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'))) { throw 'no shortcut' }
 
       - name: A changed archive is refused
         run: |

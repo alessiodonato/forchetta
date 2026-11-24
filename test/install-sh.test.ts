@@ -265,7 +265,7 @@ describe('docs/install.sh', () => {
 
   it('says what to do elsewhere', () => {
     expect(scene({ system: 'Darwin' }).run()).toMatchObject({ code: 1, err: expect.stringContaining('brew install') });
-    expect(scene({ system: 'MINGW64_NT-10.0' }).run()).toMatchObject({ code: 1, err: expect.stringContaining('WSL 2') });
+    expect(scene({ system: 'MINGW64_NT-10.0' }).run()).toMatchObject({ code: 1, err: expect.stringContaining('install.ps1') });
     expect(scene().run({ HOME: '/mnt/c/Users/me' })).toMatchObject({ code: 1, err: expect.stringContaining('folder of Windows') });
   });
 
