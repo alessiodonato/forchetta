@@ -93,7 +93,7 @@ export interface Look {
   matching(pattern: string[]): Promise<number[]>;
 }
 
-const unixLook = (run: ServersOptions['run']): Look => ({
+export const unixLook = (run: ServersOptions['run']): Look => ({
   listening: async () => parseListening((await run(LSOF, ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])) ?? ''),
   processes: async () => parsePs((await run(PS, ['-axo', 'pid=,ppid=,comm='])) ?? ''),
   table: async () => new Map(),

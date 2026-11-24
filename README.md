@@ -81,24 +81,26 @@ To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Windows and Linux (beta)
 
-On Windows, Forchetta runs inside [WSL 2](https://learn.microsoft.com/windows/wsl/install), the Linux that comes with it, next to Claude Code and your projects. You use it from a window of Edge or Chrome: the same page as on a Mac, without the menu bar and the system-wide shortcut. It sees the sessions started inside WSL: those of PowerShell, or of Claude Code for Windows, don't show up.
+Forchetta runs on Windows itself: no WSL, no administrator. The Claude Code it shows is the one you have, with your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use it from a window of Edge or Chrome: the same page as on a Mac, without the menu bar and the system-wide shortcut.
 
-It needs people to try it: the tests pass on macOS and on Linux, but it has not been tried on a Windows PC yet. Skip the steps you have done already:
+It needs people to try it: its tests run on Windows with the real Claude Code, but no one has used it on a PC of their own yet. In PowerShell, not as administrator:
 
-1. **WSL 2 and Ubuntu.** In PowerShell, as administrator: `wsl --install`. Restart Windows, open Ubuntu from the Start menu, and choose a name and a password for it. The next steps are there.
-2. **Claude Code, inside Ubuntu**, also if you have it on Windows: `curl -fsSL https://claude.ai/install.sh | bash`. Then, in a new terminal of Ubuntu, `claude` to log in.
-3. **Forchetta, inside Ubuntu.** It shows the hooks it adds, and asks: answer `y`.
+```powershell
+irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex
+```
 
-   ```sh
-   curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.1/install.sh &&
-   sh ~/forchetta-install.sh
-   ```
+It shows the hooks it adds, and asks: answer `y`. Then `forchetta open`, or Forchetta in the Start menu. You need Windows 10 1809 or later and [Claude Code for Windows](https://code.claude.com/docs/en/setup); Node.js comes if you don't have it.
 
-4. **Open it**, in a new terminal of Ubuntu: `forchetta open`. From then on it is the only command.
+On Linux, with `curl`, `tmux` and `lsof` installed, and in WSL if you work there:
 
-On Linux start from step 2, with `curl`, `tmux` and `lsof` installed; the page opens in your browser. The installer holds the checksum of Forchetta and takes nothing else; GitHub builds it from the source and signs which commit it comes from ([how to check it](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows)).
+```sh
+curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.sh &&
+sh ~/forchetta-install.sh
+```
 
-**[The guide for Windows](https://forchetta.dev/windows/)** says how to know that each step is done, what to do if something goes wrong, what to try, and where to say how it went.
+Each installer holds the checksum of its Forchetta and takes nothing else; GitHub builds it from the source and signs which commit it comes from ([how to check it](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows)).
+
+**[The guide for Windows](https://forchetta.dev/windows/)** says how to know that each step is done, what to do if something goes wrong, what to try, and where to say how it went. [The one for WSL](https://forchetta.dev/windows/wsl/) does the same.
 
 ## Try the guard
 

@@ -9,7 +9,7 @@ Thanks for wanting to help. Forchetta is a young project with one maintainer, so
 
 ## Set up
 
-You need macOS 12 or later, Node.js 22 or later, pnpm, tmux (`brew install tmux`) and the Xcode Command Line Tools. On Linux, or in WSL 2: Node.js 22 or later, pnpm, tmux 3.2 or later, and `build-essential` with `python3`, since `pnpm install` compiles node-pty there; there is no app to build, and `bin/forchetta open` opens the page. In WSL, clone into your home, not under `/mnt/c`.
+You need macOS 12 or later, Node.js 22 or later, pnpm, tmux (`brew install tmux`) and the Xcode Command Line Tools. On Windows: Node.js 22 or later, pnpm and git (`pnpm build`, then `node dist/cli.js setup`). On Linux, or in WSL 2: Node.js 22 or later, pnpm, tmux 3.2 or later, and `build-essential` with `python3`, since `pnpm install` compiles node-pty there; there is no app to build, and `bin/forchetta open` opens the page. In WSL, clone into your home, not under `/mnt/c`.
 
 ```sh
 git clone https://github.com/alessiodonato/forchetta.git

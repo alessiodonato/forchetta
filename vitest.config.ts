@@ -8,7 +8,7 @@ const windows = process.platform === 'win32';
 const NOT_ON_WINDOWS = ['install-sh', 'linux-release', 'mac-untouched', 'permissions', 'platform', 'safety-off-mac', 'scripts', 'spawn', 'terminals', 'tmux'].map((name) => `test/${name}.test.ts`);
 
 /** The folders of the tests, as Windows has them: what is absolute there has a drive. */
-const FOLDERS = /(?<![\w.:/~$@*\\-])\/(?=(?:p|r|w|x|wt|repo|proj)(?:\/|['"`\s)\];,]|$))/gm;
+const FOLDERS = /(?<![\w.:/~$@*\\-])\/(?=(?:p|r|w|x|y|q|abs|wt|repo|proj)(?:\/|['"`\s)\];,]|$))/gm;
 const WITH_FOLDERS = /\/test\/(?:arrival|coherence|conflicts|guard|guard-notes|guard-stats|hub|lanes|loops|patches|reviews|servers|shell|teams|windows)\.test\.ts$/;
 
 export default defineConfig({

@@ -49,9 +49,25 @@ for (const name of ['CLAUDE_CONFIG_DIR', 'FORCHETTA_VAR', 'FORCHETTA_AGENT', 'CL
 // The status line of a home with a space is the command of the installer, in the PATH.
 env.Path = `${join(root, 'bin')};${claude ? resolve(claude, '..') : ''};${process.env.PATH}`;
 delete env.PATH;
-const node = process.execPath;
-const forchetta = (...args) => spawnSync(node, [join(root, 'dist', 'cli.js'), ...args], { encoding: 'utf8', env, cwd: project, timeout: 60_000 });
 const varDir = join(home, '.local', 'share', 'forchetta');
+const node = process.execPath;
+/** Whatever happens the daemon stops: the next run needs its port. */
+function finish() {
+  forchetta('daemon', 'stop');
+  const log = join(varDir, 'daemon.log');
+  if (bad > 0 && existsSync(log)) console.log(`\n# the log of the daemon\n${readFileSync(log, 'utf8').split('\n').slice(-40).join('\n')}`);
+  console.log(bad ? `\n${bad} FAILED` : '\nall ok');
+  process.exit(bad ? 1 : 0);
+}
+process.on('uncaughtException', (error) => {
+  check('the test itself', false, error.stack);
+  finish();
+});
+process.on('unhandledRejection', (error) => {
+  check('the test itself', false, error?.stack ?? error);
+  finish();
+});
+const forchetta = (...args) => spawnSync(node, [join(root, 'dist', 'cli.js'), ...args], { encoding: 'utf8', env, cwd: project, timeout: 60_000 });
 console.log(`# ${claude}: ${spawnSync(claude, ['--version'], { encoding: 'utf8' }).stdout?.trim()} · ${process.platform} ${process.arch} · node ${process.version}\n# home ${home}`);
 
 // ── setup ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -104,14 +120,13 @@ const send = (message) => ws.send(JSON.stringify(message));
 send({ type: 'listFolders', folder: home });
 check('the panel of the folders', Boolean(await until(() => messages.find((message) => message.type === 'folders' && message.folders.includes('my shop')), 5000)));
 
-async function start(prompt, mode = 'default') {
+async function start(prompt, mode = 'manual') {
   const from = messages.length;
   send({ type: 'spawn', cwd: project, prompt, mode });
   const answer = await until(() => messages.slice(from).find((message) => message.type === 'spawned'), 40_000);
   if (!answer?.ok) {
     check('a session starts from the page', false, answer?.error ?? 'no answer');
-    console.log(readFileSync(join(varDir, 'daemon.log'), 'utf8').split('\n').slice(-25).join('\n'));
-    process.exit(1);
+    finish();
   }
   return answer.agentId;
 }
@@ -155,7 +170,7 @@ check('the box knows the file', Boolean(await until(() => agents.get(a)?.filesCh
 const shared = join(project, 'src', 'Shared.ts');
 mkdirSync(join(project, 'src'));
 writeFileSync(shared, 'first\n');
-const b = await start(`WRITE ${slashes(shared)} and HOLD`, 'bypassPermissions');
+const b = await start(`WRITE ${slashes(shared)} and HOLD`, 'acceptEdits');
 check('another session changes a file, in the middle of its turn', Boolean(await until(() => api.holding() === 1)) && readFileSync(shared, 'utf8') !== 'first\n');
 const held = readFileSync(shared, 'utf8');
 /** A session in a plain terminal, not started by Forchetta. */
@@ -236,7 +251,4 @@ check('/exit ends a session, and its host goes', Boolean(await until(() => state
 const removed = forchetta('hooks', 'uninstall', '--yes');
 const left = JSON.parse(readFileSync(join(home, '.claude', 'settings.json'), 'utf8'));
 check('hooks uninstall leaves the settings as they were', removed.status === 0 && left.hooks === undefined && left.statusLine.command.includes('mine.js'), JSON.stringify(left));
-forchetta('daemon', 'stop');
-if (bad > 0) console.log(`\n# the log of the daemon\n${readFileSync(join(varDir, 'daemon.log'), 'utf8').split('\n').slice(-40).join('\n')}`);
-console.log(bad ? `\n${bad} FAILED` : '\nall ok');
-process.exit(bad ? 1 : 0);
+finish();

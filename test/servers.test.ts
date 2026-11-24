@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ownerOf, parseCwds, parseListening, parsePs, Servers } from '../src/daemon/servers.ts';
+import { ownerOf, parseCwds, parseListening, parsePs, Servers, unixLook } from '../src/daemon/servers.ts';
 import { type Agent, newAgent } from '../src/daemon/state.ts';
 
 // One dev server for a folder: a session about to start a second one is told the address of the first; a kill of a
@@ -16,17 +16,20 @@ function setup() {
   let now = 1_000_000;
   const agents: Agent[] = [];
   const calls: string[] = [];
+  const run = async (file: string, args: string[]): Promise<string | undefined> => {
+    calls.push([file.split('/').at(-1), ...args].join(' '));
+    if (file.endsWith('ps')) return PS;
+    if (file.endsWith('pgrep')) return args.includes('vite') ? '4242\n' : undefined;
+    if (args.includes('cwd')) return CWDS;
+    return LISTEN;
+  };
   const servers = new Servers({
     agents: () => agents,
     repoOf: (dir) => (dir === REPO || dir.startsWith(`${REPO}/`) ? REPO : undefined),
     enabled: () => true,
-    run: async (file, args) => {
-      calls.push([file.split('/').at(-1), ...args].join(' '));
-      if (file.endsWith('ps')) return PS;
-      if (file.endsWith('pgrep')) return args.includes('vite') ? '4242\n' : undefined;
-      if (args.includes('cwd')) return CWDS;
-      return LISTEN;
-    },
+    run,
+    // As on a Mac and on Linux, on Windows too: how it looks there is in windows.test.ts.
+    look: unixLook(run),
     now: () => now,
   });
   const add = (id: string, pid: number, cwd = REPO): Agent => {

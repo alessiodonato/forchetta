@@ -15,6 +15,8 @@ mkdir -p "$STAGE/scripts" "$STAGE/node_modules/node-pty/prebuilds"
 
 cp "$SRC/package.json" "$SRC/LICENSE" "$STAGE/"
 cp -R "$SRC/bin" "$SRC/config" "$SRC/native" "$STAGE/"
+# Those of Windows are in its own archive (scripts/package-windows.sh).
+rm -f "$STAGE"/bin/*.cmd
 cp "$SRC/scripts/build-app.sh" "$STAGE/scripts/"
 rsync -a --exclude '*.map' --exclude '/windows' "$SRC/dist/" "$STAGE/dist/"
 
