@@ -14,6 +14,7 @@ import {
   loopText,
   percentText,
   restLine,
+  SHELL_TITLE,
   shownSubagents,
   stalledFor,
   stallText,
@@ -43,6 +44,8 @@ import { canOpen, type Store } from './store.ts';
 
 interface Line {
   text: string;
+  /** More than the text, for its tooltip. */
+  title?: string;
   family?: ToolFamily;
   tone?: 'muted' | 'accent' | 'error';
 }
@@ -65,7 +68,11 @@ function actionLine(agent: Agent, now: number, limits: UsageLimits | undefined):
     case 'compacting':
       return { text: restLine(agent, now) ?? '' };
     default:
-      return { text: restLine(agent, now) ?? '', tone: 'muted' };
+      return {
+        text: restLine(agent, now) ?? '',
+        ...(agent.state === 'idle' && agent.backgroundShell ? { title: `${restLine(agent, now) ?? ''}\n${SHELL_TITLE}` } : {}),
+        tone: 'muted',
+      };
   }
 }
 
@@ -306,7 +313,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
             <ToolIcon family={line.family} />
           </span>
         )}
-        <span class="text" title={line.text}>
+        <span class="text" title={line.title ?? line.text}>
           {line.text}
         </span>
       </div>

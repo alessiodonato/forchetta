@@ -240,6 +240,50 @@ describe('sessions found without forchetta run', () => {
     expect(agent.state).toBe('idle');
   });
 
+  it('leaves a session at rest when only a shell of its runs in the background', () => {
+    started();
+    const agent = registry.agents.get(AGENT)!;
+    const read = (status: string): boolean => registry.reconcile([{ pid: 4242, sessionId: S1, status }], [], () => true);
+    registry.hook(ev('UserPromptSubmit', { prompt: 'vai' }));
+    registry.hook(ev('Stop'));
+    const completedAt = agent.completedAt;
+    clock += QUIET_MS;
+    expect(read('shell')).toBe(true);
+    expect(agent).toMatchObject({ state: 'idle', backgroundShell: true, completedAt });
+    expect(read('shell')).toBe(false);
+    // A /clear does not end the shell: it belongs to the process.
+    registry.hook(ev('SessionEnd', { reason: 'clear' }));
+    registry.hook(ev('SessionStart', { source: 'clear' }, S2), { pid: 4242 });
+    expect(agent).toMatchObject({ state: 'idle', backgroundShell: true });
+    // The shell ended.
+    registry.reconcile([{ pid: 4242, sessionId: S2, status: 'idle' }], [], () => true);
+    expect(agent).toMatchObject({ state: 'idle', backgroundShell: undefined });
+    // A turn the hooks did not tell still shows.
+    clock += QUIET_MS;
+    registry.reconcile([{ pid: 4242, sessionId: S2, status: 'busy' }], [], () => true);
+    expect(agent.state).toBe('working');
+  });
+
+  it('ends a turn stopped with Esc also when a shell runs on', () => {
+    started();
+    const agent = registry.agents.get(AGENT)!;
+    registry.hook(ev('UserPromptSubmit', { prompt: 'vai' }));
+    registry.reconcile([{ pid: 4242, sessionId: S1, status: 'shell' }], [], () => true);
+    expect(agent.state).toBe('working');
+    clock += QUIET_MS;
+    registry.reconcile([{ pid: 4242, sessionId: S1, status: 'shell' }], [], () => true);
+    expect(agent).toMatchObject({ state: 'idle', backgroundShell: true });
+    // The next turn says nothing of the shell, until the next reading.
+    registry.hook(ev('UserPromptSubmit', { prompt: 'ancora' }));
+    expect(agent).toMatchObject({ state: 'working', backgroundShell: undefined });
+  });
+
+  it('finds a session that rests with a shell in the background', () => {
+    fresh();
+    registry.reconcile([{ pid: 111, sessionId: S1, cwd: CWD, kind: 'interactive', status: 'shell' }], [], () => true);
+    expect(registry.list()[0]).toMatchObject({ state: 'idle', backgroundShell: true });
+  });
+
   it('follows a /clear the hooks missed, and ends processes that are gone', () => {
     fresh();
     registry.hook(ev('UserPromptSubmit', { prompt: 'vai' }));

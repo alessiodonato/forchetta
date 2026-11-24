@@ -284,6 +284,9 @@ export function folderText(cwd: string | undefined): string {
 /** How a session ended, in words; nothing when Claude Code says no more than that it ended. */
 const ENDED_WORDS: Record<string, string> = { prompt_input_exit: 'closed', logout: 'logged out', clear: 'cleared', resume: 'resumed elsewhere' };
 
+/** What a shell left in the background means for a session at rest: for the tooltips. */
+export const SHELL_TITLE = 'A command it started still runs in the background. In its terminal, /tasks lists it and can stop it.';
+
 /**
  * The line under the name, for a session that is not at work: it does not say again what the state says. Finished
  * and when, the folder of one that is starting or ready, why it compacts, the error in words, how it ended.
@@ -291,9 +294,10 @@ const ENDED_WORDS: Record<string, string> = { prompt_input_exit: 'closed', logou
 export function restLine(agent: Agent, now: number, limits?: UsageLimits): string | undefined {
   switch (agent.state) {
     case 'idle': {
-      if (agent.completedAt === undefined) return folderText(agent.cwd);
+      // The shell before the folder: a box cuts the end of a long path.
+      if (agent.completedAt === undefined) return `${agent.backgroundShell ? 'shell running · ' : ''}${folderText(agent.cwd)}`;
       const ago = agoShort(now - agent.completedAt);
-      return ago === 'now' ? 'finished just now' : `finished ${ago} ago`;
+      return `${ago === 'now' ? 'finished just now' : `finished ${ago} ago`}${agent.backgroundShell ? ' · shell running' : ''}`;
     }
     case 'starting':
       return folderText(agent.cwd);

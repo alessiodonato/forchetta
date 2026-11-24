@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { claudeConfigDir } from '../shared/paths.ts';
 import type { AgentsEntry } from './state.ts';
 
 // `claude agents --json`: the documented way to read the sessions of Claude Code from outside (Agent View,
@@ -25,7 +28,33 @@ export function parseAgents(stdout: string): AgentsEntry[] {
     }));
 }
 
-export function readClaudeAgents(claude: string): Promise<AgentsEntry[]> {
+/**
+ * Tells the sessions at work from those at rest with a shell still running in the background (a dev server, a
+ * command that outlived its time). `claude agents --json` calls both "busy"; the file Claude Code keeps for each
+ * process, sessions/<pid>.json, calls the second "shell" (seen with 2.1.328 and 2.1.331). The file is not
+ * documented: without it, or without that word in it, "busy" stays.
+ */
+export async function withShells(entries: readonly AgentsEntry[], sessionsDir: string): Promise<AgentsEntry[]> {
+  return Promise.all(
+    entries.map(async (entry) => {
+      if (entry.status !== 'busy' || entry.pid === undefined) return entry;
+      try {
+        const file: unknown = JSON.parse(await readFile(join(sessionsDir, `${entry.pid}.json`), 'utf8'));
+        const { pid, status } = (file ?? {}) as { pid?: unknown; status?: unknown };
+        return pid === entry.pid && status === 'shell' ? { ...entry, status: 'shell' } : entry;
+      } catch {
+        return entry;
+      }
+    }),
+  );
+}
+
+/** The sessions of Claude Code now, with the ones that only have a shell running told apart. */
+export async function readClaudeAgents(claude: string, sessionsDir = join(claudeConfigDir(), 'sessions')): Promise<AgentsEntry[]> {
+  return withShells(await listClaudeAgents(claude), sessionsDir);
+}
+
+function listClaudeAgents(claude: string): Promise<AgentsEntry[]> {
   return new Promise((resolve, reject) => {
     execFile(claude, ['agents', '--json'], { timeout: 20_000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => {
       if (error) return reject(error);

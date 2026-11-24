@@ -2,7 +2,7 @@ import { memo } from 'preact/compat';
 import { useRef, useState } from 'preact/hooks';
 import { type Agent, displayName, SESSION_COLOR_HEX, STATE_LABEL, type UsageLimits } from '../shared/agent.ts';
 import type { CrewSummary } from '../shared/crew.ts';
-import { conflictsTitle, cornerTime, crewUsage, errorLine, shortTokens, stalledFor, stallText, tokensTotal, usdText, waitingText } from '../shared/present.ts';
+import { conflictsTitle, cornerTime, crewUsage, errorLine, SHELL_TITLE, shortTokens, stalledFor, stallText, tokensTotal, usdText, waitingText } from '../shared/present.ts';
 import { useMotionAnchor } from './anchor.ts';
 import { heldBackText } from './Guard.tsx';
 import { PermissionButtons } from './Permission.tsx';
@@ -90,6 +90,11 @@ function CompactBoxView({ agent, now, open, onOpen, store, unseen, limits }: Pro
         {stalledFor(agent, now, stallMs) !== undefined && (
           <span class="tag conflict-tag" title={stallText(agent, stalledFor(agent, now, stallMs)!)}>
             ◷ stuck?
+          </span>
+        )}
+        {agent.state === 'idle' && agent.backgroundShell && (
+          <span class="tag" title={SHELL_TITLE}>
+            shell
           </span>
         )}
         {agent.heldBack && (

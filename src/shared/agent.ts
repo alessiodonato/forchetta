@@ -427,6 +427,8 @@ export interface Agent {
   completedAt?: number;
   /** When the turn it is on, or its last one, began: the prompt, or its first tool call after a pause. */
   turnStartedAt?: number;
+  /** Its turn is over, but a shell it started still runs in the background (Claude Code says so). */
+  backgroundShell?: boolean;
   compactTrigger?: string;
   beforeCompact?: AgentState;
   /** A SessionEnd with reason clear or resume: the SessionStart of the same process follows. */

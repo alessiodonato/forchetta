@@ -212,6 +212,7 @@ export class Registry {
               ? { kind: 'tmux', session: pane.session, paneId: pane.paneId }
               : { kind: 'readonly', reason: entry.kind === 'background' ? 'background' : 'fuori-tmux' },
             state: stateFromStatus(entry.status),
+            ...(entry.status === 'shell' ? { backgroundShell: true } : {}),
           },
           now,
         );
