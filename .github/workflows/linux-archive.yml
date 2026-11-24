@@ -138,7 +138,7 @@ jobs:
         run: |
           tar -tvzf first/*-linux.tar.gz | tee list.txt
           test -s list.txt
-          if grep -E 'darwin|win32|windows|\.cmd$|native/|\.swift|build-app|\.map$' list.txt; then exit 1; fi
+          if grep -E 'darwin|win32|dist/windows|\.cmd$|native/|\.swift|build-app|\.map$' list.txt; then exit 1; fi
           # Every file of root, none that others can write.
           if awk '{ print $1, $2 }' list.txt | grep -v -E '^[d-][rwx-]{4}-[rwx-]{2}-[x-] 0/0$'; then exit 1; fi
 

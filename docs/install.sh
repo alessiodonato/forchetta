@@ -120,7 +120,7 @@ main() {
   case $(uname -s) in
     Linux) ;;
     Darwin) fail "on a Mac install it with Homebrew:" "brew install alessiodonato/tap/forchetta" ;;
-    *) fail "on Windows Forchetta runs inside WSL 2: run this in a terminal of WSL" "see https://forchetta.dev/manual.html#windows" ;;
+    *) fail "this is for Linux, and for WSL; on Windows, in PowerShell:" "irm https://forchetta.dev/install.ps1 | iex" ;;
   esac
   case $(uname -m) in
     x86_64 | amd64) ARCH=x64 ;;
