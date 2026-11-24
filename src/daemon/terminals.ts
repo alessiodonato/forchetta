@@ -94,14 +94,16 @@ export class Terminals {
   private attach(ws: WebSocket, session: string, columns: number, rows: number): void {
     let pty: Pty;
     try {
-      pty = loadPty().spawn(this.options.tmux.bin, this.options.tmux.argv('attach-session', ['-t', session]), {
-        name: 'xterm-256color',
-        cols: columns,
-        rows,
-        cwd: process.env.HOME ?? '/',
-        env: clientEnv(),
-        encoding: null,
-      });
+      pty =
+        this.options.tmux.attach?.(session, columns, rows) ??
+        loadPty().spawn(this.options.tmux.bin, this.options.tmux.argv('attach-session', ['-t', session]), {
+          name: 'xterm-256color',
+          cols: columns,
+          rows,
+          cwd: process.env.HOME ?? '/',
+          env: clientEnv(),
+          encoding: null,
+        });
     } catch (error) {
       this.options.log(`terminal for ${session} not opened: ${String(error)}`, 'warn');
       ws.close(1011, 'tmux non avviato');

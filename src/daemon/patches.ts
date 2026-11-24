@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from '../shared/fspath.ts';
 import type { SessionEdit } from '../shared/agent.ts';
 import { ensurePrivateDir } from '../shared/paths.ts';
 import type { HookPayload } from './state.ts';

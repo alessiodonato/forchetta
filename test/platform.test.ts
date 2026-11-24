@@ -18,12 +18,13 @@ const temp = tempDir('platform');
 afterAll(() => temp.cleanup());
 
 describe('where Forchetta runs', () => {
-  it('a Mac, Linux, or the Linux of WSL; not Windows itself', () => {
+  it('a Mac, Windows, Linux, or the Linux of WSL', () => {
     expect(platformOf('darwin', {}, '21.6.0')).toBe('macos');
     expect(platformOf('linux', {}, '6.8.0-45-generic')).toBe('linux');
     expect(platformOf('linux', { WSL_DISTRO_NAME: 'Ubuntu' }, '6.8.0')).toBe('wsl');
     expect(platformOf('linux', {}, '5.15.153.1-microsoft-standard-WSL2')).toBe('wsl');
-    expect(platformOf('win32', {}, '10.0.22631')).toBeUndefined();
+    expect(platformOf('win32', {}, '10.0.22631')).toBe('windows');
+    expect(platformOf('freebsd', {}, '14.0')).toBeUndefined();
   });
 
   it('knows the folders of Windows, and the paths as Windows writes them', () => {

@@ -23,6 +23,20 @@ await build({
   banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
 });
 
+// For Windows: the host of a session and the hooks, each in a file of its own. Not in the archives of the others.
+await build({
+  entryPoints: { host: 'src/host/main.ts', 'forchetta-hooks': 'src/hook/main.ts' },
+  outdir: 'dist/windows',
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  external: ['node-pty'],
+  sourcemap: 'linked',
+  logLevel: 'warning',
+  banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
+});
+
 mkdirSync('dist/ui', { recursive: true });
 await build({
   entryPoints: { app: 'src/ui/main.tsx' },

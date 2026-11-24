@@ -1,5 +1,4 @@
-import { homedir } from 'node:os';
-import { isAbsolute, relative } from 'node:path';
+import { homedir, isAbsolute, relative } from '../shared/fspath.ts';
 import type { ToolFamily } from '../shared/agent.ts';
 
 // Short texts for the box, built from the hook input alone: "Edit src/api.ts", "Bash npm test", and the

@@ -36,7 +36,7 @@ const COMMANDS: Record<string, CommandHelp> = {
             'Run it again after every `brew upgrade forchetta`: it builds the app again only when it changed.',
           ]
         : [
-            'Checks Node.js, tmux, curl, the terminals and Claude Code, then adds the hooks to ~/.claude/settings.json: it',
+            `Checks Node.js, ${PLATFORM === 'windows' ? 'git' : 'tmux, curl'}, the terminals and Claude Code, then adds the hooks to ~/.claude/settings.json: it`,
             'shows what it changes and asks first (d shows the whole diff). Run it again after every upgrade.',
           ],
     options: [
@@ -49,23 +49,25 @@ const COMMANDS: Record<string, CommandHelp> = {
     examples: ['forchetta setup', 'forchetta setup --yes --app-dir /Applications'],
   },
   open: {
-    summary: PLATFORM === 'macos' ? 'Open the app' : 'Open Forchetta in a browser',
+    summary: PLATFORM === 'macos' ? 'Open the app' : PLATFORM === 'windows' ? 'Open the window of Forchetta' : 'Open Forchetta in a browser',
     usage: PLATFORM === 'macos' ? 'forchetta open' : 'forchetta open [--print]',
     about:
       PLATFORM === 'macos'
         ? ['Opens the app `forchetta setup` built.']
         : [
-            'Opens the page in a browser (in WSL, one of Windows: Edge or Chrome, in a window of its own). It starts the',
+            PLATFORM === 'windows'
+              ? 'Opens the window of Forchetta: the page in Edge or Chrome, with no tabs and no extensions. It starts the'
+              : 'Opens the page in a browser (in WSL, one of Windows: Edge or Chrome, in a window of its own). It starts the',
             'daemon when it is off. The address has a code good once, for two minutes.',
           ],
     ...(PLATFORM === 'macos' ? {} : { options: [{ name: '--print', text: 'Only print the address, to open by hand' }] }),
     examples: PLATFORM === 'macos' ? ['forchetta open'] : ['forchetta open', 'forchetta open --print'],
   },
   run: {
-    summary: 'Start Claude Code in tmux, where Forchetta shows it and sends it commands',
+    summary: PLATFORM === 'windows' ? 'Start Claude Code where Forchetta shows it and sends it commands' : 'Start Claude Code in tmux, where Forchetta shows it and sends it commands',
     usage: 'forchetta run claude [claude arguments]',
     about: [
-      'Starts Claude Code in the tmux of Forchetta and attaches this terminal to it: it looks and works like claude.',
+      `Starts Claude Code in ${PLATFORM === 'windows' ? 'a session' : 'the tmux'} of Forchetta and attaches this terminal to it: it looks and works like claude.`,
       'Detach with Ctrl-b d, or close the window: the session goes on, and Forchetta keeps showing it.',
     ],
     examples: ['forchetta run claude', 'forchetta run claude --continue', 'forchetta run claude "fix the failing test"'],
@@ -114,7 +116,7 @@ const COMMANDS: Record<string, CommandHelp> = {
     summary: 'Check the installation, say what to fix; --bundle writes a file for an issue',
     usage: 'forchetta doctor [--bundle] [--json]',
     about: [
-      'Node.js, the daemon and its version, the hooks and the status line, tmux, Claude Code and the version it was',
+      `Node.js, the daemon and its version, the hooks and the status line, ${PLATFORM === 'windows' ? 'the terminals' : 'tmux'}, Claude Code and the version it was`,
       'tested with, the optional features, files set aside, and the warnings of the log of the last day.',
     ],
     options: [
@@ -129,7 +131,7 @@ const COMMANDS: Record<string, CommandHelp> = {
     usage: 'forchetta daemon <start|stop|status|keepalive on|off>',
     actions: [
       { name: 'start', text: 'Start the daemon, unless it is running' },
-      { name: 'stop', text: 'Stop it: the Claude and tmux sessions go on' },
+      { name: 'stop', text: PLATFORM === 'windows' ? 'Stop it: the sessions go on' : 'Stop it: the Claude and tmux sessions go on' },
       { name: 'status', text: 'Whether it runs, for how long and with how many sessions (exit code 1 when not)' },
       { name: 'keepalive', args: 'on|off', text: PLATFORM === 'macos' ? 'Let macOS start it at login and again if it stops by mistake (a LaunchAgent)' : 'Only on a Mac, where macOS starts it at login and again if it stops by mistake' },
     ],

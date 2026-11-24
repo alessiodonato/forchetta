@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join, WINDOWS } from '../shared/fspath.ts';
 import type { CrewTemplate, RolePreset } from '../shared/crew.ts';
 import { DESCRIBE_MAX, DESCRIBE_SYSTEM, describePrompt, templateOfAnswer } from '../shared/describe.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
@@ -62,7 +62,8 @@ export function describeEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Proces
   for (const name of ['FORCHETTA_AGENT', 'FORCHETTA_VAR', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_PID']) delete out[name];
   out.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
   // The daemon of the app has the short PATH of the Finder: node next to the daemon, in case claude is a script.
-  out.PATH = [dirname(process.execPath), out.PATH ?? '/usr/bin:/bin:/usr/sbin:/sbin'].join(':');
+  // From the environment itself: in a copy of the one of Windows it is called Path.
+  out.PATH = [dirname(process.execPath), env.PATH ?? (WINDOWS ? '' : '/usr/bin:/bin:/usr/sbin:/sbin')].filter(Boolean).join(delimiter);
   return out;
 }
 
@@ -89,7 +90,7 @@ const runClaude =
   (claude: string): DescribeRun =>
   (args, input, options) =>
     new Promise((resolve) => {
-      const child = spawn(claude, args, { cwd: options.cwd, env: options.env, stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(claude, args, { cwd: options.cwd, env: options.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
       let stdout = '';
       let stderr = '';
       const timer = setTimeout(() => child.kill('SIGTERM'), options.timeoutMs);

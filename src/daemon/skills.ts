@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from '../shared/fspath.ts';
 import { safeRepoPath } from '../shared/skill-links.ts';
 import { type SkillInfo, skillById } from '../shared/skills.ts';
+import { gitProgram } from '../shared/windows.ts';
 
 // The skills of the agents of a team (shared/skills.ts), on this Mac. The first time a team uses a skill, its folder
 // is fetched from GitHub at the commit of the catalog, and only that folder: git with a sparse checkout, one commit,
@@ -19,11 +20,11 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const PLUGIN = 'forchetta-skills';
 
 export const gitRunner =
-  (git = 'git', timeoutMs = 90_000): Git =>
+  (git = gitProgram('git'), timeoutMs = 90_000): Git =>
   (args, cwd) =>
     new Promise((resolve) => {
       // core.fsmonitor=false: the configuration of a repository cannot make git run a program of its own.
-      execFile(git, ['-c', 'core.fsmonitor=false', ...args], { cwd, timeout: timeoutMs, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+      execFile(git, ['-c', 'core.fsmonitor=false', ...args], { cwd, timeout: timeoutMs, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, windowsHide: true }, (error, stdout, stderr) => {
         resolve(error ? { ok: false, error: (stderr || error.message).trim().split('\n').at(-1) ?? 'git failed' } : { ok: true, out: stdout });
       });
     });
@@ -160,7 +161,7 @@ export class SkillCache {
       join(root, '.claude-plugin', 'plugin.json'),
       `${JSON.stringify({ name: PLUGIN, version: '1.0.0', description: 'The skills Forchetta gave this agent of a team, from its catalog of open-source skills.' }, null, 2)}\n`,
     );
-    for (const id of ready) symlinkSync(this.folderOf(this.catalog(id)!), join(root, 'skills', id));
+    for (const id of ready) symlinkSync(this.folderOf(this.catalog(id)!), join(root, 'skills', id), 'junction');
     return root;
   }
 

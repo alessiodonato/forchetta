@@ -2,3 +2,10 @@
 bin/* text eol=lf
 *.sh text eol=lf
 config/tmux.conf text eol=lf
+
+# The scripts run on Linux and on a Mac also from a checkout on Windows, and the tests read these files as they are.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.woff2 binary

@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { homedir, join } from '../shared/fspath.ts';
 import { cleanTemplate, type CrewTemplate } from '../shared/crew.ts';
 import { MACHINE } from '../shared/machine.ts';
 import { skillById } from '../shared/skills.ts';

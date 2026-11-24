@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { delimiter, dirname } from 'node:path';
+import { delimiter, dirname, WINDOWS } from '../shared/fspath.ts';
 import type { ClaudeUpdateInfo } from '../shared/agent.ts';
 
 // The updates of Claude Code. When its automatic update fails, a session says "Auto-update failed · Run claude
@@ -76,13 +76,13 @@ export function updateOutcome(result: RunResult, before: string | undefined, aft
 
 /** The PATH of `claude update`: an install by npm needs npm, and the daemon started by the app has the short PATH of the Finder. */
 function updateEnv(claude: string): NodeJS.ProcessEnv {
-  const dirs = [dirname(claude), dirname(process.execPath), '/usr/local/bin', '/opt/homebrew/bin', ...(process.env.PATH ?? '').split(delimiter)];
+  const dirs = [dirname(claude), dirname(process.execPath), ...(WINDOWS ? [] : ['/usr/local/bin', '/opt/homebrew/bin']), ...(process.env.PATH ?? '').split(delimiter)];
   return { ...process.env, PATH: [...new Set(dirs.filter(Boolean))].join(delimiter), NO_COLOR: '1' };
 }
 
 function run(bin: string, args: string[], timeout: number): Promise<RunResult> {
   return new Promise((resolve) => {
-    const child = execFile(bin, args, { timeout, maxBuffer: 4 * 1024 * 1024, env: updateEnv(bin) }, (error, stdout, stderr) => {
+    const child = execFile(bin, args, { timeout, maxBuffer: 4 * 1024 * 1024, env: updateEnv(bin), windowsHide: true }, (error, stdout, stderr) => {
       const output = `${String(stdout)}\n${String(stderr)}`;
       if (!error) return resolve({ code: 0, output, timedOut: false });
       const failure = error as NodeJS.ErrnoException & { killed?: boolean; code?: number | string };

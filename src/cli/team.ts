@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from '../shared/fspath.ts';
 import { STATE_LABEL } from '../shared/agent.ts';
 import { api, apiAnswer, type DaemonInfo, runningDaemon } from '../shared/daemon-client.ts';
 import { UserError } from '../shared/errors.ts';

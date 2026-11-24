@@ -5,7 +5,7 @@ import { CREW_MAX_MEMBERS, CREW_NAME_MAX, type CrewSpec, type CrewTemplate, MEMB
 import { teamChecks } from '../shared/team-checks.ts';
 import { lastPart, MODELS, MODES, recentFolders } from './NewSession.tsx';
 import { useReturnFocus } from './focus.ts';
-import { CHOOSE_FOLDER, keyText } from './platform.ts';
+import { CHOOSE_FOLDER, keyText, placeText } from './platform.ts';
 import type { Store } from './store.ts';
 
 // A new team of agents (shared/crew.ts): a name, a folder, a lead (Claude or you) and its members. For each member
@@ -620,7 +620,7 @@ export function NewTeamPanel({ agents, store, onClose, onStudio }: { agents: rea
         <span class={`broadcast-note${state?.error || saving?.error ? ' error' : ''}`}>
           {state?.error ??
             saving?.error ??
-            (saving?.ok ? `Saved as the template "${name.trim()}": it is in "Start from".` : keyText('Each one starts in the tmux of Forchetta, in the folder of the team, knowing its role and its lead. ⌘↩ creates it.'))}
+            (saving?.ok ? `Saved as the template "${name.trim()}": it is in "Start from".` : placeText(keyText('Each one starts in the tmux of Forchetta, in the folder of the team, knowing its role and its lead. ⌘↩ creates it.'), store.state.system?.platform))}
         </span>
         <button type="button" class="quiet" title="Keep this team, without its folder, to start it again from 'Start from'" disabled={!name.trim() || members.some((draft) => !draft.name.trim())} onClick={saveTemplate}>
           Save as template

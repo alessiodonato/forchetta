@@ -1,20 +1,23 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { fromOutside, join, WINDOWS } from '../shared/fspath.ts';
 import { loadConfig, resolveTool } from '../shared/config.ts';
 import { TEMPLATE_TOOLS, TEMPLATE_TOOLS_ALLOWED } from '../shared/crew.ts';
 import { api, ensureDaemon } from '../shared/daemon-client.ts';
 import { UserError } from '../shared/errors.ts';
 import { mcpConfigFile, writeMcpConfig } from '../shared/mcp-config.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
+import { HostSessions } from '../shared/host-sessions.ts';
 import { Tmux, tmuxSessionName } from '../shared/tmux.ts';
-import { envFileText, paneEnv } from './pane-env.ts';
+import { attachHere } from './attach.ts';
+import { envFileText, hostEnv, paneEnv } from './pane-env.ts';
 import type { Style } from './style.ts';
 
 // `forchetta run claude [args]`: starts Claude Code in a session of the private tmux server and attaches this
 // terminal to it, so it looks and works like `claude`. Detaching (Ctrl-b d) or closing the window leaves the
-// session running: Forchetta keeps showing it, and /exit ends it as usual.
+// session running: Forchetta keeps showing it, and /exit ends it as usual. On Windows the host of the session does what
+// tmux does (shared/host-sessions.ts).
 
 export interface RunIO {
   stdout: (text: string) => void;
@@ -56,14 +59,14 @@ export async function runClaude(args: string[], io: RunIO): Promise<number> {
   // Already inside a Forchetta session (from its shell, say): a nested tmux would only get in the way.
   if (process.env.FORCHETTA_AGENT) return spawnSync(claude, args.slice(1), { stdio: 'inherit' }).status ?? 1;
 
-  const tmuxBin = resolveTool('tmux', config);
+  const tmuxBin = WINDOWS ? '' : resolveTool('tmux', config);
   const tmux = new Tmux(tmuxBin, paths.tmuxSocket, paths.tmuxConf);
   ensurePrivateDir(paths.varDir);
   ensurePrivateDir(paths.runDir);
 
   const id = randomUUID();
   const session = tmuxSessionName(id);
-  const cwd = process.cwd();
+  const cwd = fromOutside(process.cwd());
 
   let announced = false;
   try {
@@ -81,7 +84,7 @@ export async function runClaude(args: string[], io: RunIO): Promise<number> {
   }
 
   const envFile = join(paths.runDir, `${id}.env`);
-  writeFileSync(envFile, envFileText(paneEnv(process.env, id)), { mode: 0o600 });
+  if (!WINDOWS) writeFileSync(envFile, envFileText(paneEnv(process.env, id)), { mode: 0o600 });
   // The tools of templates, as for a session started from the app; the daemon takes the file away when it forgets
   // the session.
   const tools =
@@ -91,6 +94,18 @@ export async function runClaude(args: string[], io: RunIO): Promise<number> {
 
   const columns = process.stdout.columns || 120;
   const rows = process.stdout.rows || 40;
+  if (WINDOWS) {
+    // Its host starts claude, with the environment of this terminal; then this terminal is a window on it.
+    const sessions = new HostSessions({ node: resolveTool('node', config) });
+    const started = await sessions.start({ session, agentId: id, file: claude, args: [...tools, ...args.slice(1)], cwd, env: hostEnv(paneEnv(process.env, id), session), cols: columns, rows });
+    if ('error' in started) {
+      rmSync(mcpConfigFile(id), { force: true });
+      throw new UserError(`the session did not start: ${started.error}`, 'see `forchetta doctor`');
+    }
+    if (process.stdin.isTTY && process.stdout.isTTY) return attachHere(session, sessions);
+    io.stdout(`${io.style.mark('✓', 'green', `Session started (${session}).`)} This is not a terminal, so it is not attached here: you see it in Forchetta.\n`);
+    return 0;
+  }
   const created = spawnSync(
     tmuxBin,
     tmux.argv('new-session', ['-d', '-s', session, '-c', cwd, '-x', String(columns), '-y', String(rows), '--', '/bin/sh', paths.execScript, envFile, '--', claude, ...tools, ...args.slice(1)]),

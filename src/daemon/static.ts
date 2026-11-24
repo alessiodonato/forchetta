@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import type { ServerResponse } from 'node:http';
-import { extname, join, resolve, sep } from 'node:path';
+import { extname, join, resolve, sep } from '../shared/fspath.ts';
 
 // The files of the page, from dist/ui. Only files inside that folder, with a Content-Security-Policy that lets
 // the page load its own scripts and styles and talk to this daemon, and nothing else.

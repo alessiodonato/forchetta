@@ -1,13 +1,16 @@
 import { appendFileSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import type { Server as NetServer } from 'node:net';
 import type { Hub } from './hub.ts';
 import { isLocalHost, isOwnOrigin } from './origin.ts';
 import type { Permissions } from './permissions.ts';
 import type { Terminals } from './terminals.ts';
 import type { HookMeta, Registry, StatusContext, StatusLine } from './registry.ts';
 import type { Agent, HookPayload } from './state.ts';
+import { isFullPath } from '../shared/agent.ts';
 import { serveStatic } from './static.ts';
+import { ownPaths } from './windows-payload.ts';
 import { artifactOf } from '../shared/artifacts.ts';
 import { subagentResultOf } from './subagents.ts';
 import { type RateLimits, rateLimitsOf } from './limits.ts';
@@ -126,7 +129,8 @@ export function hookMeta(headers: IncomingHttpHeaders): HookMeta {
   const pid = Number(header(headers, 'x-forchetta-claude-pid') ?? header(headers, 'x-forchetta-pid'));
   if (Number.isInteger(pid) && pid > 1) meta.pid = pid;
   const pane = header(headers, 'x-forchetta-pane');
-  if (pane && /^%\d+$/.test(pane)) meta.pane = pane;
+  // %3 of tmux; on Windows the session itself.
+  if (pane && /^(?:%\d+|fk-[0-9a-f]{8})$/.test(pane)) meta.pane = pane;
   const agent = header(headers, 'x-forchetta-agent');
   if (agent && UUID.test(agent)) meta.agentId = agent.toLowerCase();
   return meta;
@@ -234,7 +238,11 @@ const isHookRoute = (path: string): boolean => path === HOOK_PATH || path === PE
  * only there: no other user or app can open that socket, nor be there in its place when the daemon is off, so
  * what a hook prints to Claude Code (a decision of the guard, the answer to a permission) comes from this daemon.
  */
-export type DaemonServer = Server & { hooks: Server };
+export type DaemonServer = Server & {
+  hooks: Server;
+  /** Windows: the pipe whose connections go to `hooks`, once they proved to be of Forchetta (shared/pipe.ts). */
+  pipe?: NetServer;
+};
 
 export function createDaemonServer(options: ServerOptions): DaemonServer {
   const { registry, token, log } = options;
@@ -252,11 +260,12 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
       log('hook: invalid JSON', 'warn');
       return undefined;
     }
-    const payload = slimPayload(raw);
-    if (!payload) {
+    const slim = slimPayload(raw);
+    if (!slim) {
       log('hook: input without hook_event_name or session_id', 'warn');
       return undefined;
     }
+    const payload = ownPaths(slim);
     const meta = hookMeta(headers);
     if (options.recordFile) {
       try {
@@ -308,7 +317,8 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
       const body = await readBody(req);
       let decision: object | undefined;
       try {
-        const payload = body ? slimPayload(JSON.parse(body.toString('utf8'))) : undefined;
+        const slim = body ? slimPayload(JSON.parse(body.toString('utf8'))) : undefined;
+        const payload = slim ? ownPaths(slim) : undefined;
         const agent = payload ? registry.lookup(payload, hookMeta(req.headers)) : undefined;
         if (payload && agent) decision = await options.guard?.(agent, payload);
       } catch (error) {
@@ -360,7 +370,7 @@ export function createDaemonServer(options: ServerOptions): DaemonServer {
           return send(res, 400, { error: 'invalid JSON' });
         }
         const { id, cwd, tmuxSession } = input;
-        if (typeof id !== 'string' || !UUID.test(id) || typeof cwd !== 'string' || !cwd.startsWith('/') || typeof tmuxSession !== 'string' || !/^fk-[0-9a-f]{8}$/.test(tmuxSession)) {
+        if (typeof id !== 'string' || !UUID.test(id) || typeof cwd !== 'string' || !isFullPath(cwd) || typeof tmuxSession !== 'string' || !/^fk-[0-9a-f]{8}$/.test(tmuxSession)) {
           return send(res, 400, { error: 'invalid fields' });
         }
         return send(res, 200, { agent: registry.register({ id: id.toLowerCase(), cwd, tmuxSession }) });

@@ -1,15 +1,16 @@
 import { existsSync } from 'node:fs';
 import { release } from 'node:os';
 
-// Where Forchetta runs: a Mac, or Linux, which on Windows is the one of WSL2. There Forchetta, tmux and Claude Code
-// are inside WSL, and the page is in a browser of Windows, which reaches the daemon on localhost. Windows itself,
-// without WSL, has no tmux: Forchetta does not run there.
+// Where Forchetta runs: a Mac, Windows, or Linux, the one of WSL2 too. On Windows there is no tmux: each session has a
+// host of its own (src/host/main.ts). In WSL Forchetta, tmux and Claude Code are inside WSL, and the page is in a browser
+// of Windows, which reaches the daemon on localhost.
 
-export type Platform = 'macos' | 'linux' | 'wsl';
+export type Platform = 'macos' | 'linux' | 'wsl' | 'windows';
 
-/** The platform of a process; undefined where Forchetta does not run (Windows without WSL, say). */
+/** The platform of a process; undefined where Forchetta does not run. */
 export function platformOf(platform: string = process.platform, env: NodeJS.ProcessEnv = process.env, kernel: string = release()): Platform | undefined {
   if (platform === 'darwin') return 'macos';
+  if (platform === 'win32') return 'windows';
   if (platform !== 'linux') return undefined;
   // The kernel of WSL says so: "5.15.153.1-microsoft-standard-WSL2", "4.4.0-19041-Microsoft" for WSL1.
   return env.WSL_DISTRO_NAME || /microsoft/i.test(kernel) ? 'wsl' : 'linux';
@@ -45,6 +46,7 @@ export function systemTool(name: string, exists: (path: string) => boolean = exi
 /** How to install a package on this system, for a hint: the package manager that is there. */
 export function installHint(name: string, find: (program: string) => string | undefined, platform: Platform | undefined = PLATFORM): string {
   if (platform === 'macos') return `brew install ${name}`;
+  if (platform === 'windows') return `winget install ${name}`;
   if (find('apt-get')) return `sudo apt install ${name}`;
   if (find('dnf')) return `sudo dnf install ${name}`;
   if (find('pacman')) return `sudo pacman -S ${name}`;

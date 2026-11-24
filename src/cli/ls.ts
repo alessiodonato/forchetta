@@ -4,6 +4,7 @@ import { activity, ago, cacheSoon, cacheText, controlLabel, hasEvents, percentTe
 import { code } from './help.ts';
 import type { RunIO } from './run.ts';
 import { plain, type Style } from './style.ts';
+import { WINDOWS } from '../shared/fspath.ts';
 
 // `forchetta ls`: the sessions the daemon knows, one line each, with their context (from the status line of Claude
 // Code, or estimated by arricurdAI) and cache (from arricurdAI). On a terminal each state has its symbol and, as in
@@ -69,7 +70,7 @@ export function renderList(agents: readonly Agent[], now: number, width: number,
         cell(contextCell(agent), fixed.context, high && !ended ? s.amber : quiet),
         cell(cache, fixed.cache, cacheSoon(agent, now) && !ended ? s.amber : cache === 'expired' ? s.dim : quiet),
         cell(hasEvents(agent) ? ago(now - agent.lastEvent.at) : '—', fixed.last, s.dim),
-        cell(controlLabel(agent), fixed.control, agent.control.kind === 'tmux' ? quiet : s.dim),
+        cell(WINDOWS && agent.control.kind === 'tmux' ? 'forchetta' : controlLabel(agent), fixed.control, agent.control.kind === 'tmux' ? quiet : s.dim),
         cell(agent.pid ? String(agent.pid) : '—', fixed.pid, s.dim),
         agent.sessionId ? s.dim(agent.sessionId.slice(0, 8)) : s.dim('—'),
       ]),

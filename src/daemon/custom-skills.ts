@@ -1,11 +1,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, fromOutside, homedir, isAbsolute, join, resolve, slashes, WINDOWS } from '../shared/fspath.ts';
 import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
-import { homedir } from 'node:os';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { ensurePrivateDir } from '../shared/paths.ts';
 import { customSkills, setCustomSkills, type SkillInfo, skillById, skillUsers } from '../shared/skills.ts';
 import { describeSkill, githubLink, safeRepoPath } from '../shared/skill-links.ts';
 import { bytesOf, type Git, gitRunner, type SkillCache, slug } from './skills.ts';
+import { isFullPath } from '../shared/agent.ts';
 
 export { describeSkill, githubLink, skillUsers };
 
@@ -83,7 +83,7 @@ export class CustomSkills {
     const text = source.trim();
     if (!text) return { ok: false, error: 'paste the link of a skill on GitHub, or choose its folder' };
     try {
-      const skill = text.startsWith('/') || text === '~' || text.startsWith('~/') ? this.fromFolder(text) : await this.fromGitHub(text);
+      const skill = isFullPath(WINDOWS ? slashes(text) : text) || text === '~' || text.startsWith('~/') ? this.fromFolder(text) : await this.fromGitHub(text);
       if ('error' in skill) return { ok: false, error: skill.error };
       if (skillById(skill.id)) return { ok: false, error: `there is a skill called ${skill.id} already` };
       setCustomSkills([...customSkills(), skill]);
@@ -96,7 +96,7 @@ export class CustomSkills {
   }
 
   private fromFolder(text: string): SkillInfo | { error: string } {
-    const folder = resolve(text === '~' || text.startsWith('~/') ? join(this.home, text.slice(1)) : text);
+    const folder = fromOutside(resolve(text === '~' || text.startsWith('~/') ? join(this.home, text.slice(1)) : text));
     if (!existsSync(folder) || !statSync(folder).isDirectory()) return { error: `${text} is not a folder` };
     const manifest = join(folder, 'SKILL.md');
     if (!existsSync(manifest)) return { error: `${text} has no SKILL.md: a skill is a folder with its SKILL.md` };

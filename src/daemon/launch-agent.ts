@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, userInfo } from 'node:os';
-import { dirname, join } from 'node:path';
+import { userInfo } from 'node:os';
+import { dirname, homedir, join } from '../shared/fspath.ts';
 import { paths } from '../shared/paths.ts';
 
 // The daemon kept alive by macOS (`forchetta daemon keepalive on`): a LaunchAgent that starts it at login and again

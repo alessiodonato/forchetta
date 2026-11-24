@@ -73,6 +73,10 @@ const fontLoaded: Promise<void> =
         },
       );
 
+/** The history of a terminal with no tmux, and the Windows it draws for. */
+const HOSTED_HISTORY = 5000;
+const WINDOWS_11 = 22000;
+
 /** How far the mouse moves with the button down before it is a drag, not a click: a click selects nothing. */
 const DRAG_PX = 5;
 
@@ -93,6 +97,8 @@ interface Props {
   /** Typing or clicking in the terminal. */
   onUse: () => void;
   onStatus: (status: TerminalStatus) => void;
+  /** Windows: no tmux between this terminal and the session. The history is here, and so is what you select. */
+  hosted?: boolean;
   /** Focus the terminal when the pane opens or is activated: when this changes, and is not -1 (see layout.ts). */
   focusKey: number;
   /**
@@ -104,7 +110,7 @@ interface Props {
   onSelectText?: (text: string, place: SelectionPlace) => void;
 }
 
-export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDragStart, onDragEnd, onSelectText }: Props) {
+export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, focusKey, onDragStart, onDragEnd, onSelectText }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const callbacks = useRef({ onUse, onStatus, onDragStart, onDragEnd, onSelectText });
@@ -130,7 +136,9 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
       macOptionIsMeta: false,
       macOptionClickForcesSelection: true,
       // The history is in tmux: the wheel scrolls it (mouse on). A second one here would only show a scrollbar.
-      scrollback: 0,
+      scrollback: hosted ? HOSTED_HISTORY : 0,
+      // The pseudo-terminal of Windows draws in its own way when it changes size.
+      ...(hosted ? { windowsPty: { backend: 'conpty' as const, buildNumber: WINDOWS_11 } } : {}),
       theme: terminalTheme(color, resolvedTheme()),
       // Links that the program marks itself (OSC 8): ⌘-click opens them, as in the Terminal.
       linkHandler: {
@@ -250,7 +258,8 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
       callbacks.current.onUse();
       if (event.button !== 0) return;
       // Selected by xterm.js in the page, not by tmux: with Option on a Mac, with Shift elsewhere.
-      press = { x: event.clientX, y: event.clientY, option: IS_MAC ? event.altKey : event.shiftKey, dragging: false };
+      // With no tmux, always: unless the program itself wants the mouse, and then Shift selects.
+      press = { x: event.clientX, y: event.clientY, option: hosted || (IS_MAC ? event.altKey : event.shiftKey), dragging: false };
       // Told at the press, before tmux can copy anything: the daemon notes where its buffers stand (daemon/selection.ts).
       if (!press.option) callbacks.current.onDragStart?.();
       window.addEventListener('mousemove', onMove, true);
@@ -297,7 +306,7 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
       term.dispose();
       terminal.current = null;
     };
-  }, [agentId]);
+  }, [agentId, hosted]);
 
   useEffect(() => {
     if (focusKey >= 0) terminal.current?.focus();

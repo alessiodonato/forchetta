@@ -1,3 +1,4 @@
+import { isFullPath } from './agent.ts';
 import { cleanBudget, CREW_NAME_MAX, type CrewTemplate, paramsIn, paramsUsed, VALUE_MAX } from './crew.ts';
 
 // A team that starts by itself: an automation. It is a template of a team (with a Claude lead), a folder, a way to
@@ -288,7 +289,7 @@ export function cleanAutomation(raw: unknown, templates: readonly CrewTemplate[]
   if ('error' in found) return found;
   const { template } = found;
   const cwd = typeof input.cwd === 'string' ? input.cwd.trim() : '';
-  if (!cwd.startsWith('/')) return { error: 'choose the folder of the team' };
+  if (!isFullPath(cwd)) return { error: 'choose the folder of the team' };
   const trigger = cleanTrigger(input.trigger);
   if ('error' in trigger) return trigger;
   const fields = fieldsOf(trigger.trigger);

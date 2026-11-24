@@ -88,6 +88,7 @@ export function Pane({ agent, area, focusKey, now, store, onClose, onUse }: Prop
         <TerminalView
           agentId={agent.id}
           color={color}
+          hosted={store.state.system?.platform === 'windows'}
           focusKey={focusKey}
           onUse={() => {
             onUse(agent.id);

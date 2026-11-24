@@ -1,4 +1,4 @@
-import { homedir } from 'node:os';
+import { homedir } from '../shared/fspath.ts';
 
 // How the CLI looks: the colors of the app, in the terminal. As in the app, amber, green and red mean a state and
 // nothing else; Claude orange marks what you can type. Colors (and the symbols that go with them) only on a

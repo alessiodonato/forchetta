@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { homedir, join } from '../shared/fspath.ts';
 import { type Config, which } from '../shared/config.ts';
+import { hookTargets } from '../shared/hook-targets.ts';
 import { claudeConfigDir, paths } from '../shared/paths.ts';
 import { installHint, PLATFORM, type Platform } from '../shared/platform.ts';
 import { isOurStatusLine, withForchettaHooks } from '../shared/settings.ts';
@@ -56,7 +56,7 @@ export function setupChecks(inputs: SystemInputs, platform: Platform | undefined
   if (settings) {
     try {
       hooksOk =
-        withForchettaHooks(settings, { port: inputs.config.port, hookScript: paths.hookScript, permissionScript: paths.permissionScript, guardScript: paths.guardScript }).changes.length === 0;
+        withForchettaHooks(settings, hookTargets(inputs.config)).changes.length === 0;
     } catch {
       hooksOk = false;
     }
@@ -77,13 +77,14 @@ export function setupChecks(inputs: SystemInputs, platform: Platform | undefined
       detail: statusLine ? 'gives the context, the cost and the limits of each session' : 'without it, context and cost come from arricurdAI, if you use it',
       ...(statusLine ? {} : { fix: 'forchetta hooks install' }),
     },
-    {
-      id: 'tmux',
+    // Windows has none: each session has a host of its own, with the terminals below.
+    ...(platform === 'windows' ? [] : [{
+      id: 'tmux' as const,
       ok: Boolean(inputs.tmux),
       label: 'tmux',
       detail: inputs.tmux ? tilde(inputs.tmux) : 'not found: the sessions cannot open in the app',
       ...(inputs.tmux ? {} : { fix: installHint('tmux', which, platform) }),
-    },
+    }]),
     // Compiled for this computer or not: on a Mac it comes with Forchetta.
     ...(inputs.ptyProblem ? [{ id: 'terminals' as const, ok: false, label: 'Terminals', detail: `they cannot open: ${inputs.ptyProblem}`, fix: 'forchetta setup' }] : []),
     {

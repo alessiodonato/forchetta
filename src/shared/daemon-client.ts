@@ -78,7 +78,7 @@ export async function ensureDaemon(node: string, waitMs = 5000): Promise<DaemonI
   }
   // The daemon writes and rotates its log itself (daemon/log.ts); what a crash prints on stderr goes there too.
   const out = openSync(paths.log, 'a', 0o600);
-  const child = spawn(node, [paths.daemonJs], { detached: true, stdio: ['ignore', 'ignore', out], env: daemonEnv(process.env), cwd: paths.varDir });
+  const child = spawn(node, [paths.daemonJs], { detached: true, stdio: ['ignore', 'ignore', out], env: daemonEnv(process.env), cwd: paths.varDir, windowsHide: true });
   child.unref();
   closeSync(out);
   const deadline = Date.now() + waitMs;

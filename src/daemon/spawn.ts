@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir, userInfo } from 'node:os';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { envFileText, paneEnv } from '../cli/pane-env.ts';
+import { userInfo } from 'node:os';
+import { basename, dirname, fromGitBash, fromOutside, homedir, isAbsolute, join, resolve } from '../shared/fspath.ts';
+import { envFileText, hostEnv, paneEnv } from '../cli/pane-env.ts';
 import type { TeamInfo } from '../shared/agent.ts';
 import { type AgentTools, sessionTools } from '../shared/agent-tools.ts';
 import { MODELS, MODES, TEAM_MCP, TEMPLATE_TOOLS, TEMPLATE_TOOLS_ALLOWED } from '../shared/crew.ts';
 import { type TeamMcpServer, writeMcpConfig } from '../shared/mcp-config.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import { fromWindowsPath, PLATFORM, type Platform } from '../shared/platform.ts';
+import { HostSessions } from '../shared/host-sessions.ts';
 import { type Tmux, tmuxSessionName } from '../shared/tmux.ts';
 import type { Registry } from './registry.ts';
 import { SESSION_ID } from '../shared/reopen.ts';
@@ -77,13 +78,16 @@ export interface SpawnOptions {
   teamMcp?: TeamMcpServer;
 }
 
-/** A folder as typed: ~ for the home, and absolute; in WSL, also as Windows writes it (C:\Users\me\shop). */
+/** A folder as typed: ~ for the home, and absolute; in WSL, also as Windows writes it (C:\Users\me\shop). On Windows as the disk has it. */
 export function folderOf(input: string, platform: Platform | undefined = PLATFORM): string | undefined {
   const typed = input.trim();
   if (!typed) return undefined;
   const text = (platform === 'wsl' ? fromWindowsPath(typed) : undefined) ?? typed;
-  const expanded = text === '~' ? homedir() : text.startsWith('~/') ? join(homedir(), text.slice(2)) : text;
-  return isAbsolute(expanded) ? resolve(expanded) : undefined;
+  const expanded = text === '~' ? homedir() : text.startsWith('~/') || (platform === 'windows' && text.startsWith('~\\')) ? join(homedir(), text.slice(2)) : text;
+  if (!isAbsolute(expanded)) return undefined;
+  // "\\folder" is of the drive at hand, which here is no one's.
+  if (platform === 'windows') return /^(?:[A-Za-z]:|[\\/]{2})/.test(fromGitBash(expanded)) ? fromOutside(expanded) : undefined;
+  return resolve(expanded);
 }
 
 /** Whether a folder is inside a git working tree: .git in it or in a folder above. */
@@ -142,8 +146,9 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   const chosen = claudeArgs(input);
   if ('error' in chosen) return { ok: false, error: chosen.error };
   if (input.worktree && !inGitRepo(cwd)) return { ok: false, error: 'for a worktree the folder must be in a git repository' };
+  const onHost = tmux instanceof HostSessions;
   const shell = options.shell ?? (userInfo().shell || (PLATFORM === 'macos' ? '/bin/zsh' : '/bin/bash'));
-  const command = startCommand(shell, paths.startScript, claude, chosen.args);
+  const command = onHost ? [] : startCommand(shell, paths.startScript, claude, chosen.args);
   if (!command) return { ok: false, error: 'the path of Forchetta or of claude contains a quote: the session cannot start from here' };
 
   const id = randomUUID();
@@ -169,6 +174,7 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
   }
   if (own.disallowed.length > 0) env.FORCHETTA_DISALLOWED_TOOLS = own.disallowed.join('\n');
   if (own.strict) env.FORCHETTA_STRICT_MCP = '1';
+  if (tmux instanceof HostSessions) return spawnOnHost(options, tmux, { id, session, cwd, claude, args: chosen.args, env, prompt, worktree: Boolean(input.worktree) }, extras);
   writeFileSync(envFile, envFileText(env), { mode: 0o600 });
 
   const agent = registry.register({ id, cwd, tmuxSession: session });
@@ -182,9 +188,19 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
     log(`new session in ${cwd} not started: ${created.stderr.trim()}`, 'warn');
     return { ok: false, error: `tmux did not create the session: ${created.stderr.trim() || `code ${created.code}`}` };
   }
-  // claude can end at once, with code 0, and its pane with it: its message would be lost. Watch the pane until the
-  // session says hello (SessionStart) or a few seconds pass; a folder never trusted shows its dialog first, and no
-  // hook runs before it is answered: that is fine too.
+  const gone = await watchStart(options, id, session, cwd, Boolean(input.worktree));
+  if (gone) return gone;
+  log(`new session from the app: ${basename(cwd)} (${session})${chosen.args.length ? ` ${chosen.args.join(' ')}` : ''}${prompt ? ', with a first prompt' : ''}`);
+  return { ok: true, agentId: id };
+}
+
+/**
+ * claude can end at once, with code 0, and its pane with it: its message would be lost. Watch the pane until the
+ * session says hello (SessionStart) or a few seconds pass; a folder never trusted shows its dialog first, and no
+ * hook runs before it is answered: that is fine too.
+ */
+async function watchStart(options: SpawnOptions, id: string, session: string, cwd: string, worktree: boolean): Promise<SpawnResult | undefined> {
+  const { tmux, registry, log } = options;
   const watchMs = options.watchMs ?? 6000;
   for (let waited = 0; waited < watchMs; waited += 200) {
     if (registry.agents.get(id)?.sessionId) break;
@@ -197,13 +213,76 @@ export async function spawnSession(options: SpawnOptions, input: { cwd: unknown;
       }
       return {
         ok: false,
-        error: input.worktree
+        error: worktree
           ? 'Claude exited at once. For a worktree, Claude Code wants a folder you already trust: open it once without a worktree, accept the trust dialog and try again.'
           : 'Claude exited right after it started: open the folder with claude from the Terminal to see the message.',
       };
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  log(`new session from the app: ${basename(cwd)} (${session})${chosen.args.length ? ` ${chosen.args.join(' ')}` : ''}${prompt ? ', with a first prompt' : ''}`);
-  return { ok: true, agentId: id };
+  return undefined;
+}
+
+/**
+ * Windows: no login shell and no scripts between the host of the session and claude. The environment is that of the
+ * daemon; what bin/forchetta-start reads from it elsewhere becomes the arguments of claude here.
+ */
+async function spawnOnHost(
+  options: SpawnOptions,
+  sessions: HostSessions,
+  start: { id: string; session: string; cwd: string; claude: string; args: string[]; env: Record<string, string>; prompt: string; worktree: boolean },
+  extras: SpawnExtras,
+): Promise<SpawnResult> {
+  const { registry, log } = options;
+  const { env, args } = claudeStart(start.args, start.env);
+  const agent = registry.register({ id: start.id, cwd: start.cwd, tmuxSession: start.session });
+  if (extras.team) {
+    agent.team = { ...extras.team };
+    registry.touch(agent);
+  }
+  const started = await sessions.start({ session: start.session, agentId: start.id, file: start.claude, args, cwd: start.cwd, env: hostEnv(env, start.session), cols: 200, rows: 50 });
+  if ('error' in started) {
+    log(`new session in ${start.cwd} not started: ${started.error}`, 'warn');
+    markEnded(agent, 'not started', Date.now());
+    registry.forget(start.id);
+    return { ok: false, error: `the session did not start: ${started.error}` };
+  }
+  const gone = await watchStart(options, start.id, start.session, start.cwd, start.worktree);
+  if (gone) return gone;
+  log(`new session from the app: ${basename(start.cwd)} (${start.session})${start.args.length ? ` ${start.args.join(' ')}` : ''}${start.prompt ? ', with a first prompt' : ''}`);
+  return { ok: true, agentId: start.id };
+}
+
+/** What bin/forchetta-start does with the variables of Forchetta: the arguments of claude, and the variables left. */
+export function claudeStart(args: readonly string[], env: Readonly<Record<string, string>>): { args: string[]; env: Record<string, string> } {
+  const left: Record<string, string> = { ...env };
+  const take = (name: string): string => {
+    const value = left[name] ?? '';
+    delete left[name];
+    return value;
+  };
+  const rules = (text: string): string[] => text.split('\n').filter(Boolean);
+  const prompt = take('FORCHETTA_PROMPT');
+  const system = take('FORCHETTA_SYSTEM_PROMPT');
+  const name = take('FORCHETTA_NAME');
+  const plugin = take('FORCHETTA_PLUGIN_DIR');
+  const mcp = take('FORCHETTA_MCP_CONFIG');
+  const strict = take('FORCHETTA_STRICT_MCP');
+  const allowed = rules(take('FORCHETTA_ALLOWED_TOOLS'));
+  const denied = rules(take('FORCHETTA_DISALLOWED_TOOLS'));
+  return {
+    env: left,
+    args: [
+      ...args,
+      ...(system ? ['--append-system-prompt', system] : []),
+      ...(name ? ['--name', name] : []),
+      ...(plugin ? ['--plugin-dir', plugin] : []),
+      ...(mcp ? ['--mcp-config', mcp] : []),
+      ...(strict ? ['--strict-mcp-config'] : []),
+      ...(allowed.length > 0 ? ['--allowedTools', ...allowed] : []),
+      // On Windows Claude Code has two tools for commands: what may not run in one may not run in the other.
+      ...(denied.length > 0 ? ['--disallowedTools', ...denied.flatMap((rule) => (/^Bash(?:\(|$)/.test(rule) ? [rule, rule.replace(/^Bash/, 'PowerShell')] : [rule]))] : []),
+      ...(prompt ? ['--', prompt] : []),
+    ],
+  };
 }

@@ -36,3 +36,6 @@ export function keyText(text: string, mac = IS_MAC): string {
     })
     .replace(/↩/g, 'Enter');
 }
+
+/** On Windows there is no tmux: a session is of Forchetta or not. */
+export const placeText = (text: string, platform: string | undefined): string => (platform === 'windows' ? text.replace('the tmux of Forchetta', 'Forchetta').replace('Outside Forchetta:', 'Not started by Forchetta:') : text);

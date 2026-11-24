@@ -87,7 +87,7 @@ export function readArricurdaiStatus(command: readonly string[]): Promise<{ sess
   const [bin, ...prefix] = command;
   if (!bin) return Promise.reject(new Error('empty arricurdAI command'));
   return new Promise((resolve, reject) => {
-    execFile(bin, [...prefix, 'status', '--json', '--hours', '24', '--limit', '200'], { timeout: 20_000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => {
+    execFile(bin, [...prefix, 'status', '--json', '--hours', '24', '--limit', '200'], { timeout: 20_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
       if (error) return reject(error);
       try {
         const text = String(stdout);
@@ -191,7 +191,7 @@ export class ArricurdaiNotes {
     const [bin, ...prefix] = this.command ?? [];
     if (!bin) return Promise.reject(new Error('arricurdAI not found'));
     return new Promise((resolve, reject) => {
-      const child = execFile(bin, [...prefix, ...args], { timeout: 15_000, maxBuffer: 1024 * 1024 }, (error, stdout) => (error ? reject(error) : resolve(String(stdout))));
+      const child = execFile(bin, [...prefix, ...args], { timeout: 15_000, maxBuffer: 1024 * 1024, windowsHide: true }, (error, stdout) => (error ? reject(error) : resolve(String(stdout))));
       child.stdin?.end();
     });
   }

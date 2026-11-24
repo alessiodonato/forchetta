@@ -16,7 +16,7 @@ mkdir -p "$STAGE/scripts" "$STAGE/node_modules/node-pty/prebuilds"
 cp "$SRC/package.json" "$SRC/LICENSE" "$STAGE/"
 cp -R "$SRC/bin" "$SRC/config" "$SRC/native" "$STAGE/"
 cp "$SRC/scripts/build-app.sh" "$STAGE/scripts/"
-rsync -a --exclude '*.map' "$SRC/dist/" "$STAGE/dist/"
+rsync -a --exclude '*.map' --exclude '/windows' "$SRC/dist/" "$STAGE/dist/"
 
 # node-pty: its code and its binaries for macOS; not its sources, nor its binaries for Windows.
 PTY=$(cd "$SRC/node_modules/node-pty" && pwd -P)

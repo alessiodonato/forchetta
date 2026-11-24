@@ -48,6 +48,59 @@ jobs:
       - name: Build the app
         run: pnpm build:app
 
+  # Windows itself, with no WSL: the hosts of the sessions in place of tmux, and the real Claude Code with a stand-in for its
+  # API (no account, no secret), with Git Bash and without.
+  windows:
+    name: Tests and build on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck and tests
+        run: pnpm test
+
+      - name: Build the CLI, the daemon and the page
+        if: always()
+        run: pnpm build
+
+      - name: Install Claude Code
+        if: always()
+        run: |
+          irm https://claude.ai/install.ps1 | iex
+          "$env:USERPROFILE\.local\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: End to end, with Git Bash
+        if: always()
+        run: node scripts/dev/windows-e2e.mjs
+
+      - name: End to end, without Git Bash
+        if: always()
+        run: |
+          # git stays, its bash goes.
+          Rename-Item 'C:\Program Files\Git\bin\bash.exe' 'bash-away.exe'
+          Rename-Item 'C:\Program Files\Git\usr\bin\bash.exe' 'bash-away.exe'
+          try { node scripts/dev/windows-e2e.mjs } finally {
+            Rename-Item 'C:\Program Files\Git\bin\bash-away.exe' 'bash.exe'
+            Rename-Item 'C:\Program Files\Git\usr\bin\bash-away.exe' 'bash.exe'
+          }
+
   # Linux is also what Forchetta runs on in Windows, inside WSL 2. node-pty is compiled here: it ships no binaries for Linux.
   linux:
     name: Tests and build on Linux

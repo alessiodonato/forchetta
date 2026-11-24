@@ -51,7 +51,7 @@ export function FolderPicker({ store }: { store: Store }) {
         <ul class="folder-list" aria-label="Folders">
           {list?.folders.map((name) => (
             <li key={name}>
-              <button type="button" onClick={() => go(`${list.path === '/' ? '' : list.path}/${name}`)}>
+              <button type="button" onClick={() => go(`${list.path.replace(/\/$/, '')}/${name}`)}>
                 {name}
               </button>
             </li>

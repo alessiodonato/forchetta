@@ -1,22 +1,24 @@
 import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
-import { dirname, join } from 'node:path';
+import { dirname, homedir, join, WINDOWS } from '../shared/fspath.ts';
 import { type Config, detectArricurdai, loadConfig, saveConfig, which } from '../shared/config.ts';
 import { UserError } from '../shared/errors.ts';
+import { hookTargets, statusTargets } from '../shared/hook-targets.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, stablePath } from '../shared/paths.ts';
 import {
   formatSettings,
   isOurStatusLine,
   UnexpectedSettings,
   withForchettaHooks,
+  type StatusLinePlan,
   withForchettaStatusLine,
   withoutForchettaHooks,
   withoutForchettaStatusLine,
 } from '../shared/settings.ts';
 import { code } from './help.ts';
 import type { RunIO } from './run.ts';
+import { windowsGit } from '../shared/windows.ts';
 import { paintDiff, type Style, tildify } from './style.ts';
 
 // `forchetta hooks install|uninstall`: the only commands that change a file outside the Forchetta folder,
@@ -31,6 +33,16 @@ export interface HooksOptions {
   diff: boolean;
 }
 
+/** On Windows the diff is that of git, when there is one: without it the list of the changes has to do. */
+function gitDiff(a: string, b: string, label: string): string {
+  const git = windowsGit();
+  if (!git) return '(git is not installed: no diff to show)\n';
+  const result = spawnSync(git, ['diff', '--no-index', '--no-color', '--no-ext-diff', '--', a, b], { encoding: 'utf8', windowsHide: true });
+  const lines = result.stdout.split('\n');
+  const from = lines.findIndex((line) => line.startsWith('@@'));
+  return from < 0 ? '' : [`--- ${label} (now)`, `+++ ${label} (after)`, ...lines.slice(from)].join('\n');
+}
+
 /** A unified diff of two texts, from the diff of the system. */
 export function unifiedDiff(before: string, after: string, label: string): string {
   ensurePrivateDir(paths.tmpDir);
@@ -39,6 +51,7 @@ export function unifiedDiff(before: string, after: string, label: string): strin
   writeFileSync(a, before, { mode: 0o600 });
   writeFileSync(b, after, { mode: 0o600 });
   try {
+    if (WINDOWS) return gitDiff(a, b, label);
     const result = spawnSync('/usr/bin/diff', ['-u', '--label', `${label} (now)`, '--label', `${label} (after)`, a, b], { encoding: 'utf8' });
     return result.stdout;
   } finally {
@@ -106,7 +119,8 @@ function withToolPaths(config: Config, settingsText: string | undefined): Config
     paths: {
       // node of Homebrew lives in a folder per version: its opt path survives `brew upgrade node`.
       node: stablePath(config.paths.node ?? process.execPath),
-      tmux: config.paths.tmux ?? which('tmux'),
+      // No tmux on Windows: each session has a host of its own.
+      ...(WINDOWS ? {} : { tmux: config.paths.tmux ?? which('tmux') }),
       claude: config.paths.claude ?? which('claude'),
     },
     arricurdai: config.arricurdai ?? detectArricurdai(settingsText),
@@ -132,13 +146,10 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
   let saveCommand: string | null | undefined;
   try {
     if (action === 'install') {
-      const hooks = withForchettaHooks(settings as Record<string, unknown>, {
-        port: config.port,
-        hookScript: paths.hookScript,
-        permissionScript: paths.permissionScript,
-        guardScript: paths.guardScript,
-      });
-      const status = withForchettaStatusLine(hooks.settings, { port: config.port, statusScript: paths.statusScript });
+      const hooks = withForchettaHooks(settings as Record<string, unknown>, hookTargets(config));
+      const line = statusTargets(config);
+      const status: StatusLinePlan = line ? withForchettaStatusLine(hooks.settings, line) : { settings: hooks.settings, changes: [] };
+      if (!line) io.stdout(`${io.style.mark('▲', 'amber', 'The status line stays as it is: forchetta-statusline.cmd is not in the PATH of this terminal. Open a new one and run this again.')}\n`);
       plan = { settings: status.settings, changes: [...hooks.changes, ...status.changes] };
       // Only when the status line becomes ours now: a second install keeps the command saved the first time.
       if (status.changes.length > 0 && !isOurStatusLine(hooks.settings.statusLine)) saveCommand = status.original ?? null;

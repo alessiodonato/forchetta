@@ -1,5 +1,5 @@
 import { closeSync, existsSync, fsyncSync, linkSync, openSync, readFileSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join } from './fspath.ts';
 
 // The files where Forchetta keeps what you made (templates, presets, skills, teams, the state of the sessions):
 // written whole or not at all, the version before kept as <file>.bak, and never written over when they cannot be

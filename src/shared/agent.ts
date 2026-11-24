@@ -475,6 +475,9 @@ export interface Agent {
   endReason?: string;
 }
 
+/** A full path as Forchetta keeps it: /Users/me/shop, on Windows C:/Users/me/shop or //server/share. */
+export const isFullPath = (path: string): boolean => path.startsWith('/') || /^[A-Za-z]:\//.test(path);
+
 /** The last part of a path, without Node: the name of the project. */
 export function projectOf(cwd: string | undefined): string {
   if (!cwd) return '?';

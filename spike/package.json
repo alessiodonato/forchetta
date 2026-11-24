@@ -1,1 +1,0 @@
-{ "name": "spike", "private": true, "type": "module", "dependencies": { "node-pty": "1.1.0", "@xterm/headless": "6.0.0", "@xterm/addon-serialize": "0.14.0" } }

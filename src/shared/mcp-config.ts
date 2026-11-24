@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join } from './fspath.ts';
 import { TEAM_MCP } from './crew.ts';
 import { ensurePrivateDir, paths } from './paths.ts';
 

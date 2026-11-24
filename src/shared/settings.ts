@@ -12,6 +12,9 @@
 // PreToolUse has a second hook of Forchetta, in a group of its own with a matcher: bin/forchetta-guard, before the
 // tools that write files or run commands. Claude waits for it: the guard can stop the tool (daemon/guard.ts). For
 // every other tool nothing waits.
+//
+// On Windows there may be no shell to run those scripts: one program (src/hook/main.ts) does what they do, started by
+// Claude Code with its arguments and no shell ("args"). The guard is also before the PowerShell tool.
 
 type Json = Record<string, unknown>;
 
@@ -45,8 +48,12 @@ export const GUARD_EVENT = 'PreToolUse';
 export const GUARD_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash'] as const;
 /** Claude Code reads the matcher as a regular expression, not anchored: anchored here, or "Edit" would match "NotebookEdit" and any tool whose name holds it. */
 export const GUARD_MATCHER = `^(${GUARD_TOOLS.join('|')})$`;
+/** On Windows Claude Code has one more tool that runs commands, and only that without Git Bash. */
+export const WINDOWS_GUARD_MATCHER = `^(${[...GUARD_TOOLS, 'PowerShell'].join('|')})$`;
 /** The script gives up on the daemon after 1 s; past this, Claude Code lets the tool go on by itself. */
 export const GUARD_TIMEOUT_S = 3;
+/** On Windows starting a program takes longer, and so does looking at the processes before a kill. */
+export const WINDOWS_TIMEOUT_S = 6;
 
 export interface HookTargets {
   port: number;
@@ -56,11 +63,15 @@ export interface HookTargets {
   permissionScript: string;
   /** Full path of bin/forchetta-guard. */
   guardScript: string;
+  /** Windows: node and the program of the hooks, in place of the scripts. */
+  windows?: { node: string; hookJs: string };
 }
 
 /** The http hooks of the first version of Forchetta: still recognised, so that install replaces them. */
 const OUR_URL = /^http:\/\/127\.0\.0\.1:\d+\/forchetta\/hook$/;
 const OUR_COMMAND = /(?:^|[/"'\s])forchetta-(hook|permission|guard)["']?(?:\s|$)/;
+/** The program of Windows: in the arguments of a hook, or in the command of a status line. */
+const OUR_PROGRAM = /(?:^|[\\/"'\s])forchetta-hooks\.js["']?(?:\s|$)/;
 
 /** Which script of Forchetta a hook runs. */
 type Kind = 'hook' | 'permission' | 'guard';
@@ -74,6 +85,11 @@ const isObject = (value: unknown): value is Json => typeof value === 'object' &&
 function kindOf(hook: Json): Kind | undefined {
   if (hook.type === 'http') return typeof hook.url === 'string' && OUR_URL.test(hook.url) ? 'hook' : undefined;
   if (hook.type !== 'command' || typeof hook.command !== 'string') return undefined;
+  if (Array.isArray(hook.args)) {
+    const [script, kind] = hook.args as unknown[];
+    const known = kind === 'hook' || kind === 'permission' || kind === 'guard' ? kind : undefined;
+    return typeof script === 'string' && OUR_PROGRAM.test(script) ? known : undefined;
+  }
   return OUR_COMMAND.exec(hook.command)?.[1] as Kind | undefined;
 }
 
@@ -91,14 +107,15 @@ export interface WantedHook {
 
 /** The hooks of Forchetta for one event, in the order they go in. */
 export function wantedHooks(event: string, targets: HookTargets): WantedHook[] {
-  if (event === PERMISSION_EVENT) {
-    return [{ kind: 'permission', hook: { type: 'command', command: `${quoteIfNeeded(targets.permissionScript)} ${targets.port}`, timeout: PERMISSION_TIMEOUT_S } }];
-  }
-  const command = `${quoteIfNeeded(targets.hookScript)} ${targets.port}`;
+  const { windows } = targets;
+  const script: Record<Kind, string> = { hook: targets.hookScript, permission: targets.permissionScript, guard: targets.guardScript };
+  const command = (kind: Kind): Json =>
+    windows ? { type: 'command', command: windows.node, args: [windows.hookJs, kind, String(targets.port)] } : { type: 'command', command: `${quoteIfNeeded(script[kind])} ${targets.port}` };
+  if (event === PERMISSION_EVENT) return [{ kind: 'permission', hook: { ...command('permission'), timeout: PERMISSION_TIMEOUT_S } }];
   const sync = (SYNC_EVENTS as readonly string[]).includes(event);
-  const wanted: WantedHook[] = [{ kind: 'hook', hook: sync ? { type: 'command', command, timeout: SYNC_TIMEOUT_S } : { type: 'command', command, async: true } }];
+  const wanted: WantedHook[] = [{ kind: 'hook', hook: sync ? { ...command('hook'), timeout: windows ? WINDOWS_TIMEOUT_S : SYNC_TIMEOUT_S } : { ...command('hook'), async: true } }];
   if (event === GUARD_EVENT) {
-    wanted.push({ kind: 'guard', matcher: GUARD_MATCHER, hook: { type: 'command', command: `${quoteIfNeeded(targets.guardScript)} ${targets.port}`, timeout: GUARD_TIMEOUT_S } });
+    wanted.push({ kind: 'guard', matcher: windows ? WINDOWS_GUARD_MATCHER : GUARD_MATCHER, hook: { ...command('guard'), timeout: windows ? WINDOWS_TIMEOUT_S : GUARD_TIMEOUT_S } });
   }
   return wanted;
 }
@@ -124,7 +141,7 @@ function handlersOf(group: Json, event: string): Json[] {
 const describe = (hook: Json): string =>
   hook.type === 'http'
     ? `http ${String(hook.url)}`
-    : `command ${String(hook.command)}${hook.async === true ? ' (async)' : typeof hook.timeout === 'number' ? ` (waits, timeout ${hook.timeout} s)` : ''}`;
+    : `command ${[hook.command, ...(Array.isArray(hook.args) ? hook.args : [])].map(String).join(' ')}${hook.async === true ? ' (async)' : typeof hook.timeout === 'number' ? ` (waits, timeout ${hook.timeout} s)` : ''}`;
 
 /** The event, with the matcher of the group when it has one: "PreToolUse [^(Edit|Write)$]". */
 const where = (event: string, matcher: unknown): string => (typeof matcher === 'string' && matcher ? `${event} [${matcher}]` : event);
@@ -209,10 +226,21 @@ export const formatSettings = (settings: Json): string => `${JSON.stringify(sett
 // script sends them to the daemon and runs the command you had, saved in var/statusline-command, so the line at
 // the bottom stays the same. The other keys of the status line (padding, …) stay as they are.
 
-const OUR_STATUS = /(?:^|[/"'\s])forchetta-statusline["']?(?:\s|$)/;
+const OUR_STATUS = /(?:^|[/"'\s])forchetta-statusline(?:\.cmd)?["']?(?:\s|$)/;
 
 export const isOurStatusLine = (value: unknown): boolean =>
-  isObject(value) && typeof value.command === 'string' && OUR_STATUS.test(value.command);
+  isObject(value) && typeof value.command === 'string' && (OUR_STATUS.test(value.command) || (OUR_PROGRAM.test(value.command) && / status \d+$/.test(value.command)));
+
+/**
+ * The command of the status line on Windows. Claude Code runs it in Git Bash when there is one, else in PowerShell, and
+ * the two quote in different ways: so nothing in it is quoted. With a space in a path (C:/Users/Ada Lovelace) it is the
+ * command the installer put in the PATH, by its name; undefined when that is not there either.
+ */
+export function windowsStatusCommand(targets: { port: number; node: string; hookJs: string }, inPath: boolean): string | undefined {
+  const plain = /^[\w:/.@+-]+$/;
+  if (plain.test(targets.node) && plain.test(targets.hookJs)) return `${targets.node} ${targets.hookJs} status ${targets.port}`;
+  return inPath ? `forchetta-statusline.cmd ${targets.port}` : undefined;
+}
 
 export interface StatusLinePlan {
   settings: Json;
@@ -222,10 +250,10 @@ export interface StatusLinePlan {
 }
 
 /** The settings with the status line of Forchetta in front of yours. */
-export function withForchettaStatusLine(settings: Json, targets: { port: number; statusScript: string }): StatusLinePlan {
+export function withForchettaStatusLine(settings: Json, targets: { port: number; statusScript: string; command?: string }): StatusLinePlan {
   const next = structuredClone(settings);
   const current = next.statusLine;
-  const command = `${quoteIfNeeded(targets.statusScript)} ${targets.port}`;
+  const command = targets.command ?? `${quoteIfNeeded(targets.statusScript)} ${targets.port}`;
   if (current !== undefined && !isObject(current)) throw new UnexpectedSettings('"statusLine" is not an object');
   if (isOurStatusLine(current)) {
     if (current!.command === command) return { settings: next, changes: [] };

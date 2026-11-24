@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process';
+import type { Pty } from '../daemon/pty.ts';
 
 // The only way Forchetta talks to tmux. It runs a private tmux server, with its own socket and
 // configuration, and it can run only the commands below. None of them ends a session, a window, a pane or
-// the server: closing a pane in Forchetta detaches a client, and nothing in the code can do more.
+// the server: closing a pane in Forchetta detaches a client, and nothing in the code can do more. Windows has no tmux:
+// there the same commands go to the hosts of the sessions (shared/host-sessions.ts).
 
 export const TMUX_ALLOWED = [
   'new-session',
@@ -56,6 +58,9 @@ export class Tmux {
     // -u: UTF-8 also when LANG is not set, as for an app opened from the Finder.
     return ['-u', '-S', this.socket, '-f', this.conf, command, ...args];
   }
+
+  /** Windows: a window on a session. Elsewhere it is a `tmux attach` in a pseudo-terminal (daemon/terminals.ts). */
+  attach?(session: string, cols: number, rows: number): Pty;
 
   run(command: TmuxCommand, args: readonly string[], timeoutMs = 5000): Promise<TmuxResult> {
     const argv = this.argv(command, args);

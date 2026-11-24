@@ -1,4 +1,4 @@
-import { homedir } from 'node:os';
+import { homedir } from '../shared/fspath.ts';
 
 // The "always" choices of a permission dialog, for the box. Claude Code sends them with the request
 // (permission_suggestions): the same ones its dialog offers, such as a rule for a command, a folder to add or a

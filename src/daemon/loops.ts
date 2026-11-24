@@ -1,6 +1,7 @@
 import type { Agent, LoopInfo } from '../shared/agent.ts';
 import { clip, toolLabel } from './labels.ts';
 import { type HookPayload, startsTurn } from './state.ts';
+import { isShellTool } from './powershell.ts';
 
 // A session going in circles: in the turn it is on, the same tool call fails in the same way again and again (npm
 // test with the same error after each "fix", the same command with the same typo). The box says it, and a
@@ -26,7 +27,7 @@ interface Failure {
 /** The call, as the same call is recognized: the tool, the subagent that makes it, and its input. */
 export function callKey(tool: string, input: unknown, subagent = ''): string {
   const fields = input !== null && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
-  if (tool === 'Bash' && typeof fields.command === 'string') return `${subagent}\u0000Bash\u0000${fields.command.replace(/\s+/g, ' ').trim()}`;
+  if (isShellTool(tool) && typeof fields.command === 'string') return `${subagent}\u0000Bash\u0000${fields.command.replace(/\s+/g, ' ').trim()}`;
   // The description Claude gives a call changes from one try to the next: it is not the call.
   delete fields.description;
   return `${subagent}\u0000${tool}\u0000${JSON.stringify(fields)}`;
@@ -60,7 +61,7 @@ export function errorLine(error: unknown): string {
 /** The call as its box line says it: the command itself for Bash ("npm test"), else the label of the action. */
 function callLabel(tool: string, input: unknown, cwd: string | undefined): string {
   const command = (input as { command?: unknown } | undefined)?.command;
-  if (tool === 'Bash' && typeof command === 'string' && command.trim()) return clip(command, 80);
+  if (isShellTool(tool) && typeof command === 'string' && command.trim()) return clip(command, 80);
   return toolLabel(tool, input, cwd).label;
 }
 

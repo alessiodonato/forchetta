@@ -1,6 +1,6 @@
 import { open, readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import { join } from '../shared/fspath.ts';
 import type { TokenUsage } from '../shared/agent.ts';
 import { addTokens, noTokens } from '../shared/present.ts';
 

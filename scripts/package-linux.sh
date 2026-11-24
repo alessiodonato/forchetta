@@ -28,7 +28,7 @@ rm -rf "$OUT/linux" "$OUT/$ARCHIVE" "$OUT/$ARCHIVE.sha256" "$OUT/install.sh"
 mkdir -p "$STAGE/node_modules/node-pty/prebuilds"
 cp "$SRC/package.json" "$SRC/LICENSE" "$STAGE/"
 cp -R "$SRC/bin" "$SRC/config" "$STAGE/"
-rsync -a --exclude '*.map' "$SRC/dist/" "$STAGE/dist/"
+rsync -a --exclude '*.map' --exclude '/windows' "$SRC/dist/" "$STAGE/dist/"
 PTY=$(cd "$SRC/node_modules/node-pty" && pwd -P)
 cp "$PTY/package.json" "$PTY/LICENSE" "$STAGE/node_modules/node-pty/"
 rsync -a --exclude '*.map' --exclude '*.test.js' "$PTY/lib/" "$STAGE/node_modules/node-pty/lib/"

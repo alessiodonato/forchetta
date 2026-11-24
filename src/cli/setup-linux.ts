@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { release } from 'node:os';
-import { join } from 'node:path';
+import { join } from '../shared/fspath.ts';
 import { which } from '../shared/config.ts';
 import { UserError } from '../shared/errors.ts';
 import { paths, ROOT } from '../shared/paths.ts';

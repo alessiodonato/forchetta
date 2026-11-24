@@ -1,4 +1,4 @@
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from '../shared/fspath.ts';
 import type { Agent, GuardHold } from '../shared/agent.ts';
 import { displayName } from '../shared/agent.ts';
 import { pathsText } from '../shared/crew.ts';
@@ -7,12 +7,14 @@ import type { GuardStatKind } from '../shared/guard-stats.ts';
 import { type HookPayload, keyOf } from './state.ts';
 import { removedLines } from './coherence.ts';
 import { shellFiles } from './conflicts.ts';
-import { commandStart, globMatches, isCheckCommand, placedCommands, type ShellWrite, shellCommands, shellWrites } from './shell.ts';
+import { shellLine } from './powershell.ts';
+import { base, commandStart, globMatches, isCheckCommand, place, placedCommands, type ShellWrite, shellCommands, shellWrites } from './shell.ts';
 
 export { shellCommands } from './shell.ts';
 
 // The guard: sessions that do not step on each other. bin/forchetta-guard asks the daemon before every Edit, Write,
-// MultiEdit, NotebookEdit and Bash of every session, and Claude waits for the answer (daemon/server.ts).
+// MultiEdit, NotebookEdit and Bash (on Windows PowerShell too) of every session, and Claude waits for the answer
+// (daemon/server.ts).
 //
 // Files. A session holds a file from the moment its write is let through, before the tool runs: of two sessions that
 // try the same file at the same moment, the first answered goes and the other is stopped (the daemon answers one
@@ -153,10 +155,10 @@ export function gitCommands(line: string, cwd: string): GitCommand[] {
     const name = words[i];
     if (name === 'cd') {
       const to = words[i + 1];
-      if (to && to !== '-' && !to.startsWith('~') && !to.includes('$')) dir = resolve(dir, to);
+      if (to && to !== '-' && !to.startsWith('~') && !to.includes('$')) dir = place(dir, to);
       continue;
     }
-    if (name !== 'git' && !name?.endsWith('/git')) continue;
+    if (base(name) !== 'git') continue;
     let where = dir;
     let j = i + 1;
     for (; j < words.length; j++) {
@@ -166,8 +168,8 @@ export function gitCommands(line: string, cwd: string): GitCommand[] {
       if (!GIT_VALUE_OPTIONS.has(option)) continue;
       const given = value ?? words[++j];
       if (given === undefined) break;
-      if (option === '-C' && !given.includes('$')) where = resolve(where, given);
-      if (option === '--work-tree' && !given.includes('$')) where = resolve(where, given);
+      if (option === '-C' && !given.includes('$')) where = place(where, given);
+      if (option === '--work-tree' && !given.includes('$')) where = place(where, given);
     }
     const sub = words[j];
     if (!sub) continue;
@@ -382,8 +384,8 @@ export class Guard {
       if (answer?.decision !== 'deny') this.claim(agent, payload, [file]);
       return answer;
     }
-    const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
-    if (payload.tool_name !== 'Bash' || !cwd || typeof command !== 'string') return undefined;
+    const command = shellLine(payload);
+    if (!cwd || command === undefined) return undefined;
     const written = enabled.files ? this.decideShellWrites(agent, command, cwd) : undefined;
     if (written) return written;
     if (enabled.files) this.claim(agent, payload, shellFiles(command, cwd, this.options.repoOf(cwd) ?? cwd));
@@ -436,10 +438,10 @@ export class Guard {
    * into this commit is stopped once, with the files of this session to add instead.
    */
   async decideCommit(agent: Agent, payload: HookPayload): Promise<GuardDecision | undefined> {
-    if (payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || agent.state === 'ended' || !this.options.enabled(agent).git) return undefined;
-    const line = (payload.tool_input as { command?: unknown } | undefined)?.command;
+    const line = shellLine(payload);
+    if (payload.hook_event_name !== 'PreToolUse' || line === undefined || agent.state === 'ended' || !this.options.enabled(agent).git) return undefined;
     const cwd = agent.cwd ?? payload.cwd;
-    if (typeof line !== 'string' || !cwd || !this.options.dirty) return undefined;
+    if (!cwd || !this.options.dirty) return undefined;
     for (const command of gitCommands(line, cwd)) {
       const sweep = sweepOf(command);
       if (!sweep) continue;
@@ -884,7 +886,7 @@ export function sweepOf(command: GitCommand): { under: string[]; tracked: boolea
   // git add . or a folder: what is under it. A path with a dot in its last part is taken for a file, named by itself.
   const folders = paths.filter((path) => path === '.' || path === ':/' || path.endsWith('/') || !/\.[^/]+$/.test(path.split('/').at(-1) ?? ''));
   if (folders.length === 0) return undefined;
-  return { under: folders.map((path) => (path === ':/' ? '/' : resolve(dir, path))), tracked: update && !all };
+  return { under: folders.map((path) => (path === ':/' ? '/' : place(dir, path))), tracked: update && !all };
 }
 
 /** Whether a path is a folder or under it; "/" holds everything. */

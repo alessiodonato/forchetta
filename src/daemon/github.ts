@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { dirname } from 'node:path';
+import { delimiter, dirname } from '../shared/fspath.ts';
 import type { AutoTrigger } from '../shared/automation.ts';
 
 // GitHub for the automations (shared/automation.ts): the open issues with a label, or the pull requests, of a
@@ -34,7 +34,8 @@ export function ghRunner(gh: string): GhRun {
           cwd,
           timeout: GH_TIMEOUT_MS,
           maxBuffer: 4 * 1024 * 1024,
-          env: { ...process.env, PATH: [dirname(gh), process.env.PATH ?? '/usr/bin:/bin:/usr/sbin:/sbin'].join(':'), GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1', GH_PAGER: 'cat' },
+          windowsHide: true,
+          env: { ...process.env, PATH: [dirname(gh), process.env.PATH ?? '/usr/bin:/bin:/usr/sbin:/sbin'].join(delimiter), GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1', GH_PAGER: 'cat' },
         },
         (error, stdout, stderr) => {
           const code = error ? (typeof (error as { code?: unknown }).code === 'number' ? ((error as { code: number }).code) : 1) : 0;

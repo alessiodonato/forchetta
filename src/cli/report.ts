@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join } from '../shared/fspath.ts';
 import { UserError } from '../shared/errors.ts';
 import { paths } from '../shared/paths.ts';
 import { shortTokens, tokensTotal, usdText } from '../shared/present.ts';

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir, hostname, release, tmpdir, userInfo } from 'node:os';
-import { join, resolve } from 'node:path';
+import { hostname, release, userInfo } from 'node:os';
+import { homedir, join, resolve, tmpdir } from '../shared/fspath.ts';
 import type { Agent } from '../shared/agent.ts';
 import { loadConfig, which } from '../shared/config.ts';
 import { api, runningDaemon } from '../shared/daemon-client.ts';
@@ -11,7 +11,9 @@ import { compareVersions, type SetupCheck, type SystemInfo } from '../shared/sys
 import { VERSION } from '../shared/version.ts';
 import { versionIn } from '../daemon/claude-update.ts';
 import { readClaudeSettings, systemInfo } from '../daemon/system.ts';
+import { system32 } from '../shared/windows.ts';
 import { ptyProblem } from '../daemon/pty.ts';
+import { windowsName } from './setup-windows.ts';
 import { parseArgs } from './args.ts';
 import { code } from './help.ts';
 import type { RunIO } from './run.ts';
@@ -95,12 +97,13 @@ function setAside(): string[] {
 
 function toolVersion(file: string | undefined, args: string[]): string | undefined {
   if (!file) return undefined;
-  const result = spawnSync(file, args, { encoding: 'utf8', timeout: 10_000 });
+  const result = spawnSync(file, args, { encoding: 'utf8', timeout: 10_000, windowsHide: true });
   return result.status === 0 ? `${result.stdout}${result.stderr}`.trim().split('\n')[0] : undefined;
 }
 
 /** The Linux this is: "Ubuntu 24.04.1 LTS (WSL, 5.15.153.1-microsoft-standard-WSL2)". */
 export function osName(platform = PLATFORM, kernel = release()): string {
+  if (platform === 'windows') return windowsName(kernel);
   let name = 'Linux';
   try {
     name = /^PRETTY_NAME="?([^"\n]+)"?$/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1] ?? name;
@@ -119,7 +122,8 @@ export async function doctorCommand(args: readonly string[], io: RunIO): Promise
   findings.push({ ok: true, label: 'Forchetta', detail: `${VERSION} · ${tildify(ROOT)}` });
   let mode = '';
   try {
-    mode = (statSync(paths.varDir).mode & 0o777).toString(8);
+    // Windows has no such permissions: the folders of a user are of that user.
+    mode = PLATFORM === 'windows' ? (statSync(paths.varDir), '700') : (statSync(paths.varDir).mode & 0o777).toString(8);
   } catch {
     mode = '';
   }
@@ -220,7 +224,7 @@ export async function doctorCommand(args: readonly string[], io: RunIO): Promise
         scrub(`${JSON.stringify(agents.map((agent) => ({ state: agent.state, project: agent.project, control: agent.control.kind, model: agent.model, lastEvent: agent.lastEvent, team: agent.team?.crew ? 'yes' : undefined, error: agent.error?.kind })), null, 2)}\n`),
       );
       const out = resolve(values.get('--out') ?? process.cwd(), `forchetta-doctor-${stamp}.tar.gz`);
-      const tar = spawnSync('/usr/bin/tar', ['-czf', out, '-C', dir, `forchetta-doctor-${stamp}`], { encoding: 'utf8' });
+      const tar = spawnSync(PLATFORM === 'windows' ? system32('tar.exe') : '/usr/bin/tar', ['-czf', out, '-C', dir, `forchetta-doctor-${stamp}`], { encoding: 'utf8', windowsHide: true });
       if (tar.status !== 0) throw new Error(tar.stderr || 'tar failed');
       io.stdout(`\n${s.mark('✓', 'green', `Written ${s.bold(tildify(out))}`)}\n  ${s.dim('Your home, user name, project and team names, e-mails and tokens are replaced. Look inside before you share it.')}\n`);
     } finally {

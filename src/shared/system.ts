@@ -59,7 +59,7 @@ export interface EditableSettings {
 export interface SystemInfo {
   version: string;
   /** Where the daemon runs; undefined with one from before Linux and WSL, on a Mac. */
-  platform?: 'macos' | 'linux' | 'wsl';
+  platform?: 'macos' | 'linux' | 'wsl' | 'windows';
   protocol: number;
   checks: SetupCheck[];
   features: OptionalFeature[];

@@ -1,10 +1,10 @@
 import { accessSync, constants } from 'node:fs';
+import { delimiter, homedir, join, slashes, WINDOWS } from './fspath.ts';
 import { readDataJson, writeDataJson } from './data-file.ts';
-import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
 import { UserError } from './errors.ts';
 import { ensurePrivateDir, paths } from './paths.ts';
 import { onWindowsDrive, PLATFORM, type Platform } from './platform.ts';
+import { findExe, windowsClaude, windowsGit } from './windows.ts';
 
 // The settings of Forchetta, in var/config.json. `forchetta hooks install` writes there the full paths of
 // node, tmux and claude, because an app opened from the Finder gets a PATH without /usr/local/bin.
@@ -157,6 +157,7 @@ function executable(path: string): boolean {
  * like one, and would run outside WSL), so they do not count.
  */
 export function which(name: string, env: NodeJS.ProcessEnv = process.env, platform: Platform | undefined = PLATFORM): string | undefined {
+  if (platform === 'windows') return onWindows(name, env);
   const dirs = [...(env.PATH ?? '').split(delimiter), '/usr/local/bin', '/opt/homebrew/bin', join(homedir(), '.local', 'bin')];
   for (const dir of dirs) {
     if (!dir || (platform === 'wsl' && onWindowsDrive(dir))) continue;
@@ -166,8 +167,15 @@ export function which(name: string, env: NodeJS.ProcessEnv = process.env, platfo
   return undefined;
 }
 
+/** A program of Windows, as something that starts without a shell: a .cmd of npm does not. */
+function onWindows(name: string, env: NodeJS.ProcessEnv): string | undefined {
+  if (name === 'claude') return windowsClaude(env);
+  if (name === 'git') return windowsGit(env);
+  return findExe(name, [join(homedir(), '.local', 'bin')], env);
+}
+
 export function resolveTool(tool: Tool, config: Config): string {
-  if (tool === 'node' && !config.paths.node) return process.execPath;
+  if (tool === 'node' && !config.paths.node) return WINDOWS ? slashes(process.execPath) : process.execPath;
   const found = config.paths[tool] ?? which(tool);
   if (!found) throw new UserError(`${tool} not found: install it, or write its path in ${paths.config}`);
   return found;

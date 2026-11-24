@@ -58,7 +58,7 @@ async function daemonCommand(action: string | undefined, rest: readonly string[]
       }
       await api(info, 'POST', '/api/shutdown');
       for (let attempt = 0; attempt < 30 && (await runningDaemon()); attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
-      io.stdout(`${s.mark('✓', 'green', `Daemon stopped. ${s.dim('The Claude and tmux sessions go on.')}`)}\n`);
+      io.stdout(`${s.mark('✓', 'green', `Daemon stopped. ${s.dim(PLATFORM === 'windows' ? 'The sessions go on.' : 'The Claude and tmux sessions go on.')}`)}\n`);
       return 0;
     }
     case 'status': {

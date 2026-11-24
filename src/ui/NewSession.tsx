@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Agent } from '../shared/agent.ts';
 import { shell } from './connection.ts';
 import { useReturnFocus } from './focus.ts';
-import { CHOOSE_FOLDER, keyText } from './platform.ts';
+import { CHOOSE_FOLDER, keyText, placeText } from './platform.ts';
 import type { Store } from './store.ts';
 
 // A new session from the app: a folder and, if you want, a first prompt, a model, a permission mode and a new git
@@ -164,7 +164,7 @@ export function NewSessionPanel({ agents, store, onClose }: { agents: readonly A
       </div>
       <div class="broadcast-row end">
         <span class={`broadcast-note${state?.error ? ' error' : ''}`}>
-          {state?.error ?? 'It starts in the tmux of Forchetta, with the environment of your shell, and opens here.'}
+          {state?.error ?? placeText('It starts in the tmux of Forchetta, with the environment of your shell, and opens here.', store.state.system?.platform)}
         </span>
         <button type="button" class="primary" disabled={busy || !folder.trim()} onClick={start}>
           {busy ? 'Starting…' : 'Start'}

@@ -1,17 +1,18 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { backslashes, homedir, join, slashes } from '../shared/fspath.ts';
 import { loadConfig, resolveTool, which } from '../shared/config.ts';
 import { api, ensureDaemon } from '../shared/daemon-client.ts';
 import { UserError } from '../shared/errors.ts';
 import { paths, ROOT } from '../shared/paths.ts';
 import { PLATFORM, type Platform } from '../shared/platform.ts';
+import { system32 } from '../shared/windows.ts';
 import { code } from './help.ts';
 import type { RunIO } from './run.ts';
 import { tildify } from './style.ts';
 
-// `forchetta open`: the window of Forchetta. On a Mac the app; on Linux, and in WSL, the page in a browser, which gets the token of the daemon for a code good once (daemon/open-codes.ts). In WSL the browser is
+// `forchetta open`: the window of Forchetta. On a Mac the app; on Windows, on Linux and in WSL, the page in a browser, which
+// gets the token of the daemon for a code good once (daemon/open-codes.ts). On Windows and in WSL the browser is
 // one of Windows: Edge or Chrome as a window of its own (--app), where the shortcuts are not those of the browser;
 // else the default one. It reaches the daemon on localhost, which WSL2 forwards.
 //
@@ -42,6 +43,12 @@ const WINDOWS_BROWSERS = [
 ];
 /** Those of Linux, by name. */
 const LINUX_BROWSERS = ['microsoft-edge', 'google-chrome', 'chromium', 'chromium-browser', 'brave-browser'];
+
+/** The same on Windows itself: in its program folders, for everyone or for this user. */
+export function windowsBrowsers(env: NodeJS.ProcessEnv = process.env): string[] {
+  const folders = [env['ProgramFiles(x86)'], env.ProgramFiles, env.LOCALAPPDATA].filter((dir): dir is string => Boolean(dir)).map(slashes);
+  return ['Microsoft/Edge/Application/msedge.exe', 'Google/Chrome/Application/chrome.exe', 'BraveSoftware/Brave-Browser/Application/brave.exe'].flatMap((program) => folders.map((folder) => join(folder, program)));
+}
 
 const CMD = '/mnt/c/Windows/System32/cmd.exe';
 
@@ -84,8 +91,13 @@ export function openerOf(
   platform: Platform | undefined = PLATFORM,
   exists: (path: string) => boolean = existsSync,
   find: (name: string) => string | undefined = (name) => which(name),
-  profileOf: (browser: string) => string | undefined = (browser) => (platform === 'wsl' ? windowsProfile() : linuxProfile(browser)),
+  profileOf: (browser: string) => string | undefined = (browser) => (platform === 'wsl' ? windowsProfile() : platform === 'windows' ? backslashes(join(paths.varDir, 'browser')) : linuxProfile(browser)),
 ): Opener | undefined {
+  if (platform === 'windows') {
+    const browser = windowsBrowsers().find(exists);
+    if (browser) return { file: browser, args: ownWindow(url, profileOf(browser)), own: true };
+    return { file: system32('rundll32.exe'), args: ['url.dll,FileProtocolHandler', url], own: false };
+  }
   if (platform === 'wsl') {
     const browser = WINDOWS_BROWSERS.find(exists);
     if (browser) {
@@ -148,7 +160,7 @@ export async function openCommand(options: OpenOptions, io: RunIO): Promise<numb
   const opened = opener ? await start(opener.file, opener.args) : false;
   io.stdout(
     opened
-      ? `${s.mark('✓', 'green', `Forchetta opens in the browser ${s.dim(`· port ${info.port}`)}`)}\n${opener?.own ? '' : `${s.mark('▲', 'amber', 'It is your usual browser: its extensions can read the page and type in it. With Edge or Chrome it is a window of its own, without them.')}\n`}  ${code('If no window appears: `forchetta open --print` gives the address to open by hand.', s)}\n`
+      ? `${s.mark('✓', 'green', `Forchetta opens ${opener?.own && PLATFORM === 'windows' ? 'in a window of its own' : 'in the browser'} ${s.dim(`· port ${info.port}`)}`)}\n${opener?.own ? '' : `${s.mark('▲', 'amber', 'It is your usual browser: its extensions can read the page and type in it. With Edge or Chrome it is a window of its own, without them.')}\n`}  ${code('If no window appears: `forchetta open --print` gives the address to open by hand.', s)}\n`
       : `${s.mark('▲', 'amber', 'No browser found from here. Open this address (good once, for two minutes):')}\n\n    ${url}\n`,
   );
   return 0;

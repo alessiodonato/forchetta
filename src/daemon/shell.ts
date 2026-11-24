@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { fromGitBash, fromOutside, resolve, WINDOWS } from '../shared/fspath.ts';
 
 // How the guard reads a shell line: split into simple commands, and told apart by what they do. A plain reading, as
 // a person would read the line: no expansions, no subshells, no aliases. What cannot be read says nothing, and the
@@ -230,9 +230,9 @@ export function shellWrites(line: string, cwd: string): ShellWrite[] {
   const found: ShellWrite[] = [];
   let dir = cwd;
   const add = (word: string | undefined, how: Omit<ShellWrite, 'path'> = {}): void => {
-    if (!word || /[$`]/.test(word) || word.startsWith('~') || word.startsWith('/dev/') || word === '-') return;
+    if (!word || /[$`]/.test(word) || word.startsWith('~') || word.startsWith('/dev/') || word === '-' || (WINDOWS && /^nul$/i.test(word))) return;
     const glob = /[*?[]/.test(word);
-    found.push({ path: resolve(dir, word), ...(glob ? { glob: true } : {}), ...how });
+    found.push({ path: place(dir, word), ...(glob ? { glob: true } : {}), ...how });
   };
   for (const all of commands) {
     // The redirections first: they can stand anywhere in the command, and are taken out of its words.
@@ -255,7 +255,7 @@ export function shellWrites(line: string, cwd: string): ShellWrite[] {
     const args = words.slice(start + 1);
     if (name === 'cd') {
       const to = args[0];
-      if (to && to !== '-' && !to.startsWith('~') && !to.includes('$')) dir = resolve(dir, to);
+      if (to && to !== '-' && !to.startsWith('~') && !to.includes('$')) dir = place(dir, to);
       continue;
     }
     for (const write of programWrites(name, args)) add(write.word, write.tree ? { tree: true } : {});
@@ -480,7 +480,7 @@ export function globMatches(pattern: string, path: string): boolean {
     else if (c === '?') source += '[^/]';
     else source += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   }
-  return new RegExp(`^${source}$`).test(path);
+  return new RegExp(`^${source}$`, WINDOWS ? 'i' : '').test(path);
 }
 
 /** The words that only run the command after them: VAR=value, command, exec, env, nice, time, nohup. */
@@ -507,7 +507,7 @@ export function placedCommands(line: string, cwd: string): PlacedCommand[] {
     if (words.length === 0) continue;
     if (words[0] === 'cd') {
       const to = words[1];
-      if (to && to !== '-' && !to.startsWith('~') && !to.includes('$')) dir = resolve(dir, to);
+      if (to && to !== '-' && !to.startsWith('~') && !to.includes('$')) dir = place(dir, to);
       continue;
     }
     found.push({ words, dir });
@@ -515,7 +515,14 @@ export function placedCommands(line: string, cwd: string): PlacedCommand[] {
   return found;
 }
 
-const base = (word: string | undefined): string => (word ?? '').split('/').at(-1) ?? '';
+/** A program by its name, without its folder; on Windows without .exe either. */
+export const base = (word: string | undefined): string => {
+  const name = (word ?? '').split(WINDOWS ? /[\\/]/ : '/').at(-1) ?? '';
+  return WINDOWS ? name.replace(/\.(?:exe|cmd|bat)$/i, '') : name;
+};
+
+/** A path of a shell line, from the folder it is written in; on Windows also as Git Bash has it, and as the disk does. */
+export const place = (dir: string, word: string): string => (WINDOWS ? fromOutside(resolve(dir, fromGitBash(word))) : resolve(dir, word));
 
 /** npm, pnpm, yarn, bun: the script a command runs ("npm test" runs test, "pnpm build" runs build); undefined otherwise. */
 function scriptOf(words: readonly string[]): string | undefined {
@@ -665,6 +672,15 @@ export function killTargets(line: string): KillTargets | undefined {
   for (const all of commands) {
     const words = all.slice(commandStart(all));
     const name = base(words[0]);
+    // Of Windows, in Git Bash: //PID, so that it is not taken for a path.
+    if (name === 'taskkill') {
+      for (let i = 1; i < words.length; i++) {
+        const option = words[i]!.replace(/^\/\//, '/').toLowerCase();
+        if (option === '/pid' && /^\d+$/.test(words[i + 1] ?? '')) targets.pids.push(Number(words[++i]));
+        else if (option === '/im' && words[i + 1]) targets.patterns.push(['-x', words[++i]!]);
+      }
+      continue;
+    }
     if (name === 'kill' || (name === 'xargs' && words.includes('kill'))) {
       for (const word of words.slice(1)) if (/^\d+$/.test(word)) targets.pids.push(Number(word));
     } else if (name === 'pkill') {

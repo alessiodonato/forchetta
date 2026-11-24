@@ -1,14 +1,18 @@
+import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { userInfo } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { backslashes, dirname, homedir, join, slashes, WINDOWS } from './fspath.ts';
 import { UserError } from './errors.ts';
 import { PLATFORM, type Platform } from './platform.ts';
 
 // Where Forchetta keeps its files. Everything it writes at run time stays in one private folder: the daemon token,
 // the tmux socket, the snapshot of the sessions, the log, the backups. In a git checkout it is `var/` inside the
 // folder, as it always was; installed (by Homebrew, say), it is ~/Library/Application Support/Forchetta on a Mac, and
-// ~/.local/share/forchetta on Linux (WSL too).
+// ~/.local/share/forchetta on Linux (WSL too) and on Windows, next to the one of Claude Code.
+
+/** A path of the environment, as the others: on Windows with forward slashes. */
+const slashesOnWindows = (path: string): string => (WINDOWS ? slashes(path) : path);
 
 /** The Forchetta folder: the nearest folder above this file that holds the package.json of forchetta. */
 function findRoot(): string {
@@ -41,7 +45,7 @@ export function stablePath(path: string, exists: (path: string) => boolean = exi
   return exists(candidate) ? candidate : path;
 }
 
-export const ROOT = process.env.FORCHETTA_ROOT ?? stablePath(findRoot());
+export const ROOT = process.env.FORCHETTA_ROOT ? slashesOnWindows(process.env.FORCHETTA_ROOT) : stablePath(findRoot());
 
 /**
  * The private folder of Forchetta: FORCHETTA_VAR when set; `var/` inside the folder when it is a git checkout;
@@ -56,7 +60,7 @@ export function defaultVarDir(
   home = homedir(),
   platform: Platform | undefined = PLATFORM,
 ): string {
-  if (env.FORCHETTA_VAR) return env.FORCHETTA_VAR;
+  if (env.FORCHETTA_VAR) return slashesOnWindows(env.FORCHETTA_VAR);
   if (exists(join(root, '.git'))) return join(root, 'var');
   return platform === 'macos' ? join(home, 'Library', 'Application Support', 'Forchetta') : join(home, '.local', 'share', 'forchetta');
 }
@@ -64,7 +68,10 @@ export function defaultVarDir(
 export interface Paths {
   varDir: string;
   daemonInfo: string;
-  /** The socket the hooks of Claude Code talk to the daemon on (bin/forchetta-hook and the others find it the same way). */
+  /**
+   * The socket the hooks of Claude Code talk to the daemon on (bin/forchetta-hook and the others find it the same way).
+   * On Windows a file with the name of the pipe and its key (shared/pipe.ts): the hooks of there read it.
+   */
   hooksSocket: string;
   config: string;
   state: string;
@@ -105,14 +112,20 @@ export interface Paths {
   /** The status line command you had, run by bin/forchetta-statusline. */
   statusCommand: string;
   execScript: string;
+  /** Windows: the program of the hooks and of the status line (src/hook/main.ts), in place of the scripts of bin/. */
+  hookJs: string;
+  /** Windows: what holds a session, in place of tmux (src/host/main.ts). */
+  hostJs: string;
+  /** Windows: the sessions that run, one file each, with the pipe of their host. */
+  sessionsDir: string;
   daemonJs: string;
 }
 
-export function pathsFor(varDir: string, root = ROOT): Paths {
+export function pathsFor(varDir: string, root = ROOT, windows = WINDOWS): Paths {
   return {
     varDir,
     daemonInfo: join(varDir, 'daemon.json'),
-    hooksSocket: join(varDir, 'hooks.sock'),
+    hooksSocket: join(varDir, windows ? 'hooks-pipe.json' : 'hooks.sock'),
     config: join(varDir, 'config.json'),
     state: join(varDir, 'state.json'),
     teams: join(varDir, 'teams.json'),
@@ -140,6 +153,9 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     startScript: join(root, 'bin', 'forchetta-start'),
     statusCommand: join(varDir, 'statusline-command'),
     execScript: join(root, 'bin', 'forchetta-exec'),
+    hookJs: join(root, 'dist', 'windows', 'forchetta-hooks.js'),
+    hostJs: join(root, 'dist', 'windows', 'host.js'),
+    sessionsDir: join(varDir, 'run', 'sessions'),
     teamMcpJs: join(root, 'dist', 'team-mcp.js'),
     daemonJs: join(root, 'dist', 'daemon.js'),
   };
@@ -148,7 +164,22 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
 export const paths = pathsFor(defaultVarDir());
 
 /** The folder of Claude Code: ~/.claude, or CLAUDE_CONFIG_DIR. */
-export const claudeConfigDir = (env: NodeJS.ProcessEnv = process.env): string => env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
+export const claudeConfigDir = (env: NodeJS.ProcessEnv = process.env): string => (env.CLAUDE_CONFIG_DIR ? slashesOnWindows(env.CLAUDE_CONFIG_DIR) : join(homedir(), '.claude'));
+
+/** The system account of Windows, which the folders of a user keep too (backups, the antivirus). */
+const SYSTEM_SID = '*S-1-5-18';
+
+/**
+ * A folder of Windows that only this user can open. Inside the home it is so already: the folders of a user are of that
+ * user, of the system and of the administrators. Elsewhere (FORCHETTA_VAR on another drive) it is closed when it is made.
+ */
+function privateOnWindows(dir: string, made: boolean, home = homedir()): void {
+  const inHome = `${slashes(dir)}/`.toLowerCase().startsWith(`${home}/`.toLowerCase());
+  if (inHome || !made) return;
+  const icacls = join(process.env.SystemRoot ?? 'C:/Windows', 'System32', 'icacls.exe');
+  const result = spawnSync(icacls, [backslashes(dir), '/inheritance:r', '/grant:r', `${userInfo().username}:(OI)(CI)F`, '/grant:r', `${SYSTEM_SID}:(OI)(CI)F`], { encoding: 'utf8', timeout: 10_000, windowsHide: true });
+  if (result.status !== 0) throw new UserError(`${dir} cannot be made private`, 'put the data of Forchetta in your home, where no one else can read them');
+}
 
 /**
  * Makes a folder that only this user can open: it holds the daemon token and the text of the sessions. Off a Mac it
@@ -156,9 +187,11 @@ export const claudeConfigDir = (env: NodeJS.ProcessEnv = process.env): string =>
  * files in it would be of anyone.
  */
 export function ensurePrivateDir(dir: string, platform: Platform | undefined = PLATFORM, look: (path: string) => { mode: number; uid: number } = lstatSync, own = process.getuid?.()): void {
+  const made = !existsSync(dir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const stats = lstatSync(dir);
   if (!stats.isDirectory()) throw new Error(`forchetta: ${dir} is not a folder`);
+  if (platform === 'windows') return privateOnWindows(dir, made);
   if ((stats.mode & 0o077) !== 0) {
     try {
       chmodSync(dir, 0o700);
@@ -168,7 +201,7 @@ export function ensurePrivateDir(dir: string, platform: Platform | undefined = P
     }
   }
   if (platform === 'macos') return;
-  const made = look(dir);
-  if (own !== undefined && made.uid !== own) throw new UserError(`${dir} is of another user: Forchetta keeps its private data there`, 'run forchetta as the user it belongs to, without sudo');
-  if ((made.mode & 0o077) !== 0) throw new UserError(`${dir} cannot be made private: it is on a drive of Windows, or on a disk with no permissions`, 'put Forchetta in your home of Linux (~)');
+  const now = look(dir);
+  if (own !== undefined && now.uid !== own) throw new UserError(`${dir} is of another user: Forchetta keeps its private data there`, 'run forchetta as the user it belongs to, without sudo');
+  if ((now.mode & 0o077) !== 0) throw new UserError(`${dir} cannot be made private: it is on a drive of Windows, or on a disk with no permissions`, 'put Forchetta in your home of Linux (~)');
 }

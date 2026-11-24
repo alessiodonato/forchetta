@@ -1,3 +1,5 @@
+import { WINDOWS } from '../shared/fspath.ts';
+
 // The environment of a Forchetta pane: the one of the terminal where `forchetta run` was typed, not the one of
 // the tmux server, which may have been started from another terminal long ago. bin/forchetta-exec loads it.
 
@@ -5,7 +7,7 @@
 const SET_BY_TMUX = new Set(['TERM', 'TERM_PROGRAM', 'TERM_PROGRAM_VERSION', 'TMUX', 'TMUX_PANE']);
 
 /** The identity of the outer terminal window: inside tmux it would point to the wrong place. */
-const OUTER_TERMINAL = new Set(['TERM_SESSION_ID', 'ITERM_SESSION_ID', 'WINDOWID']);
+const OUTER_TERMINAL = new Set(['TERM_SESSION_ID', 'ITERM_SESSION_ID', 'WINDOWID', 'WT_SESSION', 'WT_PROFILE_ID']);
 
 /**
  * What a running Claude Code session sets for its own child processes. A new session started from inside
@@ -27,20 +29,25 @@ const SET_BY_CLAUDE = new Set([
 ]);
 
 /** The key for the optional summaries is for the daemon only: a Claude session has no use for it. */
-const FORCHETTA_ONLY = new Set(['FORCHETTA_ANTHROPIC_API_KEY', 'FORCHETTA_AGENT']);
+const FORCHETTA_ONLY = new Set(['FORCHETTA_ANTHROPIC_API_KEY', 'FORCHETTA_AGENT', 'FORCHETTA_PANE']);
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** Windows has names like ProgramFiles(x86), and hidden ones that start with =. */
+const WINDOWS_NAME = /^[^=\0]+$/;
 
-export function paneEnv(env: NodeJS.ProcessEnv, agentId: string): Record<string, string> {
+export function paneEnv(env: NodeJS.ProcessEnv, agentId: string, windows = WINDOWS): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
-    if (value === undefined || !NAME.test(name)) continue;
+    if (value === undefined || !(windows ? WINDOWS_NAME : NAME).test(name)) continue;
     if (SET_BY_TMUX.has(name) || OUTER_TERMINAL.has(name) || SET_BY_CLAUDE.has(name) || FORCHETTA_ONLY.has(name)) continue;
     out[name] = value;
   }
   out.FORCHETTA_AGENT = agentId;
   return out;
 }
+
+/** The environment of a session in its host (Windows): the one of a pane, and the terminal it is. */
+export const hostEnv = (env: Readonly<Record<string, string>>, session: string): Record<string, string> => ({ ...env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCHETTA_PANE: session });
 
 /**
  * The environment of the daemon: the one of whoever started it, without what belongs to a Claude session or to
@@ -51,7 +58,7 @@ export function paneEnv(env: NodeJS.ProcessEnv, agentId: string): Record<string,
 export function daemonEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [name, value] of Object.entries(env)) {
-    if (name === 'TMUX' || name === 'TMUX_PANE' || name === 'FORCHETTA_AGENT' || SET_BY_CLAUDE.has(name)) continue;
+    if (name === 'TMUX' || name === 'TMUX_PANE' || name === 'FORCHETTA_AGENT' || name === 'FORCHETTA_PANE' || SET_BY_CLAUDE.has(name)) continue;
     out[name] = value;
   }
   return out;

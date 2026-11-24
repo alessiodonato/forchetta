@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, renameSync } from 'node:fs';
+import { isAbsolute, join, relative } from '../shared/fspath.ts';
 import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
-import { isAbsolute, join, relative } from 'node:path';
 import { MACHINE } from '../shared/machine.ts';
 import { type Agent, type QueuedCommand, TEAM_TEXT_MAX, type TeamInfo } from '../shared/agent.ts';
 import {

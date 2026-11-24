@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join } from '../shared/fspath.ts';
 import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import type { Agent, CommandKind, CommandStatus, QueuedCommand } from '../shared/agent.ts';
 import type { TmuxCommand, TmuxResult } from '../shared/tmux.ts';

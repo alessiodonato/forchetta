@@ -1,5 +1,5 @@
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join } from '../shared/fspath.ts';
 import type { Agent, TokenUsage } from '../shared/agent.ts';
 import { addTokens, noTokens, tokensTotal } from '../shared/present.ts';
 

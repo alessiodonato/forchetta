@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { statSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
+import { isAbsolute } from '../shared/fspath.ts';
 import type { RecallMatch } from '../shared/agent.ts';
 
 // Search in the earlier sessions of a project, from the app: `arricurdai recall --json`. Forchetta does not search
@@ -50,7 +50,7 @@ export function runRecall(command: readonly string[] | undefined, project: unkno
   // "--" before the words: a word that starts with "-" is a word, not an option.
   const args = [...prefix, 'recall', '--project', project, '--json', '--limit', String(LIMIT), '--', ...words];
   return new Promise((resolve) => {
-    execFile(bin, args, { timeout: 60_000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(bin, args, { timeout: 60_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout, stderr) => {
       const text = String(stdout).trim();
       if (text.startsWith('{')) {
         try {

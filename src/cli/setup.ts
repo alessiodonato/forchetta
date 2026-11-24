@@ -1,7 +1,6 @@
 import { type SpawnOptions, spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, homedir, join } from '../shared/fspath.ts';
 import { loadConfig, resolveTool, which } from '../shared/config.ts';
 import { api, ensureDaemon, runningDaemon } from '../shared/daemon-client.ts';
 import { installLaunchAgent, launchAgentFile } from '../daemon/launch-agent.ts';
@@ -12,7 +11,8 @@ import { VERSION } from '../shared/version.ts';
 import { code } from './help.ts';
 import { hooksCommand } from './hooks.ts';
 import type { RunIO } from './run.ts';
-import { checkLinux } from './setup-linux.ts';
+import { checkLinux, type SetupStep } from './setup-linux.ts';
+import { checkWindows } from './setup-windows.ts';
 import { spinner, tildify } from './style.ts';
 
 // `forchetta setup`: what makes an installed Forchetta ready, in one command. It checks tmux, claude and the
@@ -136,7 +136,7 @@ async function restartOldDaemon(io: RunIO): Promise<void> {
 
 export async function setupCommand(options: SetupOptions, io: RunIO): Promise<number> {
   const s = io.style;
-  if (!PLATFORM) throw new UserError('Forchetta does not run on Windows itself, but inside WSL 2 does', 'see https://forchetta.dev/manual.html#windows');
+  if (!PLATFORM) throw new UserError('Forchetta runs on a Mac, on Windows and on Linux', 'see https://forchetta.dev/manual.html');
   if (!existsSync(paths.daemonJs) || !existsSync(join(ROOT, 'dist', 'ui', 'index.html'))) throw new UserError(`${tildify(join(ROOT, 'dist'))} is missing`, 'run `pnpm build` first');
   const width = 18;
   /** One step: "✓ tmux              /usr/local/bin/tmux". Without a symbol it lines up with the others. */
@@ -146,14 +146,16 @@ export async function setupCommand(options: SetupOptions, io: RunIO): Promise<nu
   };
 
   if (PLATFORM !== 'macos') {
-    checkLinux(({ label, detail, mark }) => step(label, mark === '✓' ? s.dim(detail) : code(detail, s), mark));
+    const say = ({ label, detail, mark }: SetupStep): void => step(label, mark === '✓' ? s.dim(detail) : code(detail, s), mark);
+    if (PLATFORM === 'windows') checkWindows(say);
+    else checkLinux(say);
     step('Data', s.dim(tildify(paths.varDir)));
     io.stdout('\n');
     const installed = await hooksCommand('install', { yes: options.yes, diff: options.diff }, io);
     if (installed !== 0) return installed;
     if (options.restart !== false) await restartOldDaemon(io);
     io.stdout(
-      `\n${s.mark('✓', 'green', s.bold('Ready.'))} Open Forchetta${PLATFORM === 'wsl' ? ' in a window of Windows' : ' in your browser'} with:\n\n    ${s.claude('forchetta open')}\n\n` +
+      `\n${s.mark('✓', 'green', s.bold('Ready.'))} Open Forchetta${PLATFORM === 'wsl' ? ' in a window of Windows' : PLATFORM === 'windows' ? '' : ' in your browser'} with:\n\n    ${s.claude('forchetta open')}\n\n` +
         `${code('Sessions started with `forchetta run claude`, or from the page, also open in its terminals.', s)}\n`,
     );
     return 0;

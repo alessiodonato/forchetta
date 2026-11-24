@@ -37,6 +37,7 @@ import { PermissionOutcomeLine, PermissionPrompt, visibleOutcome } from './Permi
 import { GuardLines } from './Guard.tsx';
 import { ColorDot, roleText, TeamEditor } from './Team.tsx';
 import { canOpen, type Store } from './store.ts';
+import { placeText } from './platform.ts';
 
 // One box per session. Its data-state drives the colors and the animations in the CSS; the few one-off
 // animations (entering, shaking at an error) run here, through motion.ts.
@@ -244,7 +245,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
       data-since={since}
       data-completed={completed ? '' : undefined}
       data-openable={openable ? '' : undefined}
-      title={openable ? 'Open the terminal of the session' : agent.state === 'ended' ? undefined : 'Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.'}
+      title={openable ? 'Open the terminal of the session' : agent.state === 'ended' ? undefined : placeText('Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.', store.state.system?.platform)}
       // From the keyboard too: Tab reaches it, Enter or Space opens it as a click. Its own buttons keep their keys.
       tabIndex={0}
       aria-label={boxLabel(agent, line.text, openable)}

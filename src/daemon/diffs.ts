@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, relative } from 'node:path';
+import { basename, homedir, relative } from '../shared/fspath.ts';
 import type { FileChange, SessionEdit } from '../shared/agent.ts';
+import { gitProgram } from '../shared/windows.ts';
 
 // The changes of a session, for the panel of its box: the files it wrote (daemon/conflicts.ts) and what git says
 // changed in each since the last commit. git only reads here, and with what could run a program turned off
@@ -18,9 +18,9 @@ const MAX_EDIT_BYTES = 1536 * 1024;
 function git(args: string[], cwd: string): Promise<{ code: number; stdout: string }> {
   return new Promise((resolve) => {
     execFile(
-      'git',
+      gitProgram('git'),
       ['-c', 'core.fsmonitor=false', '-c', 'core.quotepath=off', ...args],
-      { cwd, timeout: 10_000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' } },
+      { cwd, timeout: 10_000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' }, windowsHide: true },
       (error, stdout) => {
         const code = error ? (typeof (error as { code?: unknown }).code === 'number' ? ((error as { code: number }).code) : -1) : 0;
         resolve({ code, stdout: String(stdout) });

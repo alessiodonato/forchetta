@@ -1,14 +1,18 @@
 import { execFile, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { migrateData, readDataJson, writeDataJson } from '../shared/data-file.ts';
-import { homedir, uptime } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { uptime } from 'node:os';
+import { dirname, fromOutside, homedir, isAbsolute, join, relative, resolve, slashes, WINDOWS } from '../shared/fspath.ts';
 import { contextWindowOf, detectArricurdai, loadConfig, resolveTool, saveConfig, which } from '../shared/config.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
+import { acceptPipe, newPipe } from '../shared/pipe.ts';
 import { MACHINE } from '../shared/machine.ts';
 import { installHint, PLATFORM } from '../shared/platform.ts';
-import { listPanes, Tmux } from '../shared/tmux.ts';
+import { sessionsOf } from '../shared/sessions.ts';
+import { listPanes } from '../shared/tmux.ts';
+import { gitProgram } from '../shared/windows.ts';
 import { VERSION } from '../shared/version.ts';
 import { ArricurdaiNotes, ArricurdaiPoller, readArricurdaiStatus } from './arricurdai.ts';
 import { isAlive, readClaudeAgents } from './claude-agents.ts';
@@ -23,6 +27,7 @@ import { GuardStats } from './guard-stats.ts';
 import { Loops } from './loops.ts';
 import { changedNote, Coherence } from './coherence.ts';
 import { Servers } from './servers.ts';
+import { shellLine } from './powershell.ts';
 import { changesOf } from './diffs.ts';
 import { editOf, Patches } from './patches.ts';
 import { runRecall } from './recall.ts';
@@ -107,7 +112,7 @@ function main(): void {
     process.exit(1);
   }
   const config = loadConfig(paths.config, log);
-  const tmux = new Tmux(resolveTool('tmux', config), paths.tmuxSocket, paths.tmuxConf);
+  const tmux = sessionsOf(config);
   let claude: string | undefined;
   try {
     claude = resolveTool('claude', config);
@@ -127,10 +132,11 @@ function main(): void {
   // after an update; a hook that arrives says the hooks work.
   let claudeVersion: string | undefined;
   let hookSeen = false;
+  let hooksListening = false;
   let haikuOn = false;
   const readClaudeVersion = (): void => {
     if (!claude) return;
-    execFile(claude, ['--version'], { encoding: 'utf8', timeout: 10_000 }, (_error, stdout) => {
+    execFile(claude, ['--version'], { encoding: 'utf8', timeout: 10_000, windowsHide: true }, (_error, stdout) => {
       const found = versionIn(stdout ?? '');
       if (!found || found === claudeVersion) return;
       claudeVersion = found;
@@ -195,7 +201,8 @@ function main(): void {
   /** Runs a program for the guard: quickly, its output also when it exits with an error. */
   const runQuick = (file: string, args: string[]): Promise<string | undefined> =>
     new Promise((done) => {
-      execFile(file, args, { encoding: 'utf8', timeout: 700, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(stdout || (error ? undefined : '')));
+      // Windows takes longer to start a program, and the list of its processes comes from PowerShell.
+      execFile(file, args, { encoding: 'utf8', timeout: WINDOWS ? 2000 : 700, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (error, stdout) => done(stdout || (error ? undefined : '')));
     });
   const teams = new Teams(paths.teams, log);
   // The skills of the agents: fetched from GitHub the first time a team uses them, kept in var/skills. Yours are
@@ -245,7 +252,7 @@ function main(): void {
   // git for the verdicts of the reviewers and the merges: by its full path, briefly, its output or nothing.
   crews.git = (dir, args) =>
     new Promise((done) => {
-      execFile('/usr/bin/git', ['-c', 'core.fsmonitor=false', '-C', dir, ...args], { encoding: 'utf8', timeout: 3000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(error ? undefined : stdout));
+      execFile(gitProgram('/usr/bin/git'), ['-c', 'core.fsmonitor=false', '-C', dir, ...args], { encoding: 'utf8', timeout: 3000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (error, stdout) => done(error ? undefined : stdout));
     });
   // The trust of Claude Code, read (never written) from its global configuration. Claude Code trusts a git
   // repository at its root (a folder inside a trusted repository asks nothing; a repository of its own inside a
@@ -255,9 +262,12 @@ function main(): void {
       const file = process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : join(homedir(), '.claude.json');
       const projects = (JSON.parse(readFileSync(file, 'utf8')) as { projects?: Record<string, { hasTrustDialogAccepted?: boolean }> }).projects ?? {};
       const root = crews.gitInfo(dir).root;
-      if (root) return projects[root]?.hasTrustDialogAccepted === true;
+      // On Windows its folders may be written in either way, and in any case.
+      const byFolder = WINDOWS ? Object.fromEntries(Object.entries(projects).map(([folder, project]) => [slashes(folder).toLowerCase(), project])) : projects;
+      const projectOf = (folder: string): { hasTrustDialogAccepted?: boolean } | undefined => byFolder[WINDOWS ? folder.toLowerCase() : folder];
+      if (root) return projectOf(root)?.hasTrustDialogAccepted === true;
       for (let current = dir; ; current = dirname(current)) {
-        if (projects[current]?.hasTrustDialogAccepted === true) return true;
+        if (projectOf(current)?.hasTrustDialogAccepted === true) return true;
         if (dirname(current) === current) return false;
       }
     } catch {
@@ -269,10 +279,11 @@ function main(): void {
   crews.gitInfo = (dir) => {
     const git = (args: string[]): string | undefined => {
       // By its full path: the daemon started by the app has the short PATH of the Finder.
-      const result = spawnSync('/usr/bin/git', ['-c', 'core.fsmonitor=false', '-C', dir, ...args], { encoding: 'utf8', timeout: 2000 });
+      const result = spawnSync(gitProgram('/usr/bin/git'), ['-c', 'core.fsmonitor=false', '-C', dir, ...args], { encoding: 'utf8', timeout: 2000, windowsHide: true });
       return result.status === 0 ? result.stdout.trim() || undefined : undefined;
     };
-    return { root: git(['rev-parse', '--show-toplevel']), branch: git(['branch', '--show-current']) };
+    const root = git(['rev-parse', '--show-toplevel']);
+    return { root: root && fromOutside(root), branch: git(['branch', '--show-current']) };
   };
   // The tools of a team, or of templates for the other sessions it starts: Claude Code starts this server for each
   // session (see mcp/team.ts).
@@ -379,14 +390,17 @@ function main(): void {
     changedByOthers: (agentId, file) => coherence.changedByOthers(agentId, file),
     readText: (path) => {
       try {
-        return statSync(path).size <= 2_000_000 ? readFileSync(path, 'utf8') : undefined;
+        if (statSync(path).size > 2_000_000) return undefined;
+        const text = readFileSync(path, 'utf8');
+        // On Windows a file may have its lines ended as Windows does; what Claude writes has not.
+        return WINDOWS ? text.replace(/\r\n/g, '\n') : text;
       } catch {
         return undefined;
       }
     },
     dirty: async (repo) => {
       // core.fsmonitor=false: the configuration of a repository cannot make this run a program of its own.
-      const text = await runQuick('/usr/bin/git', ['-c', 'core.fsmonitor=false', '-C', repo, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
+      const text = await runQuick(gitProgram('/usr/bin/git'), ['-c', 'core.fsmonitor=false', '-C', repo, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
       return text === undefined ? undefined : parseStatus(text, repo);
     },
   });
@@ -398,9 +412,9 @@ function main(): void {
   });
   /** A git merge of the branch of a member of a team, with commits its reviewer did not approve: you decide. */
   const mergeCheck = async (agent: Agent, payload: Parameters<Guard['decide']>[1]): Promise<GuardDecision | undefined> => {
-    const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
+    const command = shellLine(payload);
     const cwd = agent.cwd ?? payload.cwd;
-    if (!guardFor(agent).git || payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || typeof command !== 'string' || !cwd || agent.state === 'ended') return undefined;
+    if (!guardFor(agent).git || payload.hook_event_name !== 'PreToolUse' || command === undefined || !cwd || agent.state === 'ended') return undefined;
     const found = await crews.decideMerge(agent.id, command, cwd);
     if (found) guardStats.count('merge');
     return found;
@@ -548,6 +562,7 @@ function main(): void {
       systemInfo({
         config,
         tmux: (() => {
+          if (WINDOWS) return undefined;
           try {
             return resolveTool('tmux', config);
           } catch {
@@ -561,7 +576,7 @@ function main(): void {
         arricurdai,
         notesSupported,
         haikuOn,
-        socket: server.hooks.listening,
+        socket: WINDOWS ? hooksListening : server.hooks.listening,
         hookSeen,
         sessions: [...registry.agents.values()].filter((agent) => agent.state !== 'ended').length,
         settingsText: readClaudeSettings(),
@@ -1084,6 +1099,7 @@ function main(): void {
       // Already gone.
     }
     server.hooks.close();
+    server.pipe?.close();
     try {
       rmSync(paths.hooksSocket, { force: true });
     } catch {
@@ -1128,6 +1144,19 @@ function main(): void {
   // (this one holds the port, so no other daemon is running). macOS takes paths of 104 bytes at most.
   const listenForHooks = (): void => {
     const socket = paths.hooksSocket;
+    if (WINDOWS) {
+      // A pipe with a new name and a new key each time, in a file of the private folder: the hooks read it there.
+      const info = newPipe('hooks');
+      server.pipe = createServer((raw) => acceptPipe(raw, info.key, (connection) => server.hooks.emit('connection', connection)));
+      server.pipe.on('error', (error) => log(`pipe of the hooks: ${String(error)}`, 'error'));
+      server.pipe.listen(info.pipe, () => {
+        hooksListening = true;
+        writeFileSync(`${socket}.tmp`, `${JSON.stringify(info)}\n`, { mode: 0o600 });
+        renameSync(`${socket}.tmp`, socket);
+        hub?.systemChanged();
+      });
+      return;
+    }
     if (Buffer.byteLength(socket) > 103) {
       log(`socket of the hooks not created: the path is too long (${socket})`, 'error');
       return;
@@ -1139,6 +1168,7 @@ function main(): void {
     }
     server.hooks.on('error', (error) => log(`socket of the hooks: ${String(error)}`, 'error'));
     server.hooks.listen(socket, () => {
+      hooksListening = true;
       try {
         chmodSync(socket, 0o600);
       } catch {

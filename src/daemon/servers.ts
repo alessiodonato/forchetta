@@ -1,6 +1,9 @@
 import type { Agent } from '../shared/agent.ts';
 import { systemTool } from '../shared/platform.ts';
 import { type GuardDecision, ONCE_MS, otherName } from './guard.ts';
+import { shellLine } from './powershell.ts';
+import { windowsLook } from './windows-processes.ts';
+import { WINDOWS } from '../shared/fspath.ts';
 import { isDevServerCommand, killTargets, placedCommands } from './shell.ts';
 import type { HookPayload } from './state.ts';
 
@@ -12,7 +15,8 @@ import type { HookPayload } from './state.ts';
 // stopped: a process started by another Claude Code session (its dev server, or the session itself) asks you first.
 //
 // Which session started a process: the Claude Code process of a session among its parents (ps). A server started in
-// the background of a shell that ended has no parent left but launchd: it counts as started outside Claude Code.
+// the background of a shell that ended has no parent left but launchd: it counts as started outside Claude Code. On
+// Windows the folder of a process is not told: what its command line names is (daemon/windows-processes.ts).
 
 // On a Mac lsof is in /usr/sbin, on Linux in /usr/bin, if it is installed at all: without it nothing is found.
 const LSOF = systemTool('lsof');
@@ -77,6 +81,26 @@ export function ownerOf(pid: number, processes: ReadonlyMap<number, ProcessRow>,
 
 const inside = (path: string, dir: string): boolean => path === dir || path.startsWith(dir.endsWith('/') ? dir : `${dir}/`);
 
+/** How the processes are looked at: with lsof, ps and pgrep; on Windows with its own programs (daemon/windows-processes.ts). */
+export interface Look {
+  listening(): Promise<Map<number, number[]>>;
+  processes(): Promise<Map<number, ProcessRow>>;
+  /** The processes when the folders need them too: Windows. Empty elsewhere. */
+  table(): Promise<Map<number, ProcessRow>>;
+  /** The folder each process works in, as far as it is known. */
+  folders(pids: number[], scope: string, table: ReadonlyMap<number, ProcessRow>): Promise<Map<number, string>>;
+  /** The processes a kill by name or pattern would stop, as pgrep takes them. */
+  matching(pattern: string[]): Promise<number[]>;
+}
+
+const unixLook = (run: ServersOptions['run']): Look => ({
+  listening: async () => parseListening((await run(LSOF, ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])) ?? ''),
+  processes: async () => parsePs((await run(PS, ['-axo', 'pid=,ppid=,comm='])) ?? ''),
+  table: async () => new Map(),
+  folders: async (pids) => parseCwds((await run(LSOF, ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fn'])) ?? ''),
+  matching: async (pattern) => ((await run(PGREP, pattern)) ?? '').split(/\s+/).filter((word) => /^\d+$/.test(word)).map(Number),
+});
+
 export interface ServersOptions {
   agents: () => Iterable<Agent>;
   /** The working tree of a folder (daemon/conflicts.ts). */
@@ -85,6 +109,7 @@ export interface ServersOptions {
   enabled: (agent: Agent) => boolean;
   /** Runs a program and gives its output, also when it exits with an error; undefined when it cannot run. */
   run: (file: string, args: string[]) => Promise<string | undefined>;
+  look?: Look;
   /** The pid of the daemon: it listens too, and in a clone of Forchetta it works in the folder, but it is no dev server. */
   self?: number;
   now?: () => number;
@@ -93,16 +118,18 @@ export interface ServersOptions {
 export class Servers {
   private readonly warned = new Map<string, number>();
   private readonly now: () => number;
+  private readonly look: Look;
 
   constructor(private readonly options: ServersOptions) {
     this.now = options.now ?? Date.now;
+    this.look = options.look ?? (WINDOWS ? windowsLook(options.run) : unixLook(options.run));
   }
 
   async decide(agent: Agent, payload: HookPayload): Promise<GuardDecision | undefined> {
-    if (payload.hook_event_name !== 'PreToolUse' || payload.tool_name !== 'Bash' || agent.state === 'ended' || !this.options.enabled(agent)) return undefined;
-    const line = (payload.tool_input as { command?: unknown } | undefined)?.command;
+    const line = shellLine(payload);
+    if (payload.hook_event_name !== 'PreToolUse' || line === undefined || agent.state === 'ended' || !this.options.enabled(agent)) return undefined;
     const cwd = agent.cwd ?? payload.cwd;
-    if (typeof line !== 'string' || !cwd) return undefined;
+    if (!cwd) return undefined;
     const kill = await this.decideKill(agent, line);
     if (kill) return kill;
     const start = placedCommands(line, cwd).find((command) => isDevServerCommand(command.words));
@@ -112,9 +139,10 @@ export class Servers {
   /** A dev server about to start where one already listens: its address, once. */
   private async decideStart(agent: Agent, line: string, dir: string): Promise<GuardDecision | undefined> {
     const scope = this.options.repoOf(dir) ?? dir;
-    const listening = parseListening((await this.options.run(LSOF, ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])) ?? '');
+    const listening = await this.look.listening();
     if (listening.size === 0) return undefined;
-    const cwds = parseCwds((await this.options.run(LSOF, ['-a', '-p', [...listening.keys()].join(','), '-d', 'cwd', '-Fn'])) ?? '');
+    const table = await this.look.table();
+    const cwds = await this.look.folders([...listening.keys()], scope, table);
     // A server of this folder: it works inside the working tree, in the folder of the command, above it or under it.
     const servers = [...listening].filter(([pid]) => {
       if (pid === (this.options.self ?? process.pid)) return false;
@@ -123,7 +151,7 @@ export class Servers {
     });
     if (servers.length === 0) return undefined;
     if (!this.firstTime(agent.id, `start\n${line}`)) return undefined;
-    const processes = parsePs((await this.options.run(PS, ['-axo', 'pid=,ppid=,comm='])) ?? '');
+    const processes = table.size > 0 ? table : await this.look.processes();
     const described = servers.slice(0, 3).map(([pid, ports]) => {
       const owner = ownerOf(pid, processes, this.options.agents());
       const by = !owner ? 'started outside Claude Code' : owner.id === agent.id ? 'started by you earlier' : `started by "${otherName(owner, agent)}", another Claude Code session`;
@@ -148,16 +176,13 @@ export class Servers {
     const targets = killTargets(line);
     if (!targets) return undefined;
     const pids = new Set(targets.pids);
-    for (const pattern of targets.patterns) {
-      const found = (await this.options.run(PGREP, pattern)) ?? '';
-      for (const word of found.split(/\s+/)) if (/^\d+$/.test(word)) pids.add(Number(word));
-    }
+    for (const pattern of targets.patterns) for (const pid of await this.look.matching(pattern)) pids.add(pid);
     if (targets.ports.length > 0) {
-      const listening = parseListening((await this.options.run(LSOF, ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])) ?? '');
+      const listening = await this.look.listening();
       for (const [pid, ports] of listening) if (ports.some((port) => targets.ports.includes(port))) pids.add(pid);
     }
     if (pids.size === 0) return undefined;
-    const processes = parsePs((await this.options.run(PS, ['-axo', 'pid=,ppid=,comm='])) ?? '');
+    const processes = await this.look.processes();
     const hit: string[] = [];
     for (const pid of pids) {
       const owner = ownerOf(pid, processes, this.options.agents());

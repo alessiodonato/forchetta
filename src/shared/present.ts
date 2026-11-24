@@ -278,7 +278,7 @@ export function errorLine(agent: Agent, limits: UsageLimits | undefined, now: nu
 /** The folder of a session, short: ~/Desktop/shop. */
 export function folderText(cwd: string | undefined): string {
   if (!cwd) return '';
-  return cwd.replace(/^\/Users\/[^/]+(?=\/|$)/, '~');
+  return cwd.replace(/^(?:[A-Z]:)?\/Users\/[^/]+(?=\/|$)/, '~');
 }
 
 /** How a session ended, in words; nothing when Claude Code says no more than that it ended. */

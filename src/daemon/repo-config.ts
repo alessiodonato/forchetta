@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join } from '../shared/fspath.ts';
 import { RULES_MAX } from '../shared/crew.ts';
 import { TEAM_FILE_MAX } from '../shared/team-file.ts';
 

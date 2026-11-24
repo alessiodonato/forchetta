@@ -9,6 +9,7 @@ import { PermissionButtons } from './Permission.tsx';
 import { runningSubagentsTag } from './Subagents.tsx';
 import { canOpen, type Store } from './store.ts';
 import { ColorDot } from './Team.tsx';
+import { placeText } from './platform.ts';
 
 // With panes open, the boxes become a column on the left: project, state, one line, time. They keep their state
 // colors and animations (the amber breath shows here too). A click opens or activates the pane of the session.
@@ -38,7 +39,7 @@ function CompactBoxView({ agent, now, open, onOpen, store, unseen, limits }: Pro
   const since = useMotionAnchor(ref, agent.state);
   const openable = canOpen(agent);
   const subagents = runningSubagentsTag(agent);
-  const title = openable ? undefined : agent.state === 'ended' ? 'Session ended' : 'Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.';
+  const title = openable ? undefined : agent.state === 'ended' ? 'Session ended' : placeText('Outside the tmux of Forchetta: read only. Start it with "forchetta run claude" to open it here.', store.state.system?.platform);
   return (
     // A div with the role of a button: a <button> does not lay out its content as a flex column in WebKit.
     <div

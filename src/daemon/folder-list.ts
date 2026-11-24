@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, homedir, join } from '../shared/fspath.ts';
 import { fromWindowsPath, PLATFORM, type Platform } from '../shared/platform.ts';
 import { startFolder } from './folder-chooser.ts';
 
@@ -28,6 +27,7 @@ export const MAX_FOLDERS = 500;
 /** Your home, and in WSL your home of Windows (the only user in C:\Users that is not one of the system), or drive C. */
 export function placesOf(home = homedir(), platform: Platform | undefined = PLATFORM, users = '/mnt/c/Users'): FolderList['places'] {
   const places = [{ label: 'home', path: home }];
+  if (platform === 'windows') return [...places, ...drives().map((drive) => ({ label: drive.slice(0, 2), path: drive }))];
   if (platform !== 'wsl') return places;
   const own = folderNames(users).names.filter((name) => !/^(public|default|default user|all users|desktop\.ini)$/i.test(name));
   if (own.length === 1) places.push({ label: 'Windows', path: join(users, own[0]!) });
@@ -35,11 +35,15 @@ export function placesOf(home = homedir(), platform: Platform | undefined = PLAT
   return places;
 }
 
+/** The drives of Windows: C:/, D:/… */
+const drives = (): string[] => [...'CDEFGHIJKLMNOPQRSTUVWXYZ'].map((letter) => `${letter}:/`).filter((drive) => existsSync(drive));
+
 function folderNames(path: string): { names: string[]; error?: string } {
   try {
     const names = readdirSync(path, { withFileTypes: true })
       .filter((entry) => {
-        if (entry.name.startsWith('.')) return false;
+        // $RECYCLE.BIN and the like, at the root of a drive of Windows.
+        if (entry.name.startsWith('.') || entry.name.startsWith('$')) return false;
         if (entry.isDirectory()) return true;
         if (!entry.isSymbolicLink()) return false;
         try {
@@ -61,7 +65,8 @@ export function listFolders(asked: string | undefined, home = homedir(), platfor
   const typed = (asked ?? '').trim();
   const folder = (platform === 'wsl' ? fromWindowsPath(typed) : undefined) ?? typed;
   // startFolder never opens on the root, where the folder above leads.
-  const path = folder === '/' ? '/' : startFolder(folder, home);
+  const root = folder === '/' ? '/' : platform === 'windows' ? /^[A-Za-z]:[\\/]?$/.exec(folder)?.[0] : undefined;
+  const path = root ? (root === '/' ? '/' : `${root[0]!.toUpperCase()}:/`) : startFolder(folder, home);
   const { names, error } = folderNames(path);
   const parent = dirname(path);
   return {

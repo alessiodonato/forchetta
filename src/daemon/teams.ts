@@ -1,5 +1,5 @@
 import { keepRejected, readDataJson, writeDataJson } from '../shared/data-file.ts';
-import { type Agent, cleanTeam, type TeamInfo } from '../shared/agent.ts';
+import { type Agent, cleanTeam, isFullPath, type TeamInfo } from '../shared/agent.ts';
 
 // Names, groups and roles of the sessions, for the chart of a team of agents. They are set from the box of a
 // session and remembered for its folder in var/teams.json: a session that starts again in the same folder (a
@@ -20,7 +20,7 @@ export class Teams {
     const rejected: unknown[] = [];
     for (const [folder, team] of Object.entries(saved)) {
       const clean = cleanTeam(team);
-      if (clean && folder.startsWith('/')) this.byFolder[folder] = clean;
+      if (clean && isFullPath(folder)) this.byFolder[folder] = clean;
       else rejected.push({ [folder]: team });
     }
     keepRejected(file, rejected, 'teams of the folders', log);

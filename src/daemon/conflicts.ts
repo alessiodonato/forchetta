@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from '../shared/fspath.ts';
 import type { Agent, Conflict } from '../shared/agent.ts';
+import { shellLine } from './powershell.ts';
 import { shellWrites } from './shell.ts';
 import type { HookPayload } from './state.ts';
 
@@ -34,10 +35,9 @@ export function writtenFile(payload: HookPayload, cwd: string | undefined): stri
  * took away, and a log in /tmp are left out: they are no file of the work to hold.
  */
 export function shellWrittenFiles(payload: HookPayload, cwd: string | undefined, within: string | undefined): string[] {
-  if (payload.hook_event_name !== 'PostToolUse' || payload.tool_name !== 'Bash') return [];
-  const command = (payload.tool_input as { command?: unknown } | undefined)?.command;
+  const command = payload.hook_event_name === 'PostToolUse' ? shellLine(payload) : undefined;
   const base = cwd ?? payload.cwd;
-  if (typeof command !== 'string' || !base || !within) return [];
+  if (command === undefined || !base || !within) return [];
   return shellFiles(command, base, within);
 }
 
