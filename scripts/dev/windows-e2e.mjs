@@ -140,6 +140,8 @@ function terminal(id) {
     socket.on('error', fail);
   });
 }
+/** Whether a terminal drew a text: Windows moves the cursor over the spaces instead of writing them. */
+const shows = (term, text) => plain(term.text).replace(/\s+/g, '').includes(text.replace(/\s+/g, ''));
 const plain = (text) => text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
 
 // ── a session, its terminal, its permissions ─────────────────────────────────────────────────────────────────
@@ -150,27 +152,34 @@ check('its turn ends in the box', Boolean(await until(() => state(a) === 'idle')
 check('its box says the folder', agents.get(a)?.cwd === slashes(project), agents.get(a)?.cwd);
 check('its status line reaches the box', Boolean(await until(() => agents.get(a)?.usage || agents.get(a)?.context, 15_000)), JSON.stringify({ usage: agents.get(a)?.usage, context: agents.get(a)?.context }));
 const term = await terminal(a);
-check('its terminal opens in the page', Boolean(await until(() => plain(term.text).includes('say hello'), 8000)), plain(term.text).slice(-200));
-check('with the status line you had', Boolean(await until(() => plain(term.text).includes('my line '), 8000)));
+check('its terminal opens in the page', Boolean(await until(() => shows(term, 'say hello'), 8000)), plain(term.text).slice(-200));
+check('with the status line you had', Boolean(await until(() => shows(term, 'my line '), 8000)));
 term.text = '';
 term.type('typed in the page');
-check('what you type in it reaches Claude', Boolean(await until(() => plain(term.text).includes('typed in the page'), 8000)));
+check('what you type in it reaches Claude', Boolean(await until(() => shows(term, 'typed in the page'), 8000)), JSON.stringify(term.text.slice(-300)));
 term.type('\x15');
 await sleep(800);
 const permFile = join(project, 'asked.txt');
-send({ type: 'ask', agentId: a, text: `WRITE ${slashes(permFile)}` });
+send({ type: 'ask', agentId: a, text: `WRITE "${slashes(permFile)}"` });
 // You typed in it: the daemon waits ten seconds before it types.
 const asked = await until(() => agents.get(a)?.permission, 45_000);
 check('a command of the box is typed, and the permission comes to the box', Boolean(asked), JSON.stringify(agents.get(a)?.queue ?? state(a)));
 if (asked) send({ type: 'permission', agentId: a, ticket: asked.ticket, behavior: 'allow' });
 check('answered from the box, Claude goes on', Boolean(await until(() => existsSync(permFile))) && Boolean(await until(() => state(a) === 'idle')), state(a));
+if (state(a) === 'waiting') {
+  console.log(`     the terminal: ${plain(term.text).replace(/\s+/g, ' ').slice(-700)}`);
+  console.log(`     the box: ${JSON.stringify({ permission: agents.get(a)?.permission, outcome: agents.get(a)?.permissionOutcome, waiting: agents.get(a)?.waiting })}`);
+  // Out of the dialog, for what comes next.
+  term.type('\x1b');
+  await until(() => state(a) === 'idle', 10_000);
+}
 check('the box knows the file', Boolean(await until(() => agents.get(a)?.filesChanged === 1, 5000)), agents.get(a)?.filesChanged);
 
 // ── the guard ────────────────────────────────────────────────────────────────────────────────────────────────
 const shared = join(project, 'src', 'Shared.ts');
 mkdirSync(join(project, 'src'));
 writeFileSync(shared, 'first\n');
-const b = await start(`WRITE ${slashes(shared)} and HOLD`, 'acceptEdits');
+const b = await start(`WRITE "${slashes(shared)}" and HOLD`, 'acceptEdits');
 check('another session changes a file, in the middle of its turn', Boolean(await until(() => api.holding() === 1)) && readFileSync(shared, 'utf8') !== 'first\n');
 const held = readFileSync(shared, 'utf8');
 /** A session in a plain terminal, not started by Forchetta. */
@@ -184,7 +193,7 @@ const other = (prompt) =>
     setTimeout(() => child.kill(), 60_000).unref();
   });
 const outside = (text) => /Forchetta.{0,200}is changing/s.test(text);
-const write = await other(`WRITE ${slashes(shared).toLowerCase()}`);
+const write = await other(`WRITE "${slashes(shared).toLowerCase()}"`);
 check('the guard stops an edit of it, with its name in another case', outside(write) && readFileSync(shared, 'utf8') === held, write);
 const hasBash = api.tools.has('Bash');
 const line = hasBash ? 'echo taken > src/Shared.ts' : "Set-Content -Path src\\Shared.ts -Value taken";
@@ -204,7 +213,7 @@ check('reading it is free', reading.includes('written at'), reading);
 check('the box says who waits', Boolean(await until(() => [...agents.values()].some((agent) => agent.heldBack?.length) || agents.get(b)?.holding?.length, 3000)) || true);
 api.release();
 check('its turn ends', Boolean(await until(() => state(b) === 'idle')), state(b));
-const after = await other(`WRITE ${slashes(shared)}`);
+const after = await other(`WRITE "${slashes(shared)}"`);
 check('then the file is free', readFileSync(shared, 'utf8') !== held, after);
 
 // ── the daemon comes and goes ────────────────────────────────────────────────────────────────────────────────
@@ -228,7 +237,7 @@ token = info.token;
 await connect();
 check('it finds the sessions again', agents.get(a)?.state !== 'ended' && agents.get(a)?.pid === pid, JSON.stringify({ state: state(a), pid: agents.get(a)?.pid }));
 const again = await terminal(a);
-check('and their terminals', Boolean(await until(() => plain(again.text).includes('say hello'), 8000)));
+check('and their terminals', Boolean(await until(() => shows(again, 'say hello'), 8000)));
 send({ type: 'ask', agentId: a, text: 'are you still there?' });
 check('a command of the box reaches it', Boolean(await until(() => api.prompts.some((text) => text.includes('are you still there')), 45_000)), JSON.stringify(agents.get(a)?.queue ?? ''));
 await until(() => state(a) === 'idle');
@@ -242,8 +251,6 @@ check('forchetta doctor', wrong.length === 0, wrong.map((finding) => `${finding.
 const ran = forchetta('run', 'claude', '--model', 'claude-sonnet-5-5');
 check('forchetta run, with no terminal, starts one', ran.status === 0 && /Session started/.test(ran.stdout), ran.stdout + ran.stderr);
 check('and its box comes', Boolean(await until(() => [...agents.values()].some((agent) => agent.id !== a && agent.id !== b && agent.control.kind === 'tmux' && agent.state === 'idle'))));
-for (const agent of agents.values()) if (agent.control.kind === 'tmux' && agent.state !== 'ended') send({ type: 'command', agentId: agent.id, kind: 'exit', confirmed: true });
-await sleep(500);
 again.type('/exit');
 await sleep(1500);
 again.type('\r');

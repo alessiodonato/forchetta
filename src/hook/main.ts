@@ -16,8 +16,12 @@ import { gitBash, windowsPowerShell } from '../shared/windows.ts';
 
 const [kind = '', , limit] = process.argv.slice(2);
 
-/** How long the daemon has for an answer. The guard looks at the processes of Windows before a kill: it takes a moment. */
-const ANSWER_MS: Record<string, number> = { hook: 1500, guard: 2500, permission: 2000, status: 1500 };
+/**
+ * How long the daemon has for an answer. The guard looks at the processes of Windows before a kill, and a permission at
+ * the command line of the session: that takes a second or two, more on a slow PC. The dialog of a permission is on screen
+ * meanwhile.
+ */
+const ANSWER_MS: Record<string, number> = { hook: 1500, guard: 2500, permission: 15_000, status: 1500 };
 const answerMs = ANSWER_MS[kind];
 
 const HEADERS = {

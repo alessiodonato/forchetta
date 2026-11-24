@@ -846,18 +846,18 @@ function main(): void {
   commander.restored();
 
   // Whether a claude process shows its dialogs in a terminal: read once per pid (see process.ts).
-  const interactiveByPid = new Map<number, boolean>();
+  const interactiveByPid = new Map<number, Promise<boolean>>();
+  const isInteractive = (pid: number): Promise<boolean> => {
+    const known = interactiveByPid.get(pid);
+    if (known) return known;
+    if (interactiveByPid.size > 500) interactiveByPid.clear();
+    const asked = readCommandLine(pid).then(isInteractiveCommand);
+    interactiveByPid.set(pid, asked);
+    return asked;
+  };
   permissions = new Permissions({
     registry,
-    interactive: async (agent) => {
-      if (!agent.pid) return false;
-      const known = interactiveByPid.get(agent.pid);
-      if (known !== undefined) return known;
-      const interactive = isInteractiveCommand(await readCommandLine(agent.pid));
-      if (interactiveByPid.size > 500) interactiveByPid.clear();
-      interactiveByPid.set(agent.pid, interactive);
-      return interactive;
-    },
+    interactive: async (agent) => (agent.pid ? isInteractive(agent.pid) : false),
     status: async (agent) => {
       if (!claude) return undefined;
       const entries = await readClaudeAgents(claude);
@@ -948,6 +948,8 @@ function main(): void {
         hookSeen = true;
         hub?.systemChanged();
       }
+      // On Windows the answer takes a second or two: asked before the first permission needs it.
+      if (WINDOWS && payload.hook_event_name === 'SessionStart' && agent.pid) void isInteractive(agent.pid);
       commander?.hook(agent, payload);
       crews.hook(agent, payload);
       permissions?.hook(agent, payload);

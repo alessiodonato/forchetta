@@ -1,5 +1,5 @@
 // A stand-in for the API of Claude, for the end-to-end tests: Claude Code itself, with answers made here and no account.
-// What the prompt says is what Claude does: "WRITE <file>" writes that file, "RUN <command>" runs it in the shell there is,
+// What the prompt says is what Claude does: WRITE "<file>" writes that file, "RUN <command>" runs it in the shell there is,
 // "HOLD" keeps the turn open after it, until release().
 import { createServer } from 'node:http';
 
@@ -31,7 +31,7 @@ export function fakeApi() {
       let use;
       if (!result && names.length > 0) {
         prompts.push(text);
-        const file = /WRITE (\S+)/.exec(text)?.[1];
+        const file = /WRITE "([^"]+)"/.exec(text)?.[1];
         const command = /RUN (.+)/.exec(text)?.[1];
         if (file && names.includes('Write')) use = { name: 'Write', input: { file_path: file, content: `written at ${Date.now()}\n` } };
         else if (command) {
