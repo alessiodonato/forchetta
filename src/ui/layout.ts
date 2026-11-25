@@ -124,6 +124,18 @@ export function keyInput(event: { type: string; key: string; shiftKey: boolean; 
 }
 
 /**
+ * Sends what keyInput makes of a key, and says whether xterm.js reads the key (false: it does not). The browser must stop
+ * there too: it would go on to the keypress, which xterm.js takes for an Enter, and the prompt would leave.
+ */
+export function takeKey(event: Parameters<typeof keyInput>[0] & { preventDefault(): void }, send: (data: string) => void): boolean {
+  const input = keyInput(event);
+  if (input === undefined) return true;
+  event.preventDefault();
+  send(input);
+  return false;
+}
+
+/**
  * What xterm.js sends by itself when its terminal gains or loses the keyboard (tmux asks for it: focus-events on).
  * It goes on to tmux, but it is not you using the pane: a pane that loses the keyboard was not used.
  */

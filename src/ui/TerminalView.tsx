@@ -8,7 +8,7 @@ import { linksIn } from '../shared/artifacts.ts';
 import { openLink } from './Artifacts.tsx';
 import { token } from './connection.ts';
 import { GlyphFilter } from './glyphs.ts';
-import { isFocusReport, keyInput } from './layout.ts';
+import { isFocusReport, takeKey } from './layout.ts';
 import type { SelectionPlace } from './store.ts';
 import { terminalTheme } from './terminal-theme.ts';
 import { onThemeChange, resolvedTheme } from './theme.ts';
@@ -194,13 +194,12 @@ export function TerminalView({ agentId, color, onUse, onStatus, focusKey, onDrag
     });
     term.onBinary((data) => send({ type: 'input', data, binary: true }));
     term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
-    term.attachCustomKeyEventHandler((event) => {
-      const input = keyInput(event);
-      if (input === undefined) return true;
-      send({ type: 'input', data: input });
-      callbacks.current.onUse();
-      return false;
-    });
+    term.attachCustomKeyEventHandler((event) =>
+      takeKey(event, (data) => {
+        send({ type: 'input', data });
+        callbacks.current.onUse();
+      }),
+    );
     // A press, then a move beyond a few pixels, is a drag: the release may come outside the pane, so it is heard on
     // the window, in the capture phase (xterm.js handles the mouse of the terminal on its own).
     let press: { x: number; y: number; option: boolean; dragging: boolean } | undefined;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closePane, emptyPanes, focusKey, isFocusReport, keyInput, layoutFor, leastRecentlyUsed, openPane, type PaneState, prunePanes, replacePane, usePane } from '../src/ui/layout.ts';
+import { closePane, emptyPanes, focusKey, isFocusReport, keyInput, layoutFor, leastRecentlyUsed, openPane, type PaneState, prunePanes, replacePane, takeKey, usePane } from '../src/ui/layout.ts';
 
 const openAll = (ids: string[], policy: 'lru' | 'chiedi' = 'lru'): PaneState =>
   ids.reduce((state, id, index) => openPane(state, id, 1000 + index, policy), emptyPanes());
@@ -122,5 +122,16 @@ describe('keys', () => {
     expect(key({ shiftKey: true, metaKey: true })).toBeUndefined();
     expect(key({ shiftKey: true, type: 'keyup' })).toBeUndefined();
     expect(key({ key: 'a', shiftKey: true })).toBeUndefined();
+  });
+
+  it('takes Shift+Enter from the browser too, or its keypress would be an Enter that sends the prompt', () => {
+    const take = (shiftKey: boolean) => {
+      const sent: string[] = [];
+      let prevented = 0;
+      const read = takeKey({ type: 'keydown', key: 'Enter', shiftKey, altKey: false, ctrlKey: false, metaKey: false, preventDefault: () => prevented++ }, (data) => sent.push(data));
+      return { read, sent, prevented };
+    };
+    expect(take(true)).toEqual({ read: false, sent: ['\u001b\r'], prevented: 1 });
+    expect(take(false)).toEqual({ read: true, sent: [], prevented: 0 });
   });
 });
