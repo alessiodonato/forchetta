@@ -236,8 +236,11 @@ for (const kind of kinds) {
   const busy = await until(() => messages.find((message) => message.type === 'shellBusy' && message.id === id), 12_000);
   check(`${kind}: it says what runs before it closes`, /ping/i.test(busy?.running ?? ''), busy?.running);
   send({ type: 'closeShell', id, force: true });
+  const pings = () => spawnSync('tasklist', ['/FI', 'IMAGENAME eq PING.EXE', '/NH'], { encoding: 'utf8' }).stdout.includes('PING');
   check(`${kind}: then it closes`, Boolean(await until(() => messages.find((message) => message.type === 'shellClosed' && message.id === id) && shell.code, 8000)), shell.code);
+  check(`${kind}: with what ran in it`, Boolean(await until(() => !pings(), 8000)));
 }
+check('closing them leaves no error in the log', !/AttachConsole|conpty_console_list_agent/.test(readFileSync(join(varDir, 'daemon.log'), 'utf8')));
 
 // ── the order of the boxes, the scheduled tasks ──────────────────────────────────────────────────────────────
 send({ type: 'order', ids: [...agents.keys()].reverse() });
@@ -256,6 +259,17 @@ if (run?.ok) {
   await sleep(1500);
   its.type('\r');
   await until(() => state(run.agentId) === 'ended', 20_000);
+  // Gone for good, files of Claude Code written and all, before the next one starts.
+  const itsPid = agents.get(run.agentId)?.pid;
+  await until(() => {
+    try {
+      process.kill(itsPid, 0);
+      return false;
+    } catch {
+      return true;
+    }
+  }, 15_000);
+  await sleep(2000);
 }
 
 // ── the guard ────────────────────────────────────────────────────────────────────────────────────────────────

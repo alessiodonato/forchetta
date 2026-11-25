@@ -1,9 +1,7 @@
 import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Socket } from 'node:net';
-import { release } from 'node:os';
 import { StringDecoder } from 'node:string_decoder';
-import { loadPty, type Pty } from '../daemon/pty.ts';
-import { backslashes, WINDOWS } from '../shared/fspath.ts';
+import { loadPty, openPty, type Pty, windowsBuild } from '../daemon/pty.ts';
 import { acceptPipe } from '../shared/pipe.ts';
 import { clampSize, FOCUS_REPORT, type HostMessage, type HostRecord, type HostRequest, type HostSpec, TERMINAL_REPLY } from './protocol.ts';
 import { Screen } from './screen.ts';
@@ -14,24 +12,9 @@ import { Screen } from './screen.ts';
 
 /** A window so far behind is let go: it opens again by itself. */
 const MAX_BEHIND = 16 * 1024 * 1024;
-/** Windows 11: its own console draws all that Claude Code asks. Before, the one that comes with node-pty. */
-const WINDOWS_11 = 22000;
 const MAX_LINE = 4 * 1024 * 1024;
 
-const build = WINDOWS ? Number(release().split('.')[2]) || undefined : undefined;
-
-function open(spec: HostSpec): Pty {
-  const options = { name: 'xterm-256color', cols: spec.cols, rows: spec.rows, cwd: WINDOWS ? backslashes(spec.cwd) : spec.cwd, env: spec.env };
-  const pty = loadPty();
-  if (!WINDOWS) return pty.spawn(spec.file, spec.args, options);
-  const own = build !== undefined && build < WINDOWS_11;
-  try {
-    return pty.spawn(backslashes(spec.file), spec.args, { ...options, useConptyDll: own });
-  } catch (error) {
-    if (!own) throw error;
-    return pty.spawn(backslashes(spec.file), spec.args, options);
-  }
-}
+const open = (spec: HostSpec): Pty => openPty(loadPty(), spec.file, spec.args, { name: 'xterm-256color', cols: spec.cols, rows: spec.rows, cwd: spec.cwd, env: spec.env });
 
 function main(): void {
   const specFile = process.argv[2];
@@ -46,7 +29,7 @@ function main(): void {
     }
     process.exit(1);
   };
-  const screen = new Screen(spec, build);
+  const screen = new Screen(spec, windowsBuild);
   let child: Pty;
   try {
     child = open(spec);

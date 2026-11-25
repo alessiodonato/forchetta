@@ -1,4 +1,6 @@
 import { createRequire } from 'node:module';
+import { release } from 'node:os';
+import { backslashes, WINDOWS } from '../shared/fspath.ts';
 
 // node-pty, the pseudo-terminals of the panes: native, and loaded from node_modules the first time one opens. Its
 // binaries come with it for a Mac and for Windows; for Linux they are compiled (CI, or pnpm in a clone), so they may not be
@@ -26,6 +28,23 @@ let ptyModule: PtyModule | undefined;
 export function loadPty(): PtyModule {
   ptyModule ??= createRequire(import.meta.url)('node-pty') as PtyModule;
   return ptyModule;
+}
+
+/** Windows 11: its own console draws all that Claude Code asks. Before, the one that comes with node-pty. */
+const WINDOWS_11 = 22000;
+export const windowsBuild = WINDOWS ? Number(release().split('.')[2]) || undefined : undefined;
+
+/** A program in a pseudo-terminal; on Windows its paths as Windows has them, and the console that draws best there. */
+export function openPty(pty: PtyModule, file: string, args: string[], options: Record<string, unknown> & { cwd: string }): Pty {
+  if (!WINDOWS) return pty.spawn(file, args, options);
+  const own = windowsBuild !== undefined && windowsBuild < WINDOWS_11;
+  const there = { ...options, cwd: backslashes(options.cwd) };
+  try {
+    return pty.spawn(backslashes(file), args, { ...there, useConptyDll: own });
+  } catch (error) {
+    if (!own) throw error;
+    return pty.spawn(backslashes(file), args, there);
+  }
 }
 
 /** Windows loads the binary only when a terminal opens, and may refuse it then (Smart App Control): one that ends at once. */

@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { statSync } from 'node:fs';
 import { userInfo } from 'node:os';
-import { backslashes, basename, WINDOWS } from '../shared/fspath.ts';
+import { basename, WINDOWS } from '../shared/fspath.ts';
 import type { WebSocket } from 'ws';
 import { daemonEnv } from '../cli/pane-env.ts';
 import { type Agent, displayName } from '../shared/agent.ts';
 import type { ShellInfo, ShellKind } from '../shared/shells.ts';
-import type { Pty, PtyModule } from './pty.ts';
+import { openPty, type Pty, type PtyModule } from './pty.ts';
 
 // The plain terminals of the page: a shell in the folder of a session, in a pseudo-terminal of the daemon. Each lives as
 // long as its pane, as a window of a terminal does: closing the pane ends it (the page asks first when something runs in
@@ -41,6 +41,8 @@ export interface ShellsOptions {
   waitMs?: number;
   /** What runs in a shell now, besides the shell; undefined when nothing does. */
   running?: (pty: Pty, program: ShellProgram) => Promise<string | undefined> | string | undefined;
+  /** Ends a shell and what it started; a hangup, when it is not said. */
+  hangUp?: (pty: Pty) => void;
 }
 
 interface Open {
@@ -112,7 +114,7 @@ export class Shells {
     }
     let pty: Pty;
     try {
-      pty = this.options.pty().spawn(program.file, program.args, { name: 'xterm-256color', cols: 100, rows: 30, cwd: WINDOWS ? backslashes(cwd) : cwd, env: { ...shellEnv(this.options.env ?? process.env), ...program.env }, encoding: null });
+      pty = openPty(this.options.pty(), program.file, program.args, { name: 'xterm-256color', cols: 100, rows: 30, cwd, env: { ...shellEnv(this.options.env ?? process.env), ...program.env }, encoding: null });
     } catch (error) {
       this.options.log(`terminal in ${cwd} not opened: ${String(error)}`, 'warn');
       return { ok: false, error: `${program.label} did not start: ${error instanceof Error ? error.message : String(error)}` };
@@ -217,7 +219,8 @@ export class Shells {
   private end(one: Open): void {
     if (one.ended) return;
     try {
-      one.pty.kill(WINDOWS ? undefined : 'SIGHUP');
+      if (this.options.hangUp) this.options.hangUp(one.pty);
+      else one.pty.kill('SIGHUP');
     } catch {
       // Already gone.
     }

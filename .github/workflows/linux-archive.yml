@@ -332,45 +332,49 @@ jobs:
           $settings = Get-Content -Raw (Join-Path $userHome '.claude\settings.json')
           if ($settings -notmatch 'forchetta-node/node\.exe' -or $settings -match 'node-v22\.0\.0') { throw "again: $settings" }
 
-      # Who has the beta before: its installer and its setup, its daemon at work, and this one over them.
-      - name: An update from the beta before
+      # Who has a beta before: its installer and its setup, its daemon at work, and this one over them. The first one named a
+      # Node.js in a folder of its version.
+      - name: An update from the betas before
         run: |
           $ErrorActionPreference = 'Stop'
-          $before = '0.13.0-beta.3'
           $version = [regex]::Match((Get-Content -Raw release\install.ps1), "PinnedVersion = '([^']+)'").Groups[1].Value
           $others = (($env:Path -split ';') | Where-Object { $_ -and -not (Test-Path (Join-Path $_ 'node.exe')) }) -join ';'
-          $userHome = Join-Path $env:RUNNER_TEMP 'home-update'
-          New-Item -ItemType Directory -Force $userHome | Out-Null
-          $env:USERPROFILE = $userHome
-          $env:Path = "$(Join-Path $env:RUNNER_TEMP 'node-v22.0.0-win-x64');$others"
-          $env:FORCHETTA_NO_SETUP = '1'
-          $env:FORCHETTA_NO_SHORTCUT = '1'
-          Invoke-RestMethod "https://github.com/alessiodonato/forchetta/releases/download/v$before/install.ps1" | Invoke-Expression
-          $forchetta = Join-Path $userHome '.local\bin\forchetta.cmd'
-          if ((& $forchetta --version) -ne $before) { throw 'the beta before is not there' }
-          & $forchetta setup --yes
-          if ($LASTEXITCODE -ne 0) { throw 'setup of the beta before' }
-          & $forchetta daemon start
-          if ($LASTEXITCODE -ne 0) { throw 'daemon of the beta before' }
-          $file = Join-Path $userHome '.claude\settings.json'
-          if ((Get-Content -Raw $file) -notmatch 'node-v22\.0\.0') { throw 'the beta before does not name a version of Node.js: this tries nothing' }
-          $env:FORCHETTA_RELEASES = Join-Path $env:RUNNER_TEMP 'releases'
-          Get-Content -Raw release\install.ps1 | Invoke-Expression
-          if ((& $forchetta --version) -ne $version) { throw 'it was not updated' }
-          & $forchetta setup --yes
-          if ($LASTEXITCODE -ne 0) { throw 'setup' }
-          $settings = Get-Content -Raw $file
-          if ($settings -notmatch 'forchetta-node/node\.exe' -or $settings -match 'node-v22\.0\.0') { throw $settings }
-          # Each hook once, in the place of the one that was there.
-          $json = $settings | ConvertFrom-Json
-          foreach ($event in $json.hooks.PSObject.Properties) {
-            $kinds = @($event.Value | ForEach-Object { $_.hooks } | ForEach-Object { $_.args[1] })
-            if ($kinds.Count -ne @($kinds | Select-Object -Unique).Count) { throw "$($event.Name): twice" }
+          foreach ($before in '0.13.0-beta.2', '0.13.0-beta.3') {
+            $userHome = Join-Path $env:RUNNER_TEMP "home-from-$before"
+            New-Item -ItemType Directory -Force $userHome | Out-Null
+            $env:USERPROFILE = $userHome
+            $env:Path = "$(Join-Path $env:RUNNER_TEMP 'node-v22.0.0-win-x64');$others"
+            $env:FORCHETTA_NO_SETUP = '1'
+            $env:FORCHETTA_NO_SHORTCUT = '1'
+            $env:FORCHETTA_RELEASES = ''
+            Invoke-RestMethod "https://github.com/alessiodonato/forchetta/releases/download/v$before/install.ps1" | Invoke-Expression
+            $forchetta = Join-Path $userHome '.local\bin\forchetta.cmd'
+            if ((& $forchetta --version) -ne $before) { throw "$before is not there" }
+            & $forchetta setup --yes
+            if ($LASTEXITCODE -ne 0) { throw "setup of $before" }
+            & $forchetta daemon start
+            if ($LASTEXITCODE -ne 0) { throw "daemon of $before" }
+            $file = Join-Path $userHome '.claude\settings.json'
+            $named = (Get-Content -Raw $file) -match 'node-v22\.0\.0'
+            if ($before -eq '0.13.0-beta.2' -and -not $named) { throw "$before does not name a version of Node.js: this tries nothing" }
+            $env:FORCHETTA_RELEASES = Join-Path $env:RUNNER_TEMP 'releases'
+            Get-Content -Raw release\install.ps1 | Invoke-Expression
+            if ((& $forchetta --version) -ne $version) { throw "$before was not updated" }
+            & $forchetta setup --yes
+            if ($LASTEXITCODE -ne 0) { throw "setup over $before" }
+            $settings = Get-Content -Raw $file
+            if ($settings -notmatch 'forchetta-node/node\.exe' -or $settings -match 'node-v22\.0\.0') { throw "over ${before}: $settings" }
+            # Each hook once, in the place of the one that was there.
+            $json = $settings | ConvertFrom-Json
+            foreach ($event in $json.hooks.PSObject.Properties) {
+              $kinds = @($event.Value | ForEach-Object { $_.hooks } | ForEach-Object { $_.args[1] })
+              if ($kinds.Count -ne @($kinds | Select-Object -Unique).Count) { throw "over ${before}, $($event.Name): twice" }
+            }
+            $status = (& $forchetta daemon status) -join "`n"
+            if ($LASTEXITCODE -ne 0 -or $status -notmatch [regex]::Escape($version)) { throw "over ${before}, the daemon is not the new one: $status" }
+            if ((& $forchetta open --print) -notmatch '^http://127\.0\.0\.1:47821/#open=') { throw "open over $before" }
+            & $forchetta daemon stop
           }
-          $status = (& $forchetta daemon status) -join "`n"
-          if ($LASTEXITCODE -ne 0 -or $status -notmatch [regex]::Escape($version)) { throw "the daemon is not the new one: $status" }
-          if ((& $forchetta open --print) -notmatch '^http://127\.0\.0\.1:47821/#open=') { throw 'open' }
-          & $forchetta daemon stop
 
       - name: A changed archive is refused
         run: |

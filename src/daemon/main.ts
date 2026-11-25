@@ -72,7 +72,7 @@ import { Order } from './order.ts';
 import { loadPty } from './pty.ts';
 import { Scheduled } from './scheduled.ts';
 import { Shells, userShell } from './shells.ts';
-import { runningUnder, windowsShells } from './windows-shells.ts';
+import { endTree, runningUnder, windowsShells } from './windows-shells.ts';
 import { Reopener } from './reopen.ts';
 import { Restarter } from './restarts.ts';
 import { endedAtShutdown, endedByRestart } from '../shared/reopen.ts';
@@ -607,7 +607,7 @@ function main(): void {
   // The order of the boxes, as you dragged them.
   const order = new Order(paths.order, log);
   // The plain terminals, in the folders of the sessions.
-  const shells = new Shells({ pty: loadPty, programs: PLATFORM === 'windows' ? windowsShells : userShell, log, ...(PLATFORM === 'windows' ? { running: runningUnder } : {}) });
+  const shells = new Shells({ pty: loadPty, programs: PLATFORM === 'windows' ? windowsShells : userShell, log, ...(PLATFORM === 'windows' ? { running: runningUnder, hangUp: endTree } : {}) });
 
   hub = new Hub({
     token,

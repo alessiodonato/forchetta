@@ -1,7 +1,7 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { backslashes, join, slashes } from '../shared/fspath.ts';
-import { findExe, gitBash, windowsPowerShell } from '../shared/windows.ts';
+import { findExe, gitBash, system32, windowsPowerShell } from '../shared/windows.ts';
 import type { Pty } from './pty.ts';
 import type { ShellProgram } from './shells.ts';
 import { LIST_ARGS, parseProcesses, type WindowsProcess } from './windows-processes.ts';
@@ -46,3 +46,13 @@ export const runningUnder = (pty: Pty): Promise<string | undefined> =>
   new Promise((done) => {
     execFile(windowsPowerShell(), LIST_ARGS, { encoding: 'utf8', timeout: 5000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => done(error ? undefined : childOf(pty.pid, parseProcesses(stdout))));
   });
+
+/**
+ * Ends a shell and all it started. Not the kill of node-pty: it looks for them in a console it is closing, and writes in the log
+ * that it is not there.
+ */
+export function endTree(pty: Pty): void {
+  const child = spawn(system32('taskkill.exe'), ['/T', '/F', '/PID', String(pty.pid)], { detached: true, stdio: 'ignore', windowsHide: true });
+  child.on('error', () => pty.kill());
+  child.unref();
+}

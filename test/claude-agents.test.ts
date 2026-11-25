@@ -58,7 +58,8 @@ describe('a session that only has a shell running', () => {
     expect(await readSessionFile(12, sessions)).toBeUndefined();
   });
 
-  it('comes out of readClaudeAgents, with the other sessions as they are', async () => {
+  // A claude made of a script of sh, which Windows does not run.
+  it.skipIf(process.platform === 'win32')('comes out of readClaudeAgents, with the other sessions as they are', async () => {
     const claude = join(dir, 'claude');
     const list = [
       { pid: 11, sessionId: 'a', cwd: '/p', kind: 'interactive', status: 'busy' },
