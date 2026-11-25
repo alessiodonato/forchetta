@@ -550,17 +550,6 @@
 
   .demo-note { margin: 14px 0 0; font-size: 13.5px; color: var(--text-3); }
 
-  /* Where things are on Windows: the window on one side, all the rest on the other. */
-  .wsl { display: grid; grid-template-columns: minmax(0, 1fr) 132px minmax(0, 1.5fr); align-items: center; margin: 30px 0; }
-  .wsl-side { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
-  .wsl-name { font-size: 13.5px; color: var(--text-3); }
-  .wsl-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 8px; font-size: 14.5px; line-height: 1.35; color: var(--text-2); text-align: center; }
-  .wsl-box small { display: block; font-size: 12.5px; color: var(--text-3); }
-  .wsl-box.main { border-color: var(--claude); background: var(--claude-soft); color: var(--text); font-weight: 600; }
-  .wsl-box.main small { font-weight: 400; color: var(--text-2); }
-  .wsl-row { display: flex; gap: 8px; }
-  .wsl-wire { position: relative; height: 2px; background: var(--claude); }
-  .wsl-wire span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 2px 8px; background: var(--bg); font: 12.5px var(--mono); color: var(--text-2); }
 
   /* Install: a real sequence, so numbered. */
   .steps { margin: 26px 0 0; padding: 0; list-style: none; counter-reset: step; }
@@ -627,8 +616,6 @@
     #b2, #b3, #b4 { display: none; }
     .copy .cmd { white-space: normal; overflow-wrap: anywhere; }
     section.part { padding-top: 84px; }
-    .wsl { grid-template-columns: minmax(0, 1fr); justify-items: stretch; }
-    .wsl-wire { width: 2px; height: 44px; margin: 0 auto; }
     .clip-text small { display: none; }
     .clip-step { padding: 10px 12px 12px; align-items: center; }
     .yt-play { bottom: 7%; gap: 7px; padding: 7px 13px 7px 11px; font-size: 14px; }
@@ -885,11 +872,6 @@
     <section class="part text" id="windows" aria-labelledby="windows-title">
       <h2 id="windows-title">On Windows, a beta</h2>
       <p>Forchetta runs on Windows itself: no WSL, no Ubuntu, no administrator. The Claude Code it shows is the one you have, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use it from a window of Edge or Chrome: the same page as on a Mac.</p>
-      <div class="wsl" role="img" aria-label="All on your PC: a window of Edge or Chrome reaches Forchetta on 127.0.0.1. With it are Claude Code, your terminals and your projects.">
-        <div class="wsl-side"><span class="wsl-name">The window</span><span class="wsl-box main">Edge or Chrome<small>no tabs, no extensions</small></span></div>
-        <div class="wsl-wire"><span>127.0.0.1</span></div>
-        <div class="wsl-side"><span class="wsl-name">Your PC</span><span class="wsl-box main">Forchetta</span><span class="wsl-row"><span class="wsl-box">Claude Code</span><span class="wsl-box">your terminals</span><span class="wsl-box">your projects</span></span></div>
-      </div>
       <p><strong>It needs people to try it.</strong> Its tests run on Windows with the real Claude Code, but no one has used it on a PC of their own yet. GitHub builds it from the source and signs it; installing it is one command in PowerShell, and it asks before it changes your settings. <a href="windows/wsl/">In WSL</a>, and on Linux, the same version.</p>
       <div class="actions">
         <a class="button primary" href="windows/">Try it on Windows</a>

@@ -73,17 +73,6 @@
   tr:last-child td { border-bottom: 0; }
   .note { margin: 0 0 18px; padding: 12px 16px; border-left: 2px solid var(--claude); border-radius: 0 8px 8px 0; background: var(--claude-soft); color: var(--text-2); }
 
-  /* Where things are: the window on one side, all the rest on the other. */
-  .wsl { display: grid; grid-template-columns: minmax(0, 1fr) 132px minmax(0, 1.5fr); align-items: center; margin: 30px 0; }
-  .wsl-side { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); }
-  .wsl-name { font-size: 13.5px; color: var(--text-3); }
-  .wsl-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 8px; font-size: 14.5px; line-height: 1.35; color: var(--text-2); text-align: center; }
-  .wsl-box small { display: block; font-size: 12.5px; color: var(--text-3); }
-  .wsl-box.main { border-color: var(--claude); background: var(--claude-soft); color: var(--text); font-weight: 600; }
-  .wsl-box.main small { font-weight: 400; color: var(--text-2); }
-  .wsl-row { display: flex; gap: 8px; }
-  .wsl-wire { position: relative; height: 2px; background: var(--claude); }
-  .wsl-wire span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 2px 8px; background: var(--bg); font: 12.5px var(--mono); color: var(--text-2); }
 
   /* The steps of the install, each with its commands, copied with one click. */
   ol.steps { margin: 22px 0 0; padding: 0; list-style: none; counter-reset: step; }
@@ -117,8 +106,6 @@
     article { padding: 40px 16px 16px; }
     .sub { font-size: 18px; }
     .top nav { gap: 16px; }
-    .wsl { grid-template-columns: minmax(0, 1fr); justify-items: stretch; }
-    .wsl-wire { width: 2px; height: 44px; margin: 0 auto; }
     ol.steps > li { padding-left: 40px; }
   }
 </style>
@@ -140,14 +127,9 @@
 <article>
   <h1>Forchetta on Windows</h1>
   <p class="sub">A beta that needs people to try it.</p>
-  <p class="meta">Version 0.13.0-beta.2, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code. No one has used it on a PC of their own yet.</p>
+  <p class="meta">Version 0.13.0-beta.2, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. No one has used it on a PC of their own yet.</p>
 
   <p>Forchetta runs on Windows itself: no WSL, no Ubuntu, no administrator. The Claude Code it shows is the one you have, with your account and your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use Forchetta from a window of Edge or Chrome: the same page as on a Mac.</p>
-  <div class="wsl" role="img" aria-label="All on your PC: a window of Edge or Chrome reaches Forchetta on 127.0.0.1. With it are Claude Code, your terminals and your projects.">
-    <div class="wsl-side"><span class="wsl-name">The window</span><span class="wsl-box main">Edge or Chrome<small>no tabs, no extensions</small></span></div>
-    <div class="wsl-wire"><span>127.0.0.1</span></div>
-    <div class="wsl-side"><span class="wsl-name">Your PC</span><span class="wsl-box main">Forchetta</span><span class="wsl-row"><span class="wsl-box">Claude Code</span><span class="wsl-box">your terminals</span><span class="wsl-box">your projects</span></span></div>
-  </div>
   <p>Do you work inside WSL? <a href="wsl/">There is a guide for that</a> too.</p>
 
   <h2 id="before">What you need</h2>
@@ -177,6 +159,7 @@
       <ul>
         <li>It downloads Forchetta and checks it. Without Node.js 22 it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
         <li>It lists the hooks it adds to <code>.claude\settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
+        <li>It adds <code>.local\bin</code>, in your user folder, to your <code>PATH</code>: for your user only, where the installer of Claude Code puts its own command.</li>
       </ul>
       <p class="done">Done when it says <code>Ready. Open Forchetta with: forchetta open</code>.</p>
     </li>
@@ -222,6 +205,7 @@
     <li><strong>The hooks and the sessions talk to it on pipes of Windows</strong> with a name made at random and a key. Each end proves to the other that it has the key before anything passes: a program that takes the place of Forchetta gets nothing, and neither does one that calls it.</li>
     <li><strong>The window has a profile of its own</strong> in Edge or Chrome, without your extensions, which could read your terminals. If it can't have one, <code>forchetta open</code> tells you.</li>
     <li><strong>Its data is in your user folder</strong>, which other users of the PC can't open. No telemetry.</li>
+    <li><strong>The sessions it starts</strong>, with <strong>+ new</strong> or <code>forchetta run</code>, get one more MCP server, <code>forchetta</code>, with the tools of the templates of teams. It is given to them when they start, not written in your settings.</li>
     <li><strong>No program of mine to trust.</strong> What runs is Node.js, with the code of Forchetta, which you can read. GitHub builds it from the source and signs which commit it comes from; the installer takes that archive and no other.</li>
   </ul>
   <p>What it can't protect you from: a program that runs as you can read your files, those of Forchetta too. And the guard reads the commands of Bash and of PowerShell, not what a script does by itself.</p>
@@ -252,6 +236,7 @@ forchetta daemon stop
 cmd /c rmdir "$HOME\.local\lib\forchetta"
 Remove-Item -Recurse -Force "$HOME\.local\lib\forchetta-versions", "$HOME\.local\lib\forchetta-node", "$HOME\.local\share\forchetta" -ErrorAction SilentlyContinue
 Remove-Item "$HOME\.local\bin\forchetta*", "$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk" -ErrorAction SilentlyContinue</code></pre><button type="button" data-copy="forchetta hooks uninstall --yes&#10;forchetta daemon stop&#10;cmd /c rmdir &quot;$HOME\.local\lib\forchetta&quot;&#10;Remove-Item -Recurse -Force &quot;$HOME\.local\lib\forchetta-versions&quot;, &quot;$HOME\.local\lib\forchetta-node&quot;, &quot;$HOME\.local\share\forchetta&quot; -ErrorAction SilentlyContinue&#10;Remove-Item &quot;$HOME\.local\bin\forchetta*&quot;, &quot;$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk&quot; -ErrorAction SilentlyContinue" aria-label="Copy the command">Copy</button></div>
+  <p><code>.local\bin</code> stays in your <code>PATH</code>: Claude Code has its command there too.</p>
 </article>
 </main>
 
