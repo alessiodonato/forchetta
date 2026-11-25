@@ -20,6 +20,7 @@ import { claudeStart } from '../src/daemon/spawn.ts';
 import { LIST_ARGS, matchingProcesses, namesFolder, parseNetstat, parseProcesses, windowsLook } from '../src/daemon/windows-processes.ts';
 import { ofWindows, windowsPayload } from '../src/daemon/windows-payload.ts';
 import { setupChecks, type SystemInputs } from '../src/daemon/system.ts';
+import { childOf, windowsShells } from '../src/daemon/windows-shells.ts';
 import { isFullPath, projectOf } from '../src/shared/agent.ts';
 import { DEFAULT_CONFIG, lastingNode, nodeOfAVersion } from '../src/shared/config.ts';
 import { fromGitBash, realWindowsPath, slashes } from '../src/shared/fspath.ts';
@@ -345,6 +346,27 @@ describe('the programs of Windows', () => {
     expect(gitBash({ PATH: '', CLAUDE_CODE_GIT_BASH_PATH: '/mine/bash.exe' }, has('/mine/bash.exe'))).toBe('/mine/bash.exe');
     expect(gitBash({ PATH: '' }, has())).toBeUndefined();
     expect(findExe('gh', [], env, has('/c/nothing'))).toBeUndefined();
+  });
+
+  it('a plain terminal: PowerShell 7 or the one of Windows, and Git Bash when it is there', () => {
+    const env = { ProgramFiles: '/pf', SystemRoot: '/win', PATH: '' };
+    const first = windowsShells(env, has('/pf/PowerShell/7/pwsh.exe', '/pf/Git/cmd/git.exe', '/pf/Git/bin/bash.exe'));
+    expect(first.map(({ id, label, file }) => [id, label, file.replaceAll('\\', '/')])).toEqual([
+      ['powershell', 'PowerShell', '/pf/PowerShell/7/pwsh.exe'],
+      ['bash', 'Git Bash', '/pf/Git/bin/bash.exe'],
+    ]);
+    expect(first[1]!.env).toMatchObject({ CHERE_INVOKING: '1' });
+    expect(windowsShells(env, has()).map(({ file }) => file.replaceAll('\\', '/'))).toEqual(['/win/System32/WindowsPowerShell/v1.0/powershell.exe']);
+  });
+
+  it('what runs in a plain terminal is what was started under it, not the shell itself', () => {
+    const row = (ppid: number, name: string) => ({ ppid, name });
+    const all = new Map([[10, row(1, 'bash.exe')], [11, row(10, 'conhost.exe')], [12, row(10, 'bash.exe')], [13, row(12, 'node.exe')], [20, row(1, 'powershell.exe')], [21, row(20, 'conhost.exe')], [30, row(1, 'notepad.exe')]]);
+    expect(childOf(10, all)).toBe('node');
+    expect(childOf(20, all)).toBeUndefined();
+    expect(childOf(99, all)).toBeUndefined();
+    // Two processes that say to be under each other do not go round for ever.
+    expect(childOf(40, new Map([[40, row(41, 'a.exe')], [41, row(40, 'b.exe')]]))).toBe('b');
   });
 
   it('the window: Edge first, with a profile of its own and no extensions', () => {

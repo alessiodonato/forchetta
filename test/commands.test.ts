@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { SessionFile } from '../src/daemon/claude-agents.ts';
 import { Commander, type ResetNotes } from '../src/daemon/commands.ts';
 import { Registry } from '../src/daemon/registry.ts';
 import type { HookPayload } from '../src/daemon/state.ts';
@@ -24,6 +25,8 @@ class FakeTmux {
   readonly keys: string[] = [];
   /** When false, typed text does not show up in the box. */
   echo = true;
+  /** What the menu under the box shows for a text typed. */
+  menu: (typed: string) => string | undefined = () => undefined;
   readonly buffers = new Map<string, string>();
   readonly pasted: { pane: string; text: string; file?: string }[] = [];
   private lastFile: string | undefined;
@@ -63,7 +66,8 @@ class FakeTmux {
         const text = Buffer.from(args.slice(args.indexOf('-H') + 1).join(''), 'hex').toString('utf8');
         this.typed.push({ pane: target, text });
         pane.input = text;
-        if (this.echo) pane.screen = box(text);
+        const menu = this.menu(text);
+        if (this.echo) pane.screen = menu === undefined ? box(text) : `${box(text)}\n${menu}`;
       } else if (args.at(-1) === 'C-u' || args.at(-1) === 'BSpace') {
         // As Claude Code does: Ctrl+U takes out the line of the cursor, Backspace one character (a newline too).
         const key = args.at(-1)!;
@@ -605,5 +609,153 @@ describe('/exit of a run of an automation that is over', () => {
   it('is not a command of the page', () => {
     setup();
     expect(commander.enqueue(A, 'exit')).toEqual({ ok: false, error: 'unknown command: exit' });
+  });
+});
+
+describe('/restart, on the Claude Code installed', () => {
+  const NEWER = '  ❯ /restart     Restart on 2.1.331 and keep this session\n    /deep-research     Deep research';
+  const answered = (answer: string): string => ['⏺ fatto', '❯ /restart', `  ⎿  ${answer}`, '', RULE, '❯ ', RULE, '  footer'].join('\n');
+  const changes: { kind: string; status: string; reason?: string; refused?: boolean }[] = [];
+  let file: SessionFile | undefined;
+  let clock = 0;
+
+  function restartSetup(): void {
+    setup();
+    commander.stop();
+    changes.length = 0;
+    clock = 1_000_000;
+    file = { status: 'idle', version: '2.1.328', remoteControl: false };
+    commander = new Commander({
+      registry,
+      tmux,
+      log: (line) => logs.push(line),
+      now: () => (clock += 500),
+      sleep: async () => {},
+      settleMs: 0,
+      tickMs: 60_000,
+      typingQuietMs: 10_000,
+      sessionFile: async () => file,
+      onRestart: (_agent, command, refused) => changes.push({ kind: command.kind, status: command.status, reason: command.reason, refused }),
+    });
+    tmux.menu = (typed) => (typed === '/restart' ? NEWER : undefined);
+  }
+  const last = () => changes.at(-1);
+
+  it('is typed, sent only with its line of the menu, and done when the file of the process has the new version', async () => {
+    restartSetup();
+    tmux.panes.get('%1')!.afterEnter = () => {
+      file = { status: 'idle', version: '2.1.331', remoteControl: false };
+      return answered('Successfully updated from 2.1.328 to version 2.1.331');
+    };
+    expect(commander.enqueueRestart(A).ok).toBe(true);
+    await settle();
+    expect(tmux.typed).toEqual([{ pane: '%1', text: '/restart' }]);
+    expect(tmux.enters).toEqual(['%1']);
+    expect(last()).toMatchObject({ status: 'confermato', reason: '2.1.331', refused: false });
+    expect(registry.agents.get(A)!.version).toBe('2.1.331');
+  });
+
+  it('is never sent when the menu offers something else: the prompt is emptied', async () => {
+    for (const menu of ['  ❯ /deep-research     Deep research', '  ❯ /restart     Restart the dev server', undefined]) {
+      restartSetup();
+      tmux.menu = () => menu;
+      commander.enqueueRestart(A);
+      await settle();
+      expect(tmux.enters).toEqual([]);
+      expect(tmux.panes.get('%1')!.input).toBe('');
+      expect(last()).toMatchObject({ status: 'fallito', refused: false });
+      expect(last()!.reason).toContain('offers it no /restart');
+    }
+    // Already on the version installed: said as a refusal, nothing to wait for.
+    restartSetup();
+    tmux.menu = () => '  ❯ /restart     Restart Claude Code and keep this session';
+    commander.enqueueRestart(A);
+    await settle();
+    expect(tmux.enters).toEqual([]);
+    expect(last()).toMatchObject({ status: 'fallito', refused: true, reason: 'Claude Code offers it no newer version' });
+  });
+
+  it('keeps what Claude Code answers when it refuses', async () => {
+    restartSetup();
+    tmux.panes.get('%1')!.afterEnter = () => answered("Can't restart while work is running in the background.");
+    commander.enqueueRestart(A);
+    await settle();
+    expect(last()).toMatchObject({ status: 'fallito', refused: true, reason: "Can't restart while work is running in the background." });
+    expect(registry.agents.get(A)!.version).toBeUndefined();
+    // Again, with the same answer still on screen: it takes longer to be sure, and it is the same.
+    changes.length = 0;
+    commander.enqueueRestart(A);
+    await sleep(60);
+    expect(last()).toMatchObject({ status: 'fallito', refused: true });
+  });
+
+  it('presses no key after it: a question of Claude Code stays open', async () => {
+    restartSetup();
+    tmux.panes.get('%1')!.afterEnter = () => {
+      file = { status: 'waiting', version: '2.1.331', remoteControl: false };
+      return ['  LSP plugin recommendation', '  Install this LSP plugin?', '  ❯ 1. Yes, install', '    2. Not now'].join('\n');
+    };
+    commander.enqueueRestart(A);
+    await settle();
+    expect(tmux.enters).toEqual(['%1']);
+    expect(tmux.keys).toEqual([]);
+    expect(last()).toMatchObject({ status: 'confermato', reason: '2.1.331: a question of Claude Code is open in its terminal' });
+  });
+
+  it('does not wait in the queue: a session that is not ready is left as it is, with nothing typed', async () => {
+    restartSetup();
+    registry.agents.get(B)!.state = 'working';
+    expect(commander.enqueueRestart(B)).toEqual({ ok: false, error: 'waiting for the turn to end' });
+    const cases: [string, () => void, string][] = [
+      ['a draft', () => (tmux.panes.get('%1')!.screen = box('una bozza')), 'there is text in the prompt: it stays as it is'],
+      ['copy mode', () => (tmux.panes.get('%1')!.inMode = true), 'the terminal is scrolled back (tmux copy mode): scroll to the end, or press q in it'],
+      ['a shell', () => (file = { status: 'shell', version: '2.1.328', remoteControl: false }), 'a command runs in the background'],
+      ['Remote Control', () => (file = { status: 'idle', version: '2.1.328', remoteControl: true }), 'Remote Control is connected'],
+      ['a turn', () => (file = { status: 'busy', version: '2.1.328', remoteControl: false }), 'it is not at rest'],
+      ['no file', () => (file = undefined), 'its version is not known'],
+    ];
+    for (const [, prepare, reason] of cases) {
+      restartSetup();
+      prepare();
+      commander.enqueueRestart(A);
+      await settle();
+      expect(tmux.typed).toEqual([]);
+      expect(last()).toMatchObject({ status: 'annullato', reason });
+      expect(registry.agents.get(A)!.commands).toEqual([]);
+    }
+  });
+
+  it('gives up in time when nothing says how it went, and a daemon that starts again forgets one not sent', async () => {
+    restartSetup();
+    let looks = 0;
+    tmux.panes.get('%1')!.afterEnter = () => box('');
+    commander.stop();
+    commander = new Commander({
+      registry,
+      tmux,
+      log: () => {},
+      now: () => clock,
+      sleep: async () => {
+        looks += 1;
+        clock += 2000;
+        if (looks > 40) commander.tick();
+      },
+      settleMs: 0,
+      tickMs: 60_000,
+      typingQuietMs: 10_000,
+      sessionFile: async () => file,
+      onRestart: (_agent, command, refused) => changes.push({ kind: command.kind, status: command.status, reason: command.reason, refused }),
+    });
+    commander.enqueueRestart(A);
+    await sleep(60);
+    expect(last()).toMatchObject({ status: 'non-confermato', refused: false });
+    registry.agents.get(B)!.commands = [{ id: 'x', kind: 'restart', status: 'in-coda', createdAt: 1 }];
+    commander.restored();
+    expect(registry.agents.get(B)!.commands).toEqual([]);
+  });
+
+  it('is not a command of the page', () => {
+    restartSetup();
+    expect(commander.enqueue(A, 'restart')).toEqual({ ok: false, error: 'unknown command: restart' });
   });
 });

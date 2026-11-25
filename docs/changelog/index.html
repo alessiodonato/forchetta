@@ -149,12 +149,26 @@
 <p class="sub">The versions that changed what Forchetta does, newest first, with the commits that did it.</p>
 
 <ol class="log">
-  <li class="big branch ahead" id="v0.13.0-beta.2">
+  <li class="branch ahead" id="v0.13.0-beta.3">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.13.0-beta.3">0.13.0-beta.3</a></strong><time datetime="2026-11-25">25 Nov 2026</time> <span class="on">branch <code>windows</code></span></p>
+    <div class="what">
+      <h2>The first reports from a PC</h2>
+      <p>The hooks no longer stop when Node.js is updated: where an update would move it, Forchetta gets a Node.js of its own. Shift+Enter in a terminal is a new line. Setup tells a script when nothing was applied. To update, run the command of the install again.</p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/f0745e26224074c84e00a6d5411259b20b86abb4"><code>f0745e2</code></a><span>The hooks run on a Node.js that its updates leave in place</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/7a2d01fe2ba353b3369953d34c58537b3ce41c1c"><code>7a2d01f</code></a><span>Shift+Enter in a terminal is a new line, and only that</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/4d32fc602b698c5fac5b41a0da9363e27dfa2fd8"><code>4d32fc6</code></a><span>Setup: its exit code says when nothing was applied</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/7fe727da2838f12bc861f247e102b7a4605c5a64"><code>7fe727d</code></a><span>Windows guide: what the install adds to PATH, and the MCP server</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="big branch ahead along" id="v0.13.0-beta.2">
     <span class="node" aria-hidden="true"></span>
     <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.13.0-beta.2">0.13.0-beta.2</a></strong><time datetime="2026-11-24">24 Nov 2026</time> <span class="on">branch <code>windows</code></span></p>
     <div class="what">
       <h2>On Windows itself</h2>
-      <p>No WSL, no Ubuntu, no administrator: one command in PowerShell. Forchetta runs next to the Claude Code you have, which sees what it sees now, devices connected to the PC included. Each session it starts has a host of its own, in place of tmux. The guard reads PowerShell, and the paths of Windows. Its tests run on three Windows; no one has used it on a PC of their own yet.</p>
+      <p>No WSL, no Ubuntu, no administrator: one command in PowerShell. Forchetta runs next to the Claude Code you have, which sees what it sees now, devices connected to the PC included. Each session it starts has a host of its own, in place of tmux. The guard reads PowerShell, and the paths of Windows. Its tests run on three Windows; no one had used it on a PC of their own yet.</p>
       <p class="more"><a href="../windows/">How to install the beta</a></p>
       <ul class="commits" aria-label="Commits">
         <li><a href="https://github.com/alessiodonato/forchetta/commit/bf114dafbf408e4611d7f39f84e60063ad879994"><code>bf114da</code></a><span>Windows with no WSL: the sessions in hosts of their own, the hooks with no shell</span></li>

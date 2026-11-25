@@ -32,6 +32,54 @@ export function setTerminalFontSize(size: number): void {
   for (const listener of listeners) listener(next);
 }
 
+const LATER_KEY = 'forchetta.restartsLater';
+let later: string | undefined;
+try {
+  later = localStorage.getItem(LATER_KEY) ?? undefined;
+} catch {
+  // Offered again.
+}
+
+/** The version of Claude Code for which this window does not offer to restart the sessions: "not now". */
+export const restartsLater = (): string | undefined => later;
+
+export function setRestartsLater(version: string): void {
+  later = version;
+  try {
+    localStorage.setItem(LATER_KEY, version);
+  } catch {
+    // For this time only.
+  }
+}
+
+const MARKS_KEY = 'forchetta.messageMarks';
+let marks = true;
+try {
+  marks = localStorage.getItem(MARKS_KEY) !== 'off';
+} catch {
+  // On.
+}
+const markListeners = new Set<() => void>();
+
+/** Whether your messages are marked in the terminals of this window (marks.ts). */
+export const messageMarks = (): boolean => marks;
+
+export function setMessageMarks(on: boolean): void {
+  if (on === marks) return;
+  marks = on;
+  try {
+    localStorage.setItem(MARKS_KEY, on ? 'on' : 'off');
+  } catch {
+    // For this time only.
+  }
+  for (const listener of markListeners) listener();
+}
+
+export function onMessageMarks(listener: () => void): () => void {
+  markListeners.add(listener);
+  return () => markListeners.delete(listener);
+}
+
 export function onTerminalFontSize(listener: (size: number) => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);

@@ -5,7 +5,8 @@ import { ensurePrivateDir, paths } from '../shared/paths.ts';
 import type { Agent, CommandKind, CommandStatus, QueuedCommand } from '../shared/agent.ts';
 import type { TmuxCommand, TmuxResult } from '../shared/tmux.ts';
 import type { Registry } from './registry.ts';
-import { keepsWorktree, readPromptBox, screenShows } from './screen.ts';
+import type { SessionFile } from './claude-agents.ts';
+import { keepsWorktree, readPromptBox, restartAnswer, restartOffer, restartWorked, screenShows } from './screen.ts';
 import type { HookPayload } from './state.ts';
 
 // The commands of the box: /btw <question>, /compact, /clear; and the requests of a team of agents, which go in
@@ -28,6 +29,11 @@ import type { HookPayload } from './state.ts';
 // up, "Not enough messages to compact", with no PostCompact), SessionEnd/SessionStart "clear" for /clear. /btw has no hook
 // and leaves no trace in the transcript: its answer is only on screen, and the command counts as confirmed when
 // its answer box shows the question. A request is confirmed by UserPromptSubmit with its first line.
+//
+// /restart (daemon/restarts.ts) is stricter: it goes only into a session that is ready now, and does not wait in the
+// queue; Enter only when the menu under the box shows that /restart is the command of Claude Code, on a newer version;
+// and it is confirmed by the version in the file of the process, not by what is on screen. After it, no key at all:
+// Claude Code may open a question, with a choice already made.
 //
 // A request goes in two steps: its first line ("Request #3 from the user:") is typed, as words of the user, and
 // the rest is pasted after it with tmux paste-buffer -p (bracketed paste), so that its newlines stay newlines,
@@ -62,11 +68,21 @@ export interface CommanderOptions {
   settleMs?: number;
   /** A request of a team changed status: queued, blocked, sent, confirmed, failed, cancelled. */
   onRequest?: (agent: Agent, command: QueuedCommand) => void;
+  /** A /restart changed status; `refused`: Claude Code said why it does not restart. */
+  onRestart?: (agent: Agent, command: QueuedCommand, refused?: boolean) => void;
+  /** The file of a claude process: its version, whether Remote Control is connected. */
+  sessionFile?: (pid: number) => Promise<SessionFile | undefined>;
+  /** How often a session that restarts is looked at. */
+  restartLookMs?: number;
 }
 
 export type EnqueueResult = { ok: true; command: QueuedCommand } | { ok: false; error: string };
 
-const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000, ask: 15_000, free: 15_000, exit: 20_000 };
+const ACK_MS: Record<CommandKind, number> = { compact: 30_000, clear: 15_000, btw: 6_000, request: 15_000, ask: 15_000, free: 15_000, exit: 20_000, restart: 120_000 };
+/** The same refusal as before on screen, this long after Enter: it is the answer to this /restart too. */
+const SAME_REFUSAL_MS = 45_000;
+/** How many looks at the input box after a restart: a question of Claude Code may be in its place. */
+const RESTARTED_LOOKS = 6;
 /** After /exit, when to look for the question of Claude Code about the worktree of the session. */
 const EXIT_LOOKS_MS = [1200, 2000, 3000];
 /** The longest request, as the first prompt of a new session. */
@@ -164,6 +180,12 @@ export class Commander {
   restored(): void {
     for (const agent of this.options.registry.agents.values()) {
       let changed = false;
+      // A restart not sent yet: who asked for it is gone with the old daemon.
+      const restarts = agent.commands?.filter((command) => command.kind === 'restart' && WAITING.includes(command.status)) ?? [];
+      if (restarts.length > 0) {
+        agent.commands = agent.commands!.filter((command) => !restarts.includes(command));
+        changed = true;
+      }
       for (const command of agent.commands ?? []) {
         if (command.status !== 'inviato') continue;
         command.status = 'non-confermato';
@@ -217,6 +239,24 @@ export class Commander {
     const command: QueuedCommand = { id: randomUUID(), kind: 'exit', status: 'in-coda', createdAt: this.now() };
     agent.commands = [...(agent.commands ?? []), command];
     this.options.log(`/exit queued for ${agent.team?.label ?? agent.project}`);
+    this.prune(agent);
+    this.options.registry.touch(agent);
+    this.kick(agent.id);
+    return { ok: true, command };
+  }
+
+  /**
+   * /restart, for a session at rest on an older Claude Code (daemon/restarts.ts). Not a command of the page, and it
+   * does not wait: if the session is not ready when its turn comes, it goes away, and is asked again later.
+   */
+  enqueueRestart(agentId: string): EnqueueResult {
+    const agent = this.options.registry.agents.get(agentId);
+    if (!agent) return { ok: false, error: 'unknown session' };
+    if (agent.control.kind !== 'tmux' || agent.state === 'ended') return { ok: false, error: 'the session is read only or ended' };
+    if (agent.state !== 'idle') return { ok: false, error: waitReason(agent) };
+    if (this.next(agent) || this.inflight.has(agentId)) return { ok: false, error: 'a command is in its queue' };
+    const command: QueuedCommand = { id: randomUUID(), kind: 'restart', status: 'in-coda', createdAt: this.now() };
+    agent.commands = [...(agent.commands ?? []), command];
     this.prune(agent);
     this.options.registry.touch(agent);
     this.kick(agent.id);
@@ -317,8 +357,9 @@ export class Commander {
   }
 
   /** A request whose status changed: its team is told. */
-  private changed(agent: Agent, command: QueuedCommand): void {
+  private changed(agent: Agent, command: QueuedCommand, refused = false): void {
     if (command.kind === 'request') this.options.onRequest?.(agent, command);
+    if (command.kind === 'restart') this.options.onRestart?.(agent, command, refused);
   }
 
   /**
@@ -408,13 +449,15 @@ export class Commander {
 
   private note(agent: Agent, command: QueuedCommand, status: CommandStatus, reason?: string): void {
     if (command.status === status && command.reason === reason) return;
+    // A restart does not wait: the session that is not ready now is asked again later.
+    if (command.kind === 'restart' && WAITING.includes(status)) return this.finish(agent, command, 'annullato', reason);
     command.status = status;
     command.reason = reason;
     this.options.registry.touch(agent);
     this.changed(agent, command);
   }
 
-  private finish(agent: Agent, command: QueuedCommand, status: CommandStatus, reason?: string): void {
+  private finish(agent: Agent, command: QueuedCommand, status: CommandStatus, reason?: string, refused = false): void {
     command.status = status;
     command.reason = reason;
     command.doneAt = this.now();
@@ -422,7 +465,7 @@ export class Commander {
     this.options.log(`command ${commandLabel(command)} for ${agent.project}: ${status}${reason ? ` (${reason})` : ''}`);
     this.prune(agent);
     this.options.registry.touch(agent);
-    this.changed(agent, command);
+    this.changed(agent, command, refused);
     const text = this.putBacks.get(command.id);
     if (text !== undefined) {
       // The prompt goes back before the next command of the queue.
@@ -557,6 +600,37 @@ export class Commander {
     if (pasted.code !== 0) throw new Error(`tmux did not paste the request: ${pasted.stderr.trim()}`);
   }
 
+  /**
+   * A /restart under way: done when the file of the process has another version; refused when Claude Code says why.
+   * Only looks, no keys. Past its time, tick() gives it up.
+   */
+  private async watchRestart(agent: Agent, command: QueuedCommand, pane: string, from: string, answerBefore: string | undefined): Promise<void> {
+    const sentAt = this.now();
+    while (this.inflight.get(agent.id)?.command === command) {
+      await this.sleep(this.options.restartLookMs ?? 1500);
+      if (this.inflight.get(agent.id)?.command !== command) return;
+      const file = agent.pid ? await this.options.sessionFile?.(agent.pid) : undefined;
+      if (file?.version && file.version !== from) {
+        agent.version = file.version;
+        agent.remoteControl = file.remoteControl || undefined;
+        agent.restartRefused = undefined;
+        let ready = false;
+        for (let look = 0; look < RESTARTED_LOOKS && !ready; look++) {
+          if (look > 0) await this.sleep(this.options.restartLookMs ?? 1500);
+          ready = readPromptBox(await this.capture(pane, true)).found;
+        }
+        return this.finish(agent, command, 'confermato', ready ? file.version : `${file.version}: a question of Claude Code is open in its terminal`);
+      }
+      const screen = await this.capture(pane);
+      const answer = restartAnswer(screen);
+      if (answer === undefined || restartWorked(answer)) continue;
+      // The refusal of an earlier /restart may still be the last one on screen.
+      if (answer === answerBefore && this.now() - sentAt < SAME_REFUSAL_MS) continue;
+      if (readPromptBox(await this.capture(pane, true)).typed) continue;
+      return this.finish(agent, command, 'fallito', answer, true);
+    }
+  }
+
   private async dispatch(agentId: string): Promise<void> {
     if (this.dispatching.has(agentId) || this.inflight.has(agentId)) return;
     const agent = this.options.registry.agents.get(agentId);
@@ -594,6 +668,14 @@ export class Commander {
       if (box.typed && refused === undefined) return this.note(agent, command, 'bloccato', 'there is text in the prompt: it stays as it is');
       // A state that changed while checking: the next round decides again.
       if (agent.state !== 'idle') return this.note(agent, command, 'in-coda', waitReason(agent));
+      let before: SessionFile | undefined;
+      if (command.kind === 'restart') {
+        // What the file says now, not at the last reading: the version, and what a restart would cut.
+        before = await this.options.sessionFile?.(agent.pid);
+        if (!before?.version) return this.finish(agent, command, 'annullato', 'its version is not known');
+        if (before.remoteControl) return this.finish(agent, command, 'annullato', 'Remote Control is connected');
+        if (before.status !== 'idle') return this.finish(agent, command, 'annullato', before.status === 'shell' ? 'a command runs in the background' : 'it is not at rest');
+      }
 
       if (command.kind === 'clear' && this.options.notes && agent.transcriptPath && (await this.options.notes.supported())) {
         try {
@@ -629,9 +711,22 @@ export class Commander {
         this.options.log(`${commandLabel(command)} for ${agent.project}: the prompt shows ${typed.found ? JSON.stringify(typed.typed.slice(0, 300)) : 'nothing (prompt box not found)'}`);
         return this.finish(agent, command, 'fallito', 'the prompt does not show the command as typed: Enter not pressed, check the terminal');
       }
+      const answerBefore = command.kind === 'restart' ? restartAnswer(await this.capture(pane)) : undefined;
+      if (command.kind === 'restart') {
+        let offer = restartOffer(await this.capture(pane));
+        if (!offer) {
+          await this.sleep(this.options.pasteSettleMs ?? 1000);
+          offer = restartOffer(await this.capture(pane));
+        }
+        if (offer !== 'newer') {
+          const out = await this.emptyPrompt(pane, text);
+          const why = offer === 'same' ? 'Claude Code offers it no newer version' : 'Claude Code offers it no /restart (a version without it, or a pane too small to show its menu)';
+          return this.finish(agent, command, 'fallito', out ? why : `${why}; "/restart" is still in its prompt`, offer === 'same');
+        }
+      }
       await tmux.run('send-keys', ['-t', pane, 'Enter']);
       command.status = 'inviato';
-      command.reason = undefined;
+      command.reason = command.kind === 'restart' ? 'restarting' : undefined;
       command.sentAt = this.now();
       this.inflight.set(agentId, { command, deadline: this.now() + ACK_MS[command.kind] });
       this.options.log(`command sent to ${agent.project} (${session}, ${pane}, pid ${agent.pid}): ${commandLabel(command)}`);
@@ -650,6 +745,7 @@ export class Commander {
           }
         }
       }
+      if (command.kind === 'restart' && before?.version) await this.watchRestart(agent, command, pane, before.version, answerBefore);
       if (command.kind === 'btw') {
         await this.sleep(1500);
         const screen = await this.capture(pane);

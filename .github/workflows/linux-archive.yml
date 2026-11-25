@@ -304,6 +304,14 @@ jobs:
             Get-Content -Raw release\install.ps1 | Invoke-Expression
             $forchetta = Join-Path $userHome '.local\bin\forchetta.cmd'
             if ((& $forchetta --version) -ne $version) { throw "$($case.Name): the command does not answer" }
+            # In a repository with a node.exe of its own: that one must not run.
+            $repo = Join-Path $env:RUNNER_TEMP "repo-$($case.Name)"
+            New-Item -ItemType Directory -Force $repo | Out-Null
+            Copy-Item (Join-Path $env:SystemRoot 'System32\where.exe') (Join-Path $repo 'node.exe') -Force
+            Push-Location $repo
+            $said = & $forchetta --version
+            Pop-Location
+            if ($said -ne $version) { throw "$($case.Name): the node.exe of the folder ran: $said" }
             $own = Test-Path (Join-Path $userHome '.local\lib\forchetta-node\node.exe')
             if ($own -ne $case.Own) { throw "$($case.Name): a Node.js of its own: $own" }
             & $forchetta setup --yes --no-restart
@@ -328,7 +336,7 @@ jobs:
       - name: An update from the beta before
         run: |
           $ErrorActionPreference = 'Stop'
-          $before = '0.13.0-beta.2'
+          $before = '0.13.0-beta.3'
           $version = [regex]::Match((Get-Content -Raw release\install.ps1), "PinnedVersion = '([^']+)'").Groups[1].Value
           $others = (($env:Path -split ';') | Where-Object { $_ -and -not (Test-Path (Join-Path $_ 'node.exe')) }) -join ';'
           $userHome = Join-Path $env:RUNNER_TEMP 'home-update'

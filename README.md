@@ -75,7 +75,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.12.7. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. After `brew upgrade forchetta`, run `forchetta setup` again.
+Version 0.12.8. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. To update: `brew upgrade forchetta && forchetta setup`, then quit the app and open it again.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -83,18 +83,18 @@ To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Forchetta runs on Windows itself: no WSL, no administrator. The Claude Code it shows is the one you have, with your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use it from a window of Edge or Chrome: the same page as on a Mac, without the menu bar and the system-wide shortcut.
 
-It needs people to try it: its tests run on Windows with the real Claude Code, but no one has used it on a PC of their own yet. In PowerShell, not as administrator:
+It needs people to try it: its tests run on Windows with the real Claude Code, and the first reports from a PC are in (Windows 11). In PowerShell, not as administrator:
 
 ```powershell
-irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex
+irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.ps1 | iex
 ```
 
-It shows the hooks it adds, and asks: answer `y`. Then `forchetta open`, or Forchetta in the Start menu. You need Windows 10 1809 or later and [Claude Code for Windows](https://code.claude.com/docs/en/setup); Node.js comes if you don't have it.
+It shows the hooks it adds, and asks: answer `y`. Then `forchetta open`, or Forchetta in the Start menu. To update, run it again. You need Windows 10 1809 or later and [Claude Code for Windows](https://code.claude.com/docs/en/setup); Node.js comes if you don't have it.
 
 On Linux, with `curl`, `tmux` and `lsof` installed, and in WSL if you work there:
 
 ```sh
-curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.sh &&
+curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.sh &&
 sh ~/forchetta-install.sh
 ```
 

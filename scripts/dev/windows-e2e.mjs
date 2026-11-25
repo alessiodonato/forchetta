@@ -128,6 +128,10 @@ function connect() {
     });
   });
 }
+// A scheduled task of the Claude app, for later.
+const TASK = 'Look at the shop and say in one line what it sells, for the scheduled task of the test.';
+mkdirSync(join(home, '.claude', 'scheduled-tasks', 'morning'), { recursive: true });
+writeFileSync(join(home, '.claude', 'scheduled-tasks', 'morning', 'SKILL.md'), `---\r\nname: Morning\r\ndescription: What the shop sells\r\n---\r\n\r\n${TASK}\r\n`);
 const hello = await connect();
 check('the page talks to the daemon', hello.system?.platform === 'windows', hello.system?.platform);
 check('the checklist', hello.system.checks.filter((item) => !item.ok).length === 0, hello.system.checks.filter((item) => !item.ok).map((item) => `${item.label}: ${item.detail}`).join('; '));
@@ -200,6 +204,59 @@ if (state(a) === 'waiting') {
   await until(() => state(a) === 'idle', 10_000);
 }
 check('the box knows the file', Boolean(await until(() => agents.get(a)?.filesChanged === 1, 5000)), agents.get(a)?.filesChanged);
+
+// ── a plain terminal in its folder ───────────────────────────────────────────────────────────────────────────
+const kinds = hello.shells?.kinds.map((kind) => kind.id) ?? [];
+check('PowerShell for the plain terminals', kinds[0] === 'powershell', JSON.stringify(hello.shells?.kinds));
+for (const kind of kinds) {
+  const from = messages.length;
+  send({ type: 'openShell', agentId: a, kind });
+  const opened = await until(() => messages.slice(from).find((message) => message.type === 'shellOpened'), 10_000);
+  if (!check(`${kind}: a plain terminal opens`, opened?.ok, opened?.error)) continue;
+  const id = opened.shell.id;
+  const shell = { text: '', code: 0, socket: new WebSocket(`ws://127.0.0.1:${info.port}/term?token=${token}&shell=${id}&cols=110&rows=32`, { origin }) };
+  shell.socket.on('message', (data, binary) => {
+    if (!binary) return;
+    const text = data.toString('utf8');
+    shell.text += text;
+    // As the page does: which terminal it is, where the cursor is.
+    if (text.includes('\x1b[c')) shell.socket.send(JSON.stringify({ type: 'input', data: '\x1b[?1;2c' }));
+    if (text.includes('\x1b[6n')) shell.socket.send(JSON.stringify({ type: 'input', data: '\x1b[1;1R' }));
+  });
+  shell.socket.on('close', (code) => (shell.code = code));
+  const keys = (data) => shell.socket.send(JSON.stringify({ type: 'input', data }));
+  await until(() => plain(shell.text).trim().length > 2, 20_000);
+  await sleep(2500);
+  keys(kind === 'bash' ? 'echo fo""und-$((6*7)) "[$FORCHETTA_VAR$CLAUDECODE]"; pwd\r' : '"fo" + "und-" + (6*7) + " [" + $env:FORCHETTA_VAR + $env:CLAUDECODE + "]"; (Get-Location).Path\r');
+  check(`${kind}: it is in the folder of the session, with nothing of Forchetta in its environment`, Boolean(await until(() => shows(shell, 'found-42 []') && shows(shell, 'my shop'), 20_000)), JSON.stringify(plain(shell.text).slice(-300)));
+  check(`${kind}: it is not a session`, ![...agents.keys()].some((one) => one.startsWith('shell-')));
+  keys('ping -n 60 127.0.0.1\r');
+  await sleep(3000);
+  send({ type: 'closeShell', id });
+  const busy = await until(() => messages.find((message) => message.type === 'shellBusy' && message.id === id), 12_000);
+  check(`${kind}: it says what runs before it closes`, /ping/i.test(busy?.running ?? ''), busy?.running);
+  send({ type: 'closeShell', id, force: true });
+  check(`${kind}: then it closes`, Boolean(await until(() => messages.find((message) => message.type === 'shellClosed' && message.id === id) && shell.code, 8000)), shell.code);
+}
+
+// ── the order of the boxes, the scheduled tasks ──────────────────────────────────────────────────────────────
+send({ type: 'order', ids: [...agents.keys()].reverse() });
+check('the order of the boxes is kept', Boolean(await until(() => messages.some((message) => message.type === 'order') && existsSync(join(varDir, 'order.json')), 5000)));
+const task = hello.scheduled?.[0];
+check('the scheduled tasks of the Claude app', task?.name === 'Morning' && task.description === 'What the shop sells' && task.instructions === TASK, JSON.stringify(hello.scheduled));
+const asking = messages.length;
+send({ type: 'runScheduled', id: 'morning', cwd: project });
+const run = await until(() => messages.slice(asking).find((message) => message.type === 'spawned'), 40_000);
+check('one starts from here', run?.ok, run?.error);
+check('with its instructions', Boolean(await until(() => api.prompts.some((text) => text.includes(TASK)))));
+check('and how it went is known', Boolean(await until(() => messages.filter((message) => message.type === 'scheduled').at(-1)?.tasks[0]?.lastRun?.outcome === 'done', 30_000)), JSON.stringify(messages.filter((message) => message.type === 'scheduled').at(-1)?.tasks[0]?.lastRun));
+if (run?.ok) {
+  const its = await terminal(run.agentId);
+  its.type('/exit');
+  await sleep(1500);
+  its.type('\r');
+  await until(() => state(run.agentId) === 'ended', 20_000);
+}
 
 // ── the guard ────────────────────────────────────────────────────────────────────────────────────────────────
 const shared = join(project, 'src', 'Shared.ts');

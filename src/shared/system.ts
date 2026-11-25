@@ -48,6 +48,8 @@ export interface EditableSettings {
   stallMin: number;
   /** Minutes a finished session stays in the list. */
   endedRetentionMin: number;
+  /** The sessions at rest restart by themselves on a new Claude Code. */
+  autoRestart: boolean;
   /** A fifth pane replaces the least recently used one ('lru'), or asks ('chiedi'). */
   replace: 'lru' | 'chiedi';
   /** The shortcut that shows or hides the app from anywhere: "ctrl+alt+f", or "" for none. */
@@ -116,6 +118,7 @@ export function cleanSettings(input: unknown): { settings: EditableSettings } | 
       guard: { files: guard.files !== false, git: guard.git !== false, notes: guard.notes !== false, servers: guard.servers !== false },
       stallMin,
       endedRetentionMin,
+      autoRestart: raw.autoRestart === true,
       replace: raw.replace === 'chiedi' ? 'chiedi' : 'lru',
       hotkey,
       port,

@@ -7,6 +7,7 @@ import type { Tmux } from '../shared/tmux.ts';
 import { isLocalHost, isOwnOrigin } from './origin.ts';
 import { loadPty, type Pty } from './pty.ts';
 import type { Registry } from './registry.ts';
+import type { Shells } from './shells.ts';
 
 // The terminals of the app: one WebSocket per open pane, on /term. Each runs `tmux attach` for the session of its
 // agent inside a pseudo-terminal: what tmux draws goes to xterm.js in the page as bytes, what you type comes back.
@@ -22,6 +23,8 @@ export interface TerminalsOptions {
   localhost?: boolean;
   registry: Registry;
   tmux: Tmux;
+  /** The plain terminals: `shell` in the address, in place of `agent`. */
+  shells?: Shells;
   log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** Panes open at once, across windows: the app shows 4. */
   max?: number;
@@ -36,6 +39,15 @@ export const SESSION_ENDED = 4000;
 
 const clamp = (value: number, min: number, max: number, fallback: number): number =>
   Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback;
+
+/** A message of the page, or nothing when it is not one. */
+function parsed(data: RawData): ClientMessage | undefined {
+  try {
+    return JSON.parse(String(data)) as ClientMessage;
+  } catch {
+    return undefined;
+  }
+}
 
 function sameToken(given: string | null, token: string): boolean {
   if (!given) return false;
@@ -82,13 +94,32 @@ export class Terminals {
     if (!isLocalHost(req.headers.host, port) || !isOwnOrigin(req.headers.origin, port, this.options.localhost) || !sameToken(url.searchParams.get('token'), this.options.token)) {
       return this.refuse(socket, '403 Forbidden');
     }
+    const columns = clamp(Number(url.searchParams.get('cols')), 20, 500, 100);
+    const rows = clamp(Number(url.searchParams.get('rows')), 5, 200, 30);
+    const shell = url.searchParams.get('shell');
+    if (shell !== null) {
+      const shells = this.options.shells;
+      if (!shells?.has(shell)) return this.refuse(socket, '404 Not Found');
+      this.server.handleUpgrade(req, socket, head, (ws) => this.attachShell(shells, ws, shell, columns, rows));
+      return;
+    }
     const agent = this.options.registry.agents.get(url.searchParams.get('agent') ?? '');
     if (!agent || agent.state === 'ended' || agent.control.kind !== 'tmux') return this.refuse(socket, '404 Not Found');
     if (this.open.size >= (this.options.max ?? 8)) return this.refuse(socket, '429 Too Many Requests');
     const session = agent.control.session;
-    const columns = clamp(Number(url.searchParams.get('cols')), 20, 500, 100);
-    const rows = clamp(Number(url.searchParams.get('rows')), 5, 200, 30);
     this.server.handleUpgrade(req, socket, head, (ws) => this.attach(ws, session, columns, rows));
+  }
+
+  /** A plain terminal (daemon/shells.ts): what it draws goes to the page, what you type comes back. */
+  private attachShell(shells: Shells, ws: WebSocket, id: string, columns: number, rows: number): void {
+    ws.on('message', (data: RawData, isBinary: boolean) => {
+      const message = isBinary ? undefined : parsed(data);
+      if (message?.type === 'input' && typeof message.data === 'string') shells.input(id, ws, message.binary ? Buffer.from(message.data, 'latin1') : message.data);
+      else if (message?.type === 'resize') shells.resized(id, ws, clamp(message.cols, 20, 500, columns), clamp(message.rows, 5, 200, rows));
+    });
+    ws.on('close', () => shells.detached(id, ws));
+    ws.on('error', (error) => this.options.log(`terminal ${id}: ${String(error)}`, 'warn'));
+    if (!shells.attach(id, ws, columns, rows)) ws.close(SESSION_ENDED, 'the shell ended');
   }
 
   private attach(ws: WebSocket, session: string, columns: number, rows: number): void {
@@ -141,13 +172,8 @@ export class Terminals {
     });
 
     ws.on('message', (data: RawData, isBinary: boolean) => {
-      if (isBinary) return;
-      let message: ClientMessage;
-      try {
-        message = JSON.parse(String(data)) as ClientMessage;
-      } catch {
-        return;
-      }
+      const message = isBinary ? undefined : parsed(data);
+      if (!message) return;
       if (message.type === 'input' && typeof message.data === 'string') {
         pty.write(message.binary ? Buffer.from(message.data, 'latin1') : message.data);
       } else if (message.type === 'resize') {
@@ -175,6 +201,7 @@ export class Terminals {
 
   close(): void {
     for (const ws of this.open.keys()) ws.close(1001, 'daemon fermato');
+    this.options.shells?.closeAll();
     this.server.close();
   }
 }

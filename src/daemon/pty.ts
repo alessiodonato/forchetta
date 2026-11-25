@@ -6,6 +6,8 @@ import { createRequire } from 'node:module';
 
 export interface Pty {
   readonly pid: number;
+  /** The program in front, where the system says it (not on Windows). */
+  readonly process?: string;
   onData(listener: (data: Buffer | string) => void): unknown;
   onExit(listener: (event: { exitCode: number; signal?: number }) => void): unknown;
   write(data: string | Buffer): void;

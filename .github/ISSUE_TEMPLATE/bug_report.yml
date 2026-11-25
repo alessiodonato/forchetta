@@ -42,11 +42,11 @@ body:
       required: true
 
   - type: input
-    id: macos
+    id: system
     attributes:
-      label: System
-      description: macOS and the Mac, or Windows (and the WSL distribution, if you use it there), or Linux
-      placeholder: macOS 14.6, Apple Silicon — or Windows 11 24H2 — or Ubuntu 24.04 in WSL 2
+      label: Your system
+      description: macOS, Windows or Linux, its version and the processor. Say if it is WSL.
+      placeholder: macOS 14.6, Apple Silicon · Windows 11 26100, x64 · Ubuntu 24.04 in WSL 2, x64
     validations:
       required: true
 
@@ -56,8 +56,8 @@ body:
       label: How you installed Forchetta
       options:
         - Homebrew
-        - install.ps1 (Windows)
-        - install.sh (Linux, WSL)
+        - The Windows installer (install.ps1)
+        - The Linux installer (install.sh)
         - From source
     validations:
       required: true
@@ -66,7 +66,7 @@ body:
     id: log
     attributes:
       label: The daemon log
-      description: The last lines of `daemon.log`, in `~/Library/Application Support/Forchetta` on a Mac, `~/.local/share/forchetta` on Windows, on Linux and in WSL (in a clone, `var/`).
+      description: The last lines of `daemon.log`, in `~/Library/Application Support/Forchetta` on a Mac, in `~/.local/share/forchetta` on Windows and Linux (in a clone, `var/`).
       render: text
     validations:
       required: false

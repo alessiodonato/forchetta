@@ -5,7 +5,7 @@ const here = (file: string): string => fileURLToPath(new URL(file, import.meta.u
 const windows = process.platform === 'win32';
 
 /** What Windows has not: tmux, the shell scripts of the hooks, the installers and the app of the other systems. */
-const NOT_ON_WINDOWS = ['install-sh', 'linux-release', 'mac-untouched', 'permissions', 'platform', 'safety-off-mac', 'scripts', 'spawn', 'terminals', 'tmux'].map((name) => `test/${name}.test.ts`);
+const NOT_ON_WINDOWS = ['install-sh', 'linux-release', 'mac-untouched', 'permissions', 'platform', 'safety-off-mac', 'scripts', 'shells', 'spawn', 'terminals', 'tmux'].map((name) => `test/${name}.test.ts`);
 
 /** The folders of the tests, as Windows has them: what is absolute there has a drive. */
 const FOLDERS = /(?<![\w.:/~$@*\\-])\/(?=(?:p|r|w|x|y|q|abs|wt|repo|proj)(?:\/|['"`\s)\];,]|$))/gm;

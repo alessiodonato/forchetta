@@ -46,7 +46,7 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
       text = `${name} blocked · ${command.reason ?? ''}`;
       break;
     case 'inviato':
-      text = command.reason ? `${name}: ${command.reason}…` : `${name} sent…`;
+      text = command.kind === 'restart' ? 'restarting on the new Claude Code…' : command.reason ? `${name}: ${command.reason}…` : `${name} sent…`;
       break;
     case 'confermato':
       text =
@@ -60,6 +60,8 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
               ? `✓ told ${freeWhat(command)}`
             : command.kind === 'compact'
               ? '✓ /compact done'
+              : command.kind === 'restart'
+                ? `✓ restarted on Claude Code ${command.reason ?? ''}`
               : command.kind === 'exit'
                 ? '✓ ended: its run is over'
                 : '✓ /clear done';
@@ -68,7 +70,7 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
       text = `${name}: ${command.reason ?? 'no confirmation'}`;
       break;
     default:
-      text = `${name} not sent: ${command.reason ?? ''}`;
+      text = command.kind === 'restart' ? `not restarted: ${command.reason ?? ''}` : `${name} not sent: ${command.reason ?? ''}`;
   }
   const waiting = command.status === 'in-coda' || command.status === 'bloccato';
   return (

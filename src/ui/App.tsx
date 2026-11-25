@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type Agent, displayName } from '../shared/agent.ts';
+import { sortAgents } from '../shared/order.ts';
 import { nextChange } from '../shared/present.ts';
 import { startAmbient, stopAmbient } from './ambient.ts';
 import { Announcer } from './Announcer.tsx';
@@ -24,12 +25,16 @@ import { Studio } from './Studio.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
 import { AutoPanel } from './Automations.tsx';
 import { ReopenNotice } from './Reopen.tsx';
+import { RestartNotice } from './Restarts.tsx';
 import type { AutomationView } from '../shared/automation.ts';
 import { crewLineOf } from '../shared/crew.ts';
 import { PromptsPanel } from './PromptsPanel.tsx';
+import { ScheduledPanel } from './Scheduled.tsx';
+import { ShellPanel } from './Shells.tsx';
 import { RecallPanel } from './Recall.tsx';
 import { hasGroups, OrgChart } from './Team.tsx';
 import { animateMove, onReducedMotionChange } from './motion.ts';
+import { useReorder } from './reorder.ts';
 import type { Store, UiState } from './store.ts';
 import { Workspace } from './Workspace.tsx';
 
@@ -110,9 +115,12 @@ function autoSummary(automations: readonly AutomationView[]): string {
   const parts = [`${automations.length} in all`, running ? `${running} at work` : '', paused ? `${paused} paused` : ''].filter(Boolean);
   return parts.join(', ');
 }
+
+type PanelName = 'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | 'settings' | 'auto' | 'shell' | 'scheduled';
+
 export function App({ store }: { store: Store }) {
   const state = useStore(store);
-  const agents = useMemo(() => [...state.agents.values()].sort((a, b) => a.createdAt - b.createdAt), [state.agents]);
+  const agents = useMemo(() => sortAgents(state.agents.values(), state.order), [state.agents, state.order]);
   const now = useNow(agents, state.visible);
   const grid = useRef<HTMLElement>(null);
   useGlide(grid, agents.map((agent) => agent.id).join(' '));
@@ -127,7 +135,7 @@ export function App({ store }: { store: Store }) {
   const open = useCallback((id: string) => store.open(id), [store]);
   const entered = useCallback((id: string) => store.entering.delete(id), [store]);
   const working = state.panes.open.length > 0;
-  const [panel, setPanel] = useState<'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | 'settings' | 'auto' | undefined>(undefined);
+  const [panel, setPanel] = useState<PanelName | undefined>(undefined);
   /** The panel "auto" opened on its form for a new automation (from "+ new"). */
   const [autoNew, setAutoNew] = useState(false);
   /** The team the panel of the teams opens on: a run of an automation, from its panel, even once it ended. */
@@ -151,7 +159,8 @@ export function App({ store }: { store: Store }) {
   };
   const grouped = hasGroups(agents);
   const showOrg = view === 'org' && grouped;
-  const toggle = (which: 'broadcast' | 'new' | 'team' | 'crew' | 'recall' | 'prompts' | 'settings' | 'auto'): void => {
+  useReorder(grid, state.ready && state.order !== undefined && !working && !showOrg && agents.length > 1, false, (id, before) => store.moveBoxes([id], before));
+  const toggle = (which: PanelName): void => {
     store.endSpawn();
     store.endCrewSpawn();
     setAutoNew(false);
@@ -169,6 +178,10 @@ export function App({ store }: { store: Store }) {
       return;
     }
     setStudio(false);
+    if (kind === 'shell') {
+      setPanel('shell');
+      return;
+    }
     if (kind === 'auto') {
       setAutoNew(true);
       setPanel('auto');
@@ -267,7 +280,7 @@ export function App({ store }: { store: Store }) {
         event.preventDefault();
         commandRef.current('nextWaiting');
       } else if (mod && !event.shiftKey && /^Digit[1-9]$/.test(event.code)) {
-        const list = [...store.state.agents.values()].sort((a, b) => a.createdAt - b.createdAt);
+        const list = store.sorted();
         const target = list[Number(event.code.slice(5)) - 1];
         if (!target) return;
         event.preventDefault();
@@ -294,6 +307,8 @@ export function App({ store }: { store: Store }) {
       { id: 'new-auto', group: 'Actions', label: 'New automatic team', words: 'automation queue schedule github cron', run: () => startNew('auto') },
       ...(activeCrews.length > 0 ? [{ id: 'teams', group: 'Actions' as const, label: 'Teams: requests, threads, cost', run: () => setPanel('crew') }] : []),
       ...(state.automations.length > 0 ? [{ id: 'auto', group: 'Actions' as const, label: 'Automatic teams: queues, runs', words: 'automation schedule github', run: () => setPanel('auto') }] : []),
+      ...((state.shellKinds?.length ?? 0) > 0 ? [{ id: 'shell', group: 'Actions' as const, label: 'A plain terminal in the folder of a session', words: 'shell zsh bash powershell', run: () => setPanel('shell') }] : []),
+      ...((state.scheduled?.length ?? 0) > 0 ? [{ id: 'scheduled', group: 'Actions' as const, label: 'Scheduled tasks of the Claude app', words: 'cron routine run now', run: () => setPanel('scheduled') }] : []),
       { id: 'next-waiting', group: 'Actions', label: 'Next session that waits for you', keys: '⌘]', run: nextWaiting },
       { id: 'search', group: 'Actions', label: 'Search earlier sessions', words: 'recall arricurdai', run: () => setPanel('recall') },
       { id: 'broadcast', group: 'Actions', label: 'Send to several sessions', words: 'broadcast', run: () => setPanel('broadcast') },
@@ -411,7 +426,18 @@ export function App({ store }: { store: Store }) {
               auto
             </button>
           )}
-          {state.ready && <NewMenu active={panel === 'new' || panel === 'team' || studio} onPick={startNew} />}
+          {state.ready && (state.scheduled?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              class={`broadcast-toggle quiet${panel === 'scheduled' ? ' active' : ''}`}
+              title="The scheduled tasks of the Claude app: their last run, starting one now"
+              aria-pressed={panel === 'scheduled'}
+              onClick={() => toggle('scheduled')}
+            >
+              scheduled
+            </button>
+          )}
+          {state.ready && <NewMenu active={panel === 'new' || panel === 'team' || studio} shells={(state.shellKinds?.length ?? 0) > 0} onPick={startNew} />}
           {state.ready && (
             <button type="button" class={`broadcast-toggle quiet settings-toggle${panel === 'settings' ? ' active' : ''}`} aria-pressed={panel === 'settings'} title={keyText('Settings (⌘,) · Commands (⌘K)')} aria-label="Settings" onClick={() => toggle('settings')}>
               ⚙
@@ -420,6 +446,7 @@ export function App({ store }: { store: Store }) {
         </div>
       </header>
       {state.ready && <ReopenNotice store={store} />}
+      {state.ready && <RestartNotice agents={agents} store={store} />}
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && panel === 'new' && <NewSessionPanel agents={agents} store={store} onClose={() => toggle('new')} />}
       {state.ready && panel === 'team' && (
@@ -472,6 +499,16 @@ export function App({ store }: { store: Store }) {
             setStudio(true);
           }}
         />}
+      {state.ready && panel === 'scheduled' && <ScheduledPanel agents={agents} store={store} now={now} onClose={() => toggle('scheduled')} />}
+      {state.ready && panel === 'shell' && <ShellPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
+      {state.ready && state.shellError && panel !== 'shell' && (
+        <p class="notice" role="alert">
+          The terminal did not open: {state.shellError}{' '}
+          <button type="button" class="quiet" onClick={() => store.dismissShellError()}>
+            Got it
+          </button>
+        </p>
+      )}
       {state.ready && panel === 'recall' && <RecallPanel agents={agents} store={store} onClose={() => toggle('recall')} />}
       {state.ready && panel === 'prompts' && <PromptsPanel store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && panel === 'settings' && <SettingsPanel store={store} onClose={() => setPanel(undefined)} />}
@@ -574,7 +611,7 @@ export function App({ store }: { store: Store }) {
       <FilesPanel store={store} now={now} />
       <SubagentsPanel store={store} now={now} />
       {state.folderPicker && <FolderPicker store={store} />}
-      <Announcer agents={agents} />
+      <Announcer agents={agents} said={state.said} />
       {overlay === 'palette' && <Palette commands={paletteCommands()} onClose={() => setOverlay(undefined)} />}
       {overlay === 'shortcuts' && <ShortcutsSheet onClose={() => setOverlay(undefined)} />}
     </div>

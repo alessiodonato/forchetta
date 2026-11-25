@@ -65,10 +65,12 @@ describe('Claude Code against the version tested', () => {
 });
 
 describe('the settings of the app', () => {
-  const good = { guard: { files: true, git: false, notes: true, servers: true }, stallMin: 10, endedRetentionMin: 10, replace: 'lru', hotkey: 'Ctrl+Alt+F', port: 47821, haiku: false };
+  const good = { guard: { files: true, git: false, notes: true, servers: true }, stallMin: 10, endedRetentionMin: 10, autoRestart: true, replace: 'lru', hotkey: 'Ctrl+Alt+F', port: 47821, haiku: false };
   it('are checked, and say what takes effect only after a restart', () => {
     const checked = cleanSettings(good);
     expect(checked).toEqual({ settings: { ...good, hotkey: 'ctrl+alt+f' } });
+    // A page of an older Forchetta does not know it: off.
+    expect(cleanSettings({ ...good, autoRestart: undefined })).toMatchObject({ settings: { autoRestart: false } });
     expect(cleanSettings({ ...good, hotkey: '' })).toMatchObject({ settings: { hotkey: '' } });
     expect(cleanSettings({ ...good, hotkey: 'f' })).toMatchObject({ error: expect.stringContaining('ctrl+alt+f') });
     expect(cleanSettings({ ...good, stallMin: 0 })).toMatchObject({ error: expect.stringContaining('stuck after') });

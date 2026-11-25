@@ -212,6 +212,9 @@ export class Registry {
               ? { kind: 'tmux', session: pane.session, paneId: pane.paneId }
               : { kind: 'readonly', reason: entry.kind === 'background' ? 'background' : 'fuori-tmux' },
             state: stateFromStatus(entry.status),
+            ...(entry.status === 'shell' ? { backgroundShell: true } : {}),
+            ...(entry.version ? { version: entry.version } : {}),
+            ...(entry.remoteControl ? { remoteControl: true } : {}),
           },
           now,
         );
@@ -230,6 +233,14 @@ export class Registry {
         if (agent.sessionId) agent.pastSessionIds.push(agent.sessionId);
         agent.sessionId = entry.sessionId;
         forgetEndedSubagents(agent);
+        touched.add(agent);
+      }
+      if (entry.version && agent.version !== entry.version) {
+        agent.version = entry.version;
+        touched.add(agent);
+      }
+      if (entry.remoteControl !== undefined && (agent.remoteControl ?? false) !== entry.remoteControl) {
+        agent.remoteControl = entry.remoteControl || undefined;
         touched.add(agent);
       }
       if (!agent.name && entry.name) agent.name = entry.name;

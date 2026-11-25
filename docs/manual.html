@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.7 (<a href="changelog/">what changed</a>). The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.8 (<a href="changelog/">what changed</a>). The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -160,6 +160,7 @@
           <li><a href="#commands">Commands to a session</a></li>
           <li><a href="#permissions">Permissions from the box</a></li>
           <li><a href="#new-session">New session</a></li>
+          <li><a href="#scheduled">Scheduled tasks of the Claude app</a></li>
           <li><a href="#teams">Teams of agents</a></li>
           <li><a href="#guard">The guard</a></li>
           <li><a href="#changes">Changes, subagents, artifacts, conflicts</a></li>
@@ -204,7 +205,11 @@ forchetta setup</pre>
           <li>To attach again from a terminal, open its pane in the app, or use tmux with the socket of Forchetta:<br><code>tmux -S "$HOME/Library/Application Support/Forchetta/tmux.sock" attach -t fk-xxxxxxxx</code> (the names come from <code>… ls</code> with the same socket).</li>
           <li>The daemon of Forchetta starts by itself. Stopping it, or quitting the app, stops no session.</li>
         </ul>
-        <p>After <code>brew upgrade forchetta</code>, run <code>forchetta setup</code> again: it builds the app again only when it changed.</p>
+        <h3 id="update">Update</h3>
+        <p>On a Mac:</p>
+        <pre>brew upgrade forchetta &amp;&amp; forchetta setup</pre>
+        <p><code>forchetta setup</code> builds the app again when it changed, shows what changes in the hooks and asks, and starts the daemon again on the new version. Then quit the app (<kbd>⌘Q</kbd>) and open it again. On Windows and on Linux, run the command of the install again: the <a href="windows/#update">guide for Windows</a> and the one <a href="windows/wsl/#update">for WSL</a> have it, with the last version.</p>
+        <p>The sessions of Claude Code go on through it, and their conversations with them. The <a href="#shell">plain terminals</a> end. Forchetta never updates by itself, and never asks the network whether there is a new version: the <a href="changelog/">changelog</a> says what each one brings.</p>
       </section>
 
       <section id="windows">
@@ -246,7 +251,7 @@ forchetta setup</pre>
         <p>One box per session. It shows up when the session starts, fades when it ends, and goes away 10 minutes later. Each box shows:</p>
         <ul>
           <li>the project (or the name you gave it) and the state, with a dot when the session finished, or stopped on an error, since you last looked: a click on its box, or its open pane, marks it seen;</li>
-          <li>the current action, <code>Edit src/api.ts</code> or <code>Bash npm test</code> for example, or what the session is asking you; when it is not at work, what the state does not say already: <span class="ui">finished 12 min ago</span>, the error in words (<span class="ui">5-hour limit used up · back 4:40 PM</span>), its folder while it starts;</li>
+          <li>the current action, <code>Edit src/api.ts</code> or <code>Bash npm test</code> for example, or what the session is asking you; when it is not at work, what the state does not say already: <span class="ui">finished 12 min ago</span> (with <span class="ui">shell running</span> when a command it started goes on in the background: a dev server, or one that hangs), the error in words (<span class="ui">5-hour limit used up · back 4:40 PM</span>), its folder while it starts;</li>
           <li>a short summary, from the last request and the last reply;</li>
           <li>the context, as a bar and as a share of the window (the tokens are in its tooltip; see <a href="#cost">Context, cache and cost</a>), and the prompt cache when it is about to expire, with <a href="https://github.com/alessiodonato/arricurdai">arricurdAI</a>;</li>
           <li>the cost of the session; while it works, how long its turn has gone on (<span class="ui">for 12 min</span>), and while it waits, for how long; <span class="ui">read only</span> for a session outside the tmux of Forchetta.</li>
@@ -265,6 +270,8 @@ forchetta setup</pre>
         </table></div>
         <p>Amber, green and red only ever mean a state. Claude orange marks what you can act on (the buttons that start something, what you chose, the pane you are typing in) and work under way: the dashes of a session at work, the requests of a team. With “Reduce motion” on in macOS, the states stay recognizable but still. When the window is hidden, nothing moves. At rest, the app, the page and the daemon together stay under 1% of CPU.</p>
 
+        <h3 id="order">The order of the boxes</h3>
+        <p>The boxes are in the order the sessions started. Drag one to put it elsewhere: a line shows where it goes, and <kbd>Esc</kbd> leaves it where it was. It works in the grid and in the column on the left, where a team moves with all its sessions. From the keyboard, <kbd>⌥</kbd> and an arrow on a box reached with <kbd>Tab</kbd>. Forchetta keeps the order, for every window and for the next time: a new session in the folder of one that ended, with the same name, takes its place. <kbd>⌘1</kbd> … <kbd>⌘9</kbd> follow it.</p>
         <h3>Names, groups and roles</h3>
         <p>Hover a box and click <strong>✎</strong> to give the session a <strong>name</strong> (shown in place of the folder), a <strong>color</strong> (a dot before the name, in the box, the column and the pane, and a tint in the background of its terminal, to tell sessions apart at a glance), a <strong>group</strong>, a <strong>role</strong> in free text, and the mark <span class="ui">lead of the group</span>. The choice is kept for its folder too: a session that starts again in the same folder finds its place again. <span class="ui">Remove</span> clears it.</p>
         <p>With at least one group, <span class="ui">grid / org chart</span> appears at the top. In the org chart each group has its section, the leads above and the others below; the sessions with no group come last. A team of agents is a group too.</p>
@@ -278,6 +285,16 @@ forchetta setup</pre>
           <li>The box of any session that ended has <span class="ui">reopen</span> too, while it shows. The runs of <a href="#auto">automatic teams</a> are not offered: their automation pauses, and <span class="ui">again</span> starts them over.</li>
         </ul>
         <p>From a terminal: <code>forchetta reopen</code> lists them, <code>forchetta reopen --all</code> reopens every one, <code>forchetta reopen api "Studio"</code> those named (a team: all its sessions).</p>
+
+        <h3 id="restart">On a new Claude Code</h3>
+        <p>Claude Code updates itself, but a session keeps the version it started with until it restarts (<span class="ui">Update installed · Restart to update</span>). A line under the top one says how many sessions run an older one, with <span class="ui">Restart the 7 at rest</span>: one after the other they go on with the version installed, each in its box and its pane.</p>
+        <ul>
+          <li><strong>The conversation stays.</strong> Forchetta types <code>/restart</code>, the command of Claude Code for it: the model, the permission mode, the system prompt, the MCP servers, the rules and the timers stay too.</li>
+          <li><strong>Only a session at rest</strong>: not one with a command in the background, a subagent at work, a request of its team open, or a draft in its prompt. One at work is offered when it is done. Enter is pressed only when the menu shows the command of Claude Code; after that, no key at all.</li>
+          <li><strong>It counts when the version changed.</strong> What Claude Code refuses stays as it is, with the reason under <span class="ui">Choose…</span> and in a tag of its box. One that does not go as expected stops the others until you click <span class="ui">Go on</span>.</li>
+          <li>With Remote Control connected, Claude Code does not restart: once you disconnect it, the session is offered. For a session outside the tmux of Forchetta, type <code>/restart</code> in its terminal.</li>
+          <li><strong>By themselves</strong>, when you turn it on in <a href="#settings">Settings</a>: with no click, once their prompt cache is over (after an hour at rest, without arricurdAI), so a restart never makes a conversation still in cache be read again.</li>
+        </ul>
       </section>
 
       <section id="terminals">
@@ -298,7 +315,16 @@ forchetta setup</pre>
           <li>Dragging selects text: when you let go, tmux copies it to the clipboard and the <a href="#selection">menu of the selection</a> opens there. <kbd>Option</kbd> + drag selects with the terminal of the page instead.</li>
           <li><kbd>⌘</kbd> + click on a link opens it in your browser: https anywhere, http only on this Mac. A plain click stays with the terminal.</li>
           <li>Typing in a pane keeps the keyboard there, even while Claude answers in another pane.</li>
+          <li><strong>Your messages have a bar on their left</strong> and a light band, to tell them from the answers of Claude. Settings, <span class="ui">This window</span>, turns the marks off.</li>
           <li>macOS 12 has the ⏺ of Claude Code only as a color emoji, two cells wide: there the panes show it as ●. Only the drawing changes.</li>
+        </ul>
+
+        <h3 id="shell">A plain terminal</h3>
+        <p><span class="ui">shell</span>, in a box or in the header of a pane, opens your shell in the folder of that session, in a pane next to it: to run the tests, look at <code>git log</code>, start what Claude just changed. <span class="ui">+ new › terminal</span> asks which folder. On Windows the buttons are <span class="ui">PowerShell</span> and, when Git for Windows is there, <span class="ui">Git Bash</span>. It is not a session: it has no box, and nothing of Forchetta or of Claude is in its environment.</p>
+        <ul>
+          <li>It ends with its pane, as a window of the Terminal does: when something runs in it, the pane asks first. <code>exit</code> closes it too. A fifth session never takes its pane.</li>
+          <li>Reloading the page keeps it. Stopping the daemon, or updating Forchetta, ends it.</li>
+          <li>A <code>claude</code> started in it is a session as any you start in a terminal: read only.</li>
         </ul>
 
         <h3 id="selection">Ask about a selection</h3>
@@ -365,6 +391,13 @@ forchetta setup</pre>
           <li><strong>new worktree</strong>, with an optional name: Claude Code makes a git worktree for the session alone (<code>--worktree</code>). The folder must be in a git repository that Claude Code trusts.</li>
         </ul>
         <p>The session starts in the tmux of Forchetta through your login shell, so it has the PATH of a new Terminal tab, and its terminal opens at once. A folder you never opened with Claude asks there whether you trust it.</p>
+      </section>
+
+      <section id="scheduled">
+        <h2>Scheduled tasks of the Claude app</h2>
+        <p>When the Claude desktop app has <a href="https://code.claude.com/docs/en/desktop-scheduled-tasks">scheduled tasks</a> on this computer, <span class="ui">scheduled</span> shows at the top. It lists them, with their description, their instructions, and the last run Forchetta saw: when, in which folder, how it went, and its session while it is there.</p>
+        <p><span class="ui">Run now…</span> starts the instructions of one in a folder, as a session of Forchetta: with your own permission settings, not those of the task, and the app does not count it as a run.</p>
+        <p>Forchetta reads the tasks from <code>~/.claude/scheduled-tasks</code> and never writes there. When a task starts, its folder and its history are kept by the app, where other programs cannot read them: a run is known by its first prompt, which has the instructions of the task, so one that ran while the daemon was off is not.</p>
       </section>
 
       <section id="teams">
@@ -737,9 +770,9 @@ Read them again before you write code that relies on them.</code></pre>
         <p><span class="ui">⚙</span> at the top, or <kbd>⌘,</kbd>, opens the settings. What is not in place yet comes first (the hooks, the status line, tmux, Claude Code), each with the command that fixes it and a <span class="ui">copy</span> button; the same list shows in the empty window at the first start. Then:</p>
         <ul>
           <li><strong>The guard</strong>: its four parts, as in the <a href="#config">configuration</a>. A repository can change them for itself in <code>.forchetta/guard.json</code>.</li>
-          <li><strong>Sessions</strong>: after how long a session at work seems stuck, how long a finished one stays, what a fifth pane does.</li>
+          <li><strong>Sessions</strong>: after how long a session at work seems stuck, how long a finished one stays, whether they restart by themselves <a href="#restart">on a new Claude Code</a>, what a fifth pane does.</li>
           <li><strong>The app</strong>: the shortcut that shows Forchetta from anywhere, the port, the summaries by Haiku. The port and Haiku wait for a restart of the daemon; the rest counts at once.</li>
-          <li><strong>This window</strong>: the theme (dark, light, as the system) and the size of the text of the terminals.</li>
+          <li><strong>This window</strong>: the theme (dark, light, as the system), the size of the text of the terminals, and whether your messages are marked in them.</li>
           <li><strong>Optional features</strong>: arricurdAI, the note before <code>/clear</code>, the summaries by Haiku, the daemon kept alive by macOS: on or off, and why, with how to turn them on.</li>
         </ul>
         <div class="table"><table>
@@ -748,6 +781,7 @@ Read them again before you write code that relies on them.</code></pre>
             <tr><td><kbd>⌘K</kbd></td><td>Every command and every session, found by typing a few letters.</td></tr>
             <tr><td><kbd>⌘N</kbd> <kbd>⇧⌘N</kbd> <kbd>⌥⌘N</kbd></td><td>New session, new team, new team in the studio.</td></tr>
             <tr><td><kbd>⌘1</kbd> … <kbd>⌘9</kbd></td><td>Open the first nine sessions, in the order of the boxes.</td></tr>
+            <tr><td><kbd>⌥</kbd> and an arrow</td><td>On a box reached with <kbd>Tab</kbd>: moves it one place earlier or later.</td></tr>
             <tr><td><kbd>⌘]</kbd></td><td>The next session that waits for you; so does a click on <span class="ui">waits for you</span> at the top.</td></tr>
             <tr><td><kbd>⌘W</kbd></td><td>Close the palette, the panel or the pane in front; with none, hide the window.</td></tr>
             <tr><td><kbd>⌘+</kbd> <kbd>⌘−</kbd> <kbd>⌘0</kbd></td><td>Zoom the page (in the studio, its canvas). The app keeps the zoom.</td></tr>
@@ -817,6 +851,7 @@ Read them again before you write code that relies on them.</code></pre>
           <thead><tr><th>Key</th><th>Default</th><th>What it sets</th></tr></thead>
           <tbody>
             <tr><td><code>stallMin</code></td><td><code>10</code></td><td>Minutes with no event before a working session counts as stuck.</td></tr>
+            <tr><td><code>restarts</code></td><td><code>{"auto": false}</code></td><td>Whether the sessions at rest restart by themselves <a href="#restart">on a new Claude Code</a>.</td></tr>
             <tr><td><code>panes.replace</code></td><td><code>"lru"</code></td><td>The fifth terminal replaces the one used longest ago; <code>"chiedi"</code> asks which one.</td></tr>
             <tr><td><code>hotkey</code></td><td><code>"ctrl+alt+f"</code></td><td>The shortcut that shows Forchetta: letters, digits or <code>space</code>, with at least one modifier; <code>""</code> turns it off.</td></tr>
             <tr><td><code>endedRetentionMin</code></td><td><code>10</code></td><td>How long an ended session stays in the window.</td></tr>
@@ -838,7 +873,7 @@ Read them again before you write code that relies on them.</code></pre>
         <ul>
           <li><code>config.json</code>, the settings; <code>daemon.json</code>, the port and the token of the daemon; <code>hooks.sock</code>, where the hooks of Claude Code talk to the daemon; <code>tmux.sock</code>, the tmux of your sessions;</li>
           <li><code>state.json</code>, the sessions; <code>teams.json</code>, names, groups and roles by folder;</li>
-          <li><code>crews/</code>, the teams of agents, one file each (<code>crews/archive/</code>: the runs of automations past the last 50); <code>automations.json</code>, the <a href="#auto">teams that start by themselves</a>, their queues and last runs; <code>reopen.json</code>, the <a href="#reopen">sessions that ended with the Mac</a>, for a week; <code>crew-templates.json</code>, your templates; <code>crew-roles.json</code>, your presets of agents; <code>skills/</code>, the <a href="#skills">skills</a> downloaded, and the plugin of each session of a team that has some;</li>
+          <li><code>crews/</code>, the teams of agents, one file each (<code>crews/archive/</code>: the runs of automations past the last 50); <code>automations.json</code>, the <a href="#auto">teams that start by themselves</a>, their queues and last runs; <code>reopen.json</code>, the <a href="#reopen">sessions that ended with the Mac</a>, for a week; <code>order.json</code>, the <a href="#order">order of the boxes</a>; <code>scheduled.json</code>, the last run seen of each <a href="#scheduled">scheduled task</a>, without its prompt; <code>crew-templates.json</code>, your templates; <code>crew-roles.json</code>, your presets of agents; <code>skills/</code>, the <a href="#skills">skills</a> downloaded, and the plugin of each session of a team that has some;</li>
           <li><code>patches/</code>, the changes of each session; <code>backups/</code>, the copies of your settings; <code>claude-update.json</code>, the failed update of Claude Code already taken care of; <code>prompts.json</code>, your quick prompts; <code>guard-stats.json</code>, how many times a day the guard did each thing; <code>ledger/</code>, the <a href="#report">ledger</a>; <code>daemon.log</code>, in English with the level of each line (INFO, WARN, ERROR), started again past 5 MB (the last three kept as <code>daemon.log.1</code> … <code>.3</code>).</li>
         </ul>
         <p>Each file is written whole or not at all, and the version before stays next to it as <code>.bak</code>. A file that cannot be read is never written over: Forchetta sets it aside as <code>.corrupt-&lt;time&gt;</code> and goes on with the version before; entries that are not valid any more (a template, a skill) are kept in <code>&lt;file&gt;.rejected.json</code>. <code>data-version</code> says the format of the folder: a Forchetta older than its data does not start on it.</p>
@@ -859,6 +894,7 @@ Read them again before you write code that relies on them.</code></pre>
             <tr><td>A team starts only its first session</td><td>Claude Code does not trust the folder yet: answer the trust dialog in that terminal, and the rest of the team starts.</td></tr>
             <tr><td>A worktree session ends at once</td><td>The folder is not in git, or not trusted by Claude Code: open it once with <code>claude</code> and accept the dialog.</td></tr>
             <tr><td><span class="ui">Claude Code auto-update failed</span> at the top</td><td>The last automatic update of Claude Code failed (hover it for when). Click <span class="ui">update</span>: it runs <code>claude update</code> and says what it did. New sessions use the new version; the open ones keep theirs until they restart.</td></tr>
+            <tr><td><span class="ui">Update installed · Restart to update</span> in a session</td><td>A newer Claude Code is installed: see <a href="#restart">On a new Claude Code</a>.</td></tr>
             <tr><td><span class="ui">Daemon unreachable</span></td><td><code>forchetta daemon status</code>, then <code>forchetta daemon start</code>. The sessions are not affected.</td></tr>
             <tr><td>The app cannot find the daemon, from a clone on the Desktop</td><td>macOS asks whether Forchetta may access that folder: allow it in System Settings → Privacy &amp; Security → Files and Folders.</td></tr>
             <tr><td>No boxes at all</td><td>The hooks are missing: <code>forchetta hooks install</code>. Sessions already open pick them up by themselves.</td></tr>

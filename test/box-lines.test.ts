@@ -23,6 +23,8 @@ describe('the line under the name', () => {
     expect(restLine(agent('idle', { completedAt: NOW - 12 * MIN }), NOW)).toBe('finished 12 min ago');
     expect(restLine(agent('idle', { completedAt: NOW - 1000 }), NOW)).toBe('finished just now');
     expect(restLine(agent('idle'), NOW)).toBe('~/Desktop/shop');
+    expect(restLine(agent('idle', { completedAt: NOW - 12 * MIN, backgroundShell: true }), NOW)).toBe('finished 12 min ago · shell running');
+    expect(restLine(agent('idle', { backgroundShell: true }), NOW)).toBe('shell running · ~/Desktop/shop');
     expect(restLine(agent('starting'), NOW)).toBe('~/Desktop/shop');
     expect(restLine(agent('compacting', { compactTrigger: 'auto' }), NOW)).toBe('the context was full');
     expect(restLine(agent('ended', { endReason: 'prompt_input_exit' }), NOW)).toBe('closed');

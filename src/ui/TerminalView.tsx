@@ -9,11 +9,12 @@ import { openLink } from './Artifacts.tsx';
 import { token } from './connection.ts';
 import { GlyphFilter } from './glyphs.ts';
 import { clipboardKey, isFocusReport, takeKey } from './layout.ts';
+import { markMessages } from './marks.ts';
 import { commandKey, IS_MAC, keyText } from './platform.ts';
 import type { SelectionPlace } from './store.ts';
 import { terminalTheme } from './terminal-theme.ts';
 import { onThemeChange, resolvedTheme } from './theme.ts';
-import { onTerminalFontSize, terminalFontSize } from './prefs.ts';
+import { messageMarks, onMessageMarks, onTerminalFontSize, terminalFontSize } from './prefs.ts';
 
 // The terminal of a pane: xterm.js on a WebSocket of the daemon, which runs `tmux attach` for the session. Closing
 // the pane closes the socket, and the daemon detaches that tmux client: the session goes on.
@@ -91,7 +92,10 @@ declare global {
 }
 
 interface Props {
+  /** The session, or the plain terminal (`shell`), it shows. */
   agentId: string;
+  /** A plain terminal (Shells.tsx): its own scroll and selection, no tmux under it. */
+  shell?: boolean;
   /** The color of the session: a tint in the background of the terminal. */
   color?: SessionColor;
   /** Typing or clicking in the terminal. */
@@ -110,7 +114,7 @@ interface Props {
   onSelectText?: (text: string, place: SelectionPlace) => void;
 }
 
-export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, focusKey, onDragStart, onDragEnd, onSelectText }: Props) {
+export function TerminalView({ agentId, shell = false, color, hosted = false, onUse, onStatus, focusKey, onDragStart, onDragEnd, onSelectText }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const callbacks = useRef({ onUse, onStatus, onDragStart, onDragEnd, onSelectText });
@@ -136,7 +140,7 @@ export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, 
       macOptionIsMeta: false,
       macOptionClickForcesSelection: true,
       // The history is in tmux: the wheel scrolls it (mouse on). A second one here would only show a scrollbar.
-      scrollback: hosted ? HOSTED_HISTORY : 0,
+      scrollback: hosted || shell ? HOSTED_HISTORY : 0,
       // The pseudo-terminal of Windows draws in its own way when it changes size.
       ...(hosted ? { windowsPty: { backend: 'conpty' as const, buildNumber: WINDOWS_11 } } : {}),
       theme: terminalTheme(color, resolvedTheme()),
@@ -166,6 +170,9 @@ export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, 
     fit.fit();
     terminal.current = term;
     window.forchettaDebug?.terminals.set(agentId, term);
+    // Your messages, marked on the left (Settings, "This window").
+    const marks = markMessages(term, () => !shell && messageMarks());
+    const stopMarks = onMessageMarks(marks.update);
     let disposed = false;
     if (!fontReady) {
       void fontLoaded.then(() => {
@@ -180,7 +187,7 @@ export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, 
       });
     }
 
-    const url = `ws://${location.host}/term?token=${encodeURIComponent(auth)}&agent=${encodeURIComponent(agentId)}&cols=${term.cols}&rows=${term.rows}`;
+    const url = `ws://${location.host}/term?token=${encodeURIComponent(auth)}&${shell ? 'shell' : 'agent'}=${encodeURIComponent(agentId)}&cols=${term.cols}&rows=${term.rows}`;
     const socket = new WebSocket(url);
     socket.binaryType = 'arraybuffer';
     const send = (message: unknown): void => {
@@ -192,12 +199,16 @@ export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, 
       send({ type: 'resize', cols: term.cols, rows: term.rows });
     };
     const glyphs = new GlyphFilter();
+    let answering = !shell;
     socket.onmessage = (event) => {
       if (event.data instanceof ArrayBuffer) term.write(glyphs.push(new Uint8Array(event.data)));
+      // A plain terminal shown again drew all it had: from here on what xterm.js answers is for the shell.
+      else term.write('', () => (answering = true));
     };
     socket.onclose = (event) => callbacks.current.onStatus(event.code === 4000 ? 'ended' : 'lost');
 
     term.onData((data) => {
+      if (!answering) return;
       send({ type: 'input', data });
       if (!isFocusReport(data)) callbacks.current.onUse();
     });
@@ -213,6 +224,8 @@ export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, 
       }
       // Not read by xterm.js (it would send ^V): the browser pastes, and xterm.js takes the paste.
       if (clipboard === 'paste') return false;
+      // Shift+Enter is for the prompt of Claude Code: in a plain terminal it is an Enter.
+      if (shell) return true;
       return takeKey(event, (data) => {
         send({ type: 'input', data });
         callbacks.current.onUse();
@@ -289,9 +302,12 @@ export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, 
       } catch {
         // Not visible right now: the ResizeObserver fits it later.
       }
+      marks.update();
     });
     return () => {
       stopFont();
+      stopMarks();
+      marks.dispose();
       disposed = true;
       observer.disconnect();
       cancelAnimationFrame(frame);

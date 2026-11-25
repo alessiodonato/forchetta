@@ -253,6 +253,16 @@ describe('requests to a team', () => {
   };
   const member = (id: string, crew: string): Agent => ({ ...newAgent({ id, control: { kind: 'tmux', session: `fk-${id}` } }, 0), team: { crew } });
 
+  it('says which sessions have work open: their own, or what they passed on', async () => {
+    const { crews, crewId } = await started();
+    expect(['agent-1', 'agent-2', 'agent-3', 'gone'].map((id) => crews.hasOpenWork(id))).toEqual([false, false, false, false]);
+    crews.request(crewId, ['tester'], 'Add a test for the parser.', 'lead', 10);
+    // The tester has it, the lead passed it on.
+    expect(['agent-1', 'agent-2', 'agent-3'].map((id) => crews.hasOpenWork(id))).toEqual([true, true, false]);
+    for (const request of crews.get(crewId)!.requests!) for (const delivery of request.deliveries) delivery.status = 'done';
+    expect(['agent-1', 'agent-2', 'agent-3'].map((id) => crews.hasOpenWork(id))).toEqual([false, false, false]);
+  });
+
   it('numbers the requests of a team, and goes to all the members when nobody is chosen', async () => {
     const { crews, crewId, queued, enqueue } = await started();
     expect(crews.request(crewId, [], '  Add a test for the parser.  ', 'the user', 10)).toEqual({ ok: true, n: 1, to: ['tester', 'formatter'] });

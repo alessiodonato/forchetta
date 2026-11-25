@@ -5,7 +5,7 @@ import { askNotifications, notificationState } from './browser-shell.ts';
 import { shell } from './connection.ts';
 import { useReturnFocus } from './focus.ts';
 import { IS_MAC } from './platform.ts';
-import { FONT_MAX, FONT_MIN, onTerminalFontSize, setTerminalFontSize, terminalFontSize } from './prefs.ts';
+import { FONT_MAX, FONT_MIN, messageMarks, onTerminalFontSize, setMessageMarks, setTerminalFontSize, terminalFontSize } from './prefs.ts';
 import type { Store } from './store.ts';
 import { applyTheme, currentTheme, type Theme } from './theme.ts';
 
@@ -130,6 +130,7 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
   const [theme, setTheme] = useState<Theme>(currentTheme);
   const [font, setFont] = useState(terminalFontSize);
   const [notifications, setNotifications] = useState(notificationState);
+  const [marked, setMarked] = useState(messageMarks);
   useEffect(() => onTerminalFontSize(setFont), []);
   const saving = store.state.settingsSave;
   const opened = useRef(Date.now());
@@ -185,6 +186,12 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
                 <input id="setting-ended" type="number" min={1} max={1440} value={draft.endedRetentionMin} onInput={(event) => set({ endedRetentionMin: Number((event.target as HTMLInputElement).value) })} />
                 <span>minutes</span>
               </label>
+              {store.state.restarts && <label class="setting-check">
+                <input type="checkbox" checked={draft.autoRestart === true} onChange={(event) => set({ autoRestart: (event.target as HTMLInputElement).checked })} />
+                <span>
+                  Sessions restart by themselves on a new Claude Code <span class="setup-detail">— with /restart, which keeps the conversation: only at rest, one at a time, once their prompt cache is over</span>
+                </span>
+              </label>}
               <div class="setting-row" role="group" aria-label="A fifth pane">
                 <span>A fifth pane</span>
                 <button type="button" class={`chip${draft.replace === 'lru' ? ' on' : ''}`} aria-pressed={draft.replace === 'lru'} onClick={() => set({ replace: 'lru' })}>
@@ -265,6 +272,16 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
           <span>Text of the terminals</span>
           <input id="setting-font" type="range" min={FONT_MIN} max={FONT_MAX} value={font} onInput={(event) => setTerminalFontSize(Number((event.target as HTMLInputElement).value))} />
           <span>{font} px</span>
+        </label>
+        <label class="setting-check">
+          <input type="checkbox" checked={marked} onChange={(event) => {
+            const on = (event.target as HTMLInputElement).checked;
+            setMarked(on);
+            setMessageMarks(on);
+          }} />
+          <span>
+            Mark my messages in the terminals <span class="setup-detail">— a bar on their left, to tell them from the answers of Claude</span>
+          </span>
         </label>
         <p class="setup-detail">{IS_MAC ? 'The whole page: View → Zoom In / Zoom Out in the app (⌘+ ⌘− ⌘0).' : 'The whole page: the zoom of the browser (Ctrl++ Ctrl+− Ctrl+0).'}</p>
       </div>

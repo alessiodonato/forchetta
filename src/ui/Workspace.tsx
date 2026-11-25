@@ -4,6 +4,7 @@ import { focusKey, layoutFor } from './layout.ts';
 import { motionAllowed } from './motion.ts';
 import { Pane } from './Pane.tsx';
 import { Rail } from './Rail.tsx';
+import { ShellPane } from './Shells.tsx';
 import { springKeyframes } from './spring.ts';
 import type { Store, UiState } from './store.ts';
 
@@ -46,16 +47,17 @@ function useSpringLayout(container: { current: HTMLElement | null }, key: string
 
 function nameOf(state: UiState, id: string): string {
   const agent = state.agents.get(id);
-  return agent ? displayName(agent) : id;
+  const shell = state.shells.get(id);
+  return agent ? displayName(agent) : shell ? `${shell.name} (${shell.label})` : id;
 }
 
 function ReplaceChooser({ state, store }: { state: UiState; store: Store }) {
-  const asking = state.panes.asking ? state.agents.get(state.panes.asking) : undefined;
-  if (!asking) return null;
+  const asking = state.panes.asking;
+  if (!asking || !(state.agents.has(asking) || state.shells.has(asking))) return null;
   return (
     <div class="chooser" role="dialog" aria-label="Which pane do I replace?">
       <span>
-        Four panes are open. Which one does <strong>{displayName(asking)}</strong> replace?
+        Four panes are open. Which one does <strong>{nameOf(state, asking)}</strong> replace?
       </span>
       {state.panes.open.map((id) => (
         <button key={id} type="button" onClick={() => store.replace(id)}>
@@ -105,6 +107,8 @@ export function Workspace({ state, store, agents, now }: { state: UiState; store
         <ReplaceChooser state={state} store={store} />
         <div class="panes" ref={grid} style={{ gridTemplateColumns: layout.columns, gridTemplateRows: layout.rows, gridTemplateAreas: layout.areas }}>
           {panes.open.map((id) => {
+            const shell = state.shells.get(id);
+            if (shell) return <ShellPane key={id} shell={shell} area={layout.place[id] ?? 'auto'} focusKey={focusKey(panes, id)} store={store} onUse={use} />;
             const agent = state.agents.get(id);
             if (!agent) return null;
             return <Pane key={id} agent={agent} area={layout.place[id] ?? 'auto'} focusKey={focusKey(panes, id)} now={now} store={store} onClose={close} onUse={use} />;

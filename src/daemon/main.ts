@@ -1,6 +1,6 @@
 import { execFile, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { migrateData, readDataJson, writeDataJson } from '../shared/data-file.ts';
 import { uptime } from 'node:os';
@@ -15,7 +15,7 @@ import { listPanes } from '../shared/tmux.ts';
 import { gitProgram } from '../shared/windows.ts';
 import { VERSION } from '../shared/version.ts';
 import { ArricurdaiNotes, ArricurdaiPoller, readArricurdaiStatus } from './arricurdai.ts';
-import { isAlive, readClaudeAgents } from './claude-agents.ts';
+import { isAlive, readClaudeAgents, readSessionFile } from './claude-agents.ts';
 import { ClaudeUpdates } from './claude-update.ts';
 import { QuickPrompts } from './prompts.ts';
 import { SelectionReader } from './selection.ts';
@@ -68,7 +68,13 @@ import { anySubagentActive, applySubagentHook, checkSubagents, readSubagentThrea
 import { sameTokens, subagentKey, sumTokens } from '../shared/present.ts';
 import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
 import { type Agent, markEnded, startsTurn } from './state.ts';
+import { Order } from './order.ts';
+import { loadPty } from './pty.ts';
+import { Scheduled } from './scheduled.ts';
+import { Shells, userShell } from './shells.ts';
+import { runningUnder, windowsShells } from './windows-shells.ts';
 import { Reopener } from './reopen.ts';
+import { Restarter } from './restarts.ts';
 import { endedAtShutdown, endedByRestart } from '../shared/reopen.ts';
 import { displayName, type GuardHold } from '../shared/agent.ts';
 import { haikuComplete, Summarizer } from './summarizer.ts';
@@ -144,6 +150,22 @@ function main(): void {
       hub?.systemChanged();
     });
   };
+  // Claude Code updates itself: another file behind the same path. Cheap to look at, every minute.
+  let claudeFile: string | undefined;
+  const checkClaudeFile = (): void => {
+    if (!claude) return;
+    try {
+      const real = realpathSync(claude);
+      const file = `${real} ${statSync(real).mtimeMs}`;
+      if (file === claudeFile) return;
+      const first = claudeFile === undefined;
+      claudeFile = file;
+      if (!first) readClaudeVersion();
+    } catch {
+      // An update is replacing it: the next minute.
+    }
+  };
+  checkClaudeFile();
   readClaudeVersion();
 
   const token = randomBytes(32).toString('hex');
@@ -306,6 +328,8 @@ function main(): void {
     if (rules !== spec.rules) log(`team in ${spec.cwd}: with the rules of ${REPO_RULES}`);
     return { ...spec, ...(rules ? { rules } : {}) };
   };
+  // The scheduled tasks of the Claude desktop app: their list, their runs, starting one.
+  let scheduled: Scheduled | undefined;
   const notes = new ArricurdaiNotes(arricurdai);
   let notesSupported = false;
   void notes.supported().then((supported) => {
@@ -321,6 +345,7 @@ function main(): void {
       commander?.agentChanged(agent);
       permissions?.agentChanged(agent);
       attention.agentChanged(agent);
+      scheduled?.agentChanged(agent);
       if (agent.state === 'ended' && agent.conflicts) updateConflicts();
       if (agent.state === 'ended') guard?.ended(agent);
       if (agent.state === 'ended' && !endedInLedger.has(agent.id)) {
@@ -337,6 +362,7 @@ function main(): void {
       hub?.agentsRemoved(ids);
       summarizer?.forget(ids);
       attention.forget(ids);
+      scheduled?.forget(ids);
       for (const id of ids) conflicts.forget(id);
       for (const id of ids) tokensCountedAt.delete(id);
       for (const id of ids) {
@@ -548,9 +574,40 @@ function main(): void {
     log,
   });
   claudeUpdates.check();
+  // The sessions on an older Claude Code than the one installed: they restart on it when you say so, or by themselves. Not on
+  // Windows: its Claude Code has no /restart.
+  const canRestart = PLATFORM !== 'windows';
+  const restartsChanged = (): void => {
+    if (canRestart) hub?.setRestarts(restarter.info());
+  };
+  const restarter = new Restarter({
+    installed: () => claudeVersion,
+    agents: () => registry.agents.values(),
+    agent: (agentId) => registry.agents.get(agentId),
+    enqueue: (agentId) => commander?.enqueueRestart(agentId) ?? { ok: false, error: 'the daemon is starting' },
+    teamBusy: (agentId) => crews.hasOpenWork(agentId),
+    auto: () => config.restarts.auto,
+    touch: (agent) => registry.touch(agent),
+    onChange: restartsChanged,
+    log,
+  });
   // The menu of a selection in a pane: what tmux copied, and the quick prompts.
   const selections = new SelectionReader(tmux);
   const quickPrompts = new QuickPrompts(paths.prompts, log);
+
+  const tasks = new Scheduled({
+    folder: join(claudeConfigDir(), 'scheduled-tasks'),
+    file: paths.scheduled,
+    log,
+    agent: (agentId) => registry.agents.get(agentId),
+    spawn: (input, extras) => spawnSession({ tmux, registry, claude, log, teamMcp }, input, extras),
+    onChange: () => hub?.scheduledChanged(),
+  });
+  scheduled = tasks;
+  // The order of the boxes, as you dragged them.
+  const order = new Order(paths.order, log);
+  // The plain terminals, in the folders of the sessions.
+  const shells = new Shells({ pty: loadPty, programs: PLATFORM === 'windows' ? windowsShells : userShell, log, ...(PLATFORM === 'windows' ? { running: runningUnder } : {}) });
 
   hub = new Hub({
     token,
@@ -588,7 +645,7 @@ function main(): void {
       const next = checked.settings;
       // Saved over what the file has (paths of the tools, context windows…): only these fields change.
       const stored = loadConfig(paths.config, log);
-      const saved = { ...stored, guard: next.guard, stallMin: next.stallMin, endedRetentionMin: next.endedRetentionMin, panes: { replace: next.replace }, hotkey: next.hotkey, port: next.port, summaries: { ...stored.summaries, haiku: next.haiku } };
+      const saved = { ...stored, guard: next.guard, stallMin: next.stallMin, endedRetentionMin: next.endedRetentionMin, restarts: { auto: next.autoRestart }, panes: { replace: next.replace }, hotkey: next.hotkey, port: next.port, summaries: { ...stored.summaries, haiku: next.haiku } };
       try {
         saveConfig(saved);
       } catch (error) {
@@ -598,6 +655,8 @@ function main(): void {
       config.guard = next.guard;
       config.stallMin = next.stallMin;
       config.endedRetentionMin = next.endedRetentionMin;
+      config.restarts = { auto: next.autoRestart };
+      restartsChanged();
       config.panes = { replace: next.replace };
       config.hotkey = next.hotkey;
       attention.setStallMs(next.stallMin * 60_000);
@@ -637,6 +696,16 @@ function main(): void {
     reopenList: () => reopener.list(),
     onReopen: (agentIds) => reopener.reopen(agentIds),
     onDismissReopen: (agentIds) => reopener.dismiss(agentIds),
+    scheduled: () => tasks.list(),
+    onRunScheduled: (id, cwd) => tasks.run(id, cwd),
+    shells: () => ({ kinds: shells.kinds(), waiting: shells.waiting() }),
+    onOpenShell: (agentId, kind) => {
+      const agent = registry.agents.get(agentId);
+      return agent ? shells.start(agent, kind) : { ok: false, error: 'this session is gone' };
+    },
+    onCloseShell: (id, force) => shells.close(id, force),
+    order: () => order.list(),
+    onOrder: (ids) => order.set(ids, registry.list()),
     onSaveAutomation: (input, id) => {
       if (!automations) return { ok: false, error: 'the daemon is starting' };
       // The folder as a session started from the panel keeps it: ~ and the rest resolved.
@@ -739,6 +808,7 @@ function main(): void {
     onInsert: (agentId, text) => commander?.insert(agentId, text) ?? Promise.resolve({ ok: false, error: 'the daemon is starting' }),
     prompts: () => quickPrompts.list(),
     onSavePrompts: (prompts) => quickPrompts.save(prompts),
+    ...(canRestart ? { restarts: () => restarter.info(), onRestart: (agentIds: string[]) => restarter.restart(agentIds), onRestartsGoOn: (goOn: boolean) => restarter.resume(goOn) } : {}),
     claudeUpdate: () => claudeUpdates.info(),
     onClaudeUpdate: (action) => {
       if (action === 'dismiss') claudeUpdates.dismiss();
@@ -839,8 +909,16 @@ function main(): void {
     // A run of an automation is over: the next one need not wait for the next tick.
     if (crew.auto) setTimeout(() => void automations?.tick(), 1000);
   };
-  const terminals = new Terminals({ token, port: () => config.port, localhost: PLATFORM === 'wsl', registry, tmux, log });
-  commander = new Commander({ registry, tmux, log, notes, onRequest: (_agent, command) => crews.commandChanged(command) });
+  const terminals = new Terminals({ token, port: () => config.port, localhost: PLATFORM === 'wsl', registry, tmux, shells, log });
+  commander = new Commander({
+    registry,
+    tmux,
+    log,
+    notes,
+    onRequest: (_agent, command) => crews.commandChanged(command),
+    onRestart: (agent, command, refused) => restarter.commandChanged(agent, command, refused),
+    sessionFile: (pid) => readSessionFile(pid),
+  });
   const queue = commander;
   crews.enqueue = (agentId, text, link) => queue.enqueueRequest(agentId, text, link);
   commander.restored();
@@ -970,7 +1048,10 @@ function main(): void {
         registry.touch(agent);
       }
       readArtifacts(agent);
-      if (startsTurn(payload) && !payload.agent_id) watchPrompt(agent, agent.lastEvent.at, payload.prompt ?? '');
+      if (startsTurn(payload) && !payload.agent_id) {
+        watchPrompt(agent, agent.lastEvent.at, payload.prompt ?? '');
+        scheduled?.prompt(agent, payload.prompt ?? '');
+      }
       if (applySubagentHook(agent, payload, Date.now())) registry.touch(agent);
       const loopBefore = agent.loop?.since;
       if (loops.hook(agent, payload, Date.now())) {
@@ -1206,6 +1287,7 @@ function main(): void {
         });
       }, QUIET_CHECK_MS),
       setInterval(() => void reconcile('periodic'), config.reconcileIntervalMin * 60_000),
+      ...(canRestart ? [setInterval(() => restarter.tick(), LIVENESS_MS)] : []),
       // The teams that start by themselves: their runs, their schedules, GitHub.
       setInterval(() => void automations?.tick(), AUTO_TICK_MS),
       setInterval(() => {
@@ -1232,6 +1314,7 @@ function main(): void {
         for (const agent of registry.agents.values()) if (agent.state !== 'ended') ledger.cost(agent, who(agent));
         updateConflicts();
         claudeUpdates.check();
+        checkClaudeFile();
         // The last days move with the clock: a day that leaves the week leaves the top line too.
         hub?.setGuardStats(guardStats.info());
       }, SWEEP_MS),

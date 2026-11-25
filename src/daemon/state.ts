@@ -66,6 +66,8 @@ function startWork(agent: Agent, now: number): void {
   agent.waiting = undefined;
   agent.error = undefined;
   agent.completedAt = undefined;
+  // Only the next reading tells whether the shell outlives this turn.
+  agent.backgroundShell = undefined;
 }
 
 /** A prompt that starts a turn of the model: not a command, nor a shell line. */
@@ -310,8 +312,13 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
   }
 }
 
-/** What `claude agents --json` reports for a session. */
+/**
+ * What `claude agents --json` reports for a session; its status can also be "shell". The version and Remote Control
+ * come from its session file (daemon/claude-agents.ts).
+ */
 export interface AgentsEntry {
+  version?: string;
+  remoteControl?: boolean;
   pid?: number;
   sessionId?: string;
   cwd?: string;
@@ -331,21 +338,27 @@ export function stateFromStatus(status: string | undefined): AgentState {
 /**
  * Brings the state in line with `claude agents --json`, but only where the hooks have been quiet for
  * `quietMs`: a turn interrupted with Esc sends no Stop, and a permission given in the terminal sends nothing
- * until the tool ends. Returns whether the state changed.
+ * until the tool ends. A session at rest with a shell in the background rests: its box only says of the shell.
+ * Returns whether something changed.
  */
 export function applyStatus(agent: Agent, entry: AgentsEntry, now: number, quietMs: number): boolean {
   if (agent.state === 'ended') return false;
   const quiet = now - agent.lastEvent.at >= quietMs;
   const before = agent.state;
+  const shellBefore = agent.backgroundShell;
+  if (entry.status === 'shell') agent.backgroundShell = true;
+  else if (entry.status === 'idle') agent.backgroundShell = undefined;
+  const shellChanged = agent.backgroundShell !== shellBefore;
+  const status = entry.status === 'shell' ? 'idle' : entry.status;
   // A compaction that Claude Code gave up on ("Not enough messages to compact") sends PreCompact and no
   // PostCompact: when the hooks are quiet and the session waits for input, it is over.
   if (agent.state === 'compacting') {
-    if (entry.status !== 'idle' || !quiet) return false;
+    if (status !== 'idle' || !quiet) return shellChanged;
     leaveCompaction(agent);
     agent.state = 'idle';
     return true;
   }
-  switch (entry.status) {
+  switch (status) {
     case 'idle':
       if (agent.state === 'starting' || ((agent.state === 'working' || agent.state === 'waiting') && quiet)) {
         agent.state = 'idle';
@@ -363,5 +376,5 @@ export function applyStatus(agent: Agent, entry: AgentsEntry, now: number, quiet
       }
       break;
   }
-  return agent.state !== before;
+  return agent.state !== before || shellChanged;
 }

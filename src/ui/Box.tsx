@@ -14,6 +14,7 @@ import {
   loopText,
   percentText,
   restLine,
+  SHELL_TITLE,
   shownSubagents,
   stalledFor,
   stallText,
@@ -29,12 +30,15 @@ import { Check, ToolIcon } from './icons.tsx';
 import { useMotionAnchor } from './anchor.ts';
 import { CommandBar, CommandStatus, currentCommand } from './Commands.tsx';
 import { ReopenButton } from './Reopen.tsx';
+import { OldVersionTag } from './Restarts.tsx';
 import { animateEnter, animateShake } from './motion.ts';
+import { moveAndKeep, moveKey } from './reorder.ts';
 import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
 import { SubagentRows, SubagentsButton } from './Subagents.tsx';
 import { PermissionOutcomeLine, PermissionPrompt, visibleOutcome } from './Permission.tsx';
 import { GuardLines } from './Guard.tsx';
+import { ShellButton } from './ShellButton.tsx';
 import { ColorDot, roleText, TeamEditor } from './Team.tsx';
 import { canOpen, type Store } from './store.ts';
 import { placeText } from './platform.ts';
@@ -44,6 +48,8 @@ import { placeText } from './platform.ts';
 
 interface Line {
   text: string;
+  /** More than the text, for its tooltip. */
+  title?: string;
   family?: ToolFamily;
   tone?: 'muted' | 'accent' | 'error';
 }
@@ -66,7 +72,11 @@ function actionLine(agent: Agent, now: number, limits: UsageLimits | undefined):
     case 'compacting':
       return { text: restLine(agent, now) ?? '' };
     default:
-      return { text: restLine(agent, now) ?? '', tone: 'muted' };
+      return {
+        text: restLine(agent, now) ?? '',
+        ...(agent.state === 'idle' && agent.backgroundShell ? { title: `${restLine(agent, now) ?? ''}\n${SHELL_TITLE}` } : {}),
+        tone: 'muted',
+      };
   }
 }
 
@@ -145,6 +155,7 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
           guard
         </span>
       )}
+      <OldVersionTag agent={agent} store={store} now={now} />
       {/* One group, on the right: when the box is too narrow for one line, it goes whole to the next line. */}
       <span class="meta-end">
         {/* Its rows open the panel while they are in the box: the button only after. */}
@@ -251,7 +262,14 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
       aria-label={boxLabel(agent, line.text, openable)}
       onClick={() => onOpen(agent.id)}
       onKeyDown={(event) => {
-        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+        if (event.target !== event.currentTarget) return;
+        const by = moveKey(event);
+        if (by) {
+          event.preventDefault();
+          moveAndKeep(store, agent.id, by, event.currentTarget);
+          return;
+        }
+        if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         onOpen(agent.id);
       }}
@@ -307,7 +325,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
             <ToolIcon family={line.family} />
           </span>
         )}
-        <span class="text" title={line.text}>
+        <span class="text" title={line.title ?? line.text}>
           {line.text}
         </span>
       </div>
@@ -348,6 +366,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
           {!commanding && shownSubagents(agent, now).length === 0 && <SubagentsButton agent={agent} store={store} />}
           {!commanding && <FilesButton agent={agent} store={store} />}
           {!commanding && <ArtifactsButton agent={agent} />}
+          {!commanding && <ShellButton agent={agent} store={store} />}
           <CommandBar agent={agent} store={store} onModeChange={setCommanding} />
         </div>
       )}
