@@ -142,6 +142,23 @@ describe('a session in its host', () => {
     expect((await sessions.run('has-session', ['-t', name])).code).toBe(0);
   });
 
+  it('a window that comes with a size of its own shows all that is drawn for it', async () => {
+    for (let round = 0; round < 15; round++) {
+      const [cols, rows] = [82 + round * 3, 20 + (round % 6) * 2];
+      const mine = new Screen({ cols, rows }, 22000);
+      const window = sessions.attach(name, cols, rows);
+      window.onData((data) => mine.write(String(data)));
+      const shown = async (): Promise<string> => {
+        await new Promise<void>((done) => mine.settled(done));
+        return mine.capture(0);
+      };
+      expect(await until(async () => (await shown()).includes(`${cols}x${rows}`)), `${cols}x${rows}: ${await shown()}`).toBe(true);
+      expect(await shown()).toContain('TUI');
+      window.kill();
+      await sleep(30);
+    }
+  }, 60_000);
+
   it('two windows see the same, and hear its end', async () => {
     const ends: number[] = [];
     const seen = ['', ''];

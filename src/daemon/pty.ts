@@ -34,15 +34,27 @@ export function loadPty(): PtyModule {
 const WINDOWS_11 = 22000;
 export const windowsBuild = WINDOWS ? Number(release().split('.')[2]) || undefined : undefined;
 
+/** Whether the console that comes with node-pty was the one to open. */
+let ownConsole = false;
+
+/**
+ * The build of Windows whose console draws here, for what reads it as it draws: the one of node-pty works as that of
+ * Windows 11, also on a Windows before it. After openPty.
+ */
+export const consoleBuild = (build = windowsBuild, own = ownConsole): number | undefined => (build === undefined ? undefined : own ? Math.max(build, WINDOWS_11) : build);
+
 /** A program in a pseudo-terminal; on Windows its paths as Windows has them, and the console that draws best there. */
 export function openPty(pty: PtyModule, file: string, args: string[], options: Record<string, unknown> & { cwd: string }): Pty {
   if (!WINDOWS) return pty.spawn(file, args, options);
   const own = windowsBuild !== undefined && windowsBuild < WINDOWS_11;
   const there = { ...options, cwd: backslashes(options.cwd) };
   try {
-    return pty.spawn(backslashes(file), args, { ...there, useConptyDll: own });
+    const opened = pty.spawn(backslashes(file), args, { ...there, useConptyDll: own });
+    ownConsole = own;
+    return opened;
   } catch (error) {
     if (!own) throw error;
+    ownConsole = false;
     return pty.spawn(backslashes(file), args, there);
   }
 }

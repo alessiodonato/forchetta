@@ -1,10 +1,11 @@
 import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Socket } from 'node:net';
 import { StringDecoder } from 'node:string_decoder';
-import { loadPty, openPty, type Pty, windowsBuild } from '../daemon/pty.ts';
+import { consoleBuild, loadPty, openPty, type Pty } from '../daemon/pty.ts';
 import { acceptPipe } from '../shared/pipe.ts';
 import { clampSize, FOCUS_REPORT, type HostMessage, type HostRecord, type HostRequest, type HostSpec, TERMINAL_REPLY } from './protocol.ts';
 import { Screen } from './screen.ts';
+import { Viewers } from './viewers.ts';
 
 // The host of one session, on Windows, where there is no tmux: a process of its own, started apart from everything, that
 // holds the pseudo-terminal claude runs in. The windows and the daemon come and go on its pipe; the session goes on until
@@ -29,14 +30,13 @@ function main(): void {
     }
     process.exit(1);
   };
-  const screen = new Screen(spec, windowsBuild);
   let child: Pty;
   try {
     child = open(spec);
   } catch (error) {
     return fail(error);
   }
-  const viewers = new Set<Socket>();
+  const screen = new Screen(spec, consoleBuild());
   let typedAt = 0;
   const send = (socket: Socket, message: HostMessage): void => {
     if (socket.destroyed) return;
@@ -44,10 +44,12 @@ function main(): void {
     if (socket.writableLength > MAX_BEHIND) socket.destroy();
   };
 
+  const viewers = new Viewers<Socket>(screen, (socket, data) => send(socket, { type: 'data', data }));
+
   child.onData((chunk) => {
     const data = String(chunk);
     screen.write(data);
-    for (const viewer of viewers) send(viewer, { type: 'data', data });
+    viewers.drawn(data);
   });
   screen.onReply((data) => child.write(data));
   child.onExit(({ exitCode }) => {
@@ -68,10 +70,7 @@ function main(): void {
     switch (request.op) {
       case 'attach':
         resize(clampSize(request.cols, request.rows));
-        screen.settled(() => {
-          send(socket, { type: 'data', data: screen.snapshot() });
-          viewers.add(socket);
-        });
+        viewers.add(socket);
         return;
       case 'resize':
         resize(clampSize(request.cols, request.rows));
