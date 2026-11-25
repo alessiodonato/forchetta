@@ -274,7 +274,21 @@ jobs:
           & $forchetta daemon stop
           $path = (Get-Item HKCU:\Environment).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
           if (($path -split ';' | Where-Object { $_ -eq (Join-Path $userHome '.local\bin') }).Count -gt 1) { throw "twice in the PATH: $path" }
-          if (-not (Get-ChildItem -Recurse -Filter Forchetta.lnk (Join-Path $userHome 'AppData'), (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'))) { throw 'no shortcut' }
+          $link = Get-ChildItem -Recurse -Filter Forchetta.lnk (Join-Path $userHome 'AppData'), (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu') | Select-Object -First 1
+          if (-not $link) { throw 'no shortcut' }
+          # The shortcut has the fork, and Windows reads it at each size.
+          $icon = (New-Object -ComObject WScript.Shell).CreateShortcut($link.FullName).IconLocation
+          if ([Environment]::ExpandEnvironmentVariables($icon) -ne "$(Join-Path $userHome '.local\lib\forchetta\dist\ui\forchetta.ico'),0") { throw "the icon of the shortcut: $icon" }
+          $icon = [Environment]::ExpandEnvironmentVariables($icon) -replace ',0$', ''
+          Add-Type -AssemblyName System.Drawing
+          foreach ($size in 16, 20, 24, 32, 40, 48, 64) {
+            $read = New-Object System.Drawing.Icon -ArgumentList $icon, $size, $size
+            if ($read.Width -ne $size) { throw "the icon at ${size}: $($read.Width)" }
+            # The middle of the neck of the fork, which is amber.
+            $pixel = $read.ToBitmap().GetPixel($size / 2, $size / 2)
+            if ($pixel.A -ne 255 -or $pixel.R -lt 200 -or $pixel.B -gt 120) { throw "the icon at ${size}: $pixel" }
+            $read.Dispose()
+          }
 
       # As winget and the version managers keep it: an update takes that folder away, and the hooks would stop.
       - name: The hooks run on no Node.js that an update takes away

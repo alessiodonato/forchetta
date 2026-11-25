@@ -190,6 +190,9 @@
       $shortcut.Arguments = 'open'
       $shortcut.WorkingDirectory = $UserHome
       $shortcut.Description = 'The window of Forchetta'
+      # At the link, not in the folder of a version: an update takes that away. A version before the icon has none.
+      $icon = Join-Path $Link 'dist\ui\forchetta.ico'
+      if (Test-Path -LiteralPath $icon) { $shortcut.IconLocation = "$icon,0" }
       # Minimized: the window of Forchetta is the one of Edge or Chrome.
       $shortcut.WindowStyle = 7
       $shortcut.Save()
