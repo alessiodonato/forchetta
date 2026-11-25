@@ -75,7 +75,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.12.8. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. From 0.12.8 a new version is one click, in the window, or `forchetta update`. To come to it: `brew upgrade forchetta && forchetta setup`.
+Version 0.12.9. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. From 0.12.8 a new version is one click, in the window, or `forchetta update`. To come to it: `brew upgrade forchetta && forchetta setup`.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
