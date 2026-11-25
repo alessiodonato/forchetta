@@ -104,7 +104,7 @@ function installerPlan(latest: string): Plan {
   const own = join(dirname(ROOT), 'forchetta-node', ...(WINDOWS ? ['node.exe'] : ['bin', 'node']));
   return {
     steps: async () => {
-      const release = await latestRelease(undefined, current());
+      const release = await latestRelease();
       if (!release || release.version !== latest) throw new UserError(`the installer of ${latest} is not there`);
       const bytes = await readBytes(release.installer);
       if (!isIntact(bytes, release.sha256)) throw new UserError('the installer is not the one of the release: nothing was installed');
