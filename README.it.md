@@ -77,7 +77,7 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.12.7. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dopo `brew upgrade forchetta`, riesegui `forchetta setup`.
+Versione 0.12.8. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Per aggiornare: `brew upgrade forchetta && forchetta setup`, poi chiudi l'app e riaprila.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
@@ -91,7 +91,7 @@ Serve qualcuno che la provi: i suoi test girano su Windows con il vero Claude Co
 irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.ps1 | iex
 ```
 
-Mostra gli hook che aggiunge e chiede conferma: rispondi `y`. Poi `forchetta open`, oppure Forchetta nel menu Start. Servono Windows 10 1809 o successivo e [Claude Code per Windows](https://code.claude.com/docs/en/setup); Node.js arriva da solo, se non c'è.
+Mostra gli hook che aggiunge e chiede conferma: rispondi `y`. Poi `forchetta open`, oppure Forchetta nel menu Start. Per aggiornare, rilancialo. Servono Windows 10 1809 o successivo e [Claude Code per Windows](https://code.claude.com/docs/en/setup); Node.js arriva da solo, se non c'è.
 
 Su Linux, con `curl`, `tmux` e `lsof` installati, e dentro WSL se lavori lì:
 

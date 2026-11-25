@@ -197,7 +197,9 @@
   </table></div>
 
   <h2 id="update">Update</h2>
-  <p>Run step 2 of this page again: it names the last version. The sessions at work go on.</p>
+  <p>The command of the install again, in PowerShell and not as administrator. There is nothing to uninstall:</p>
+  <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
+  <p>It shows what changes in the hooks: answer <code>y</code>. It starts Forchetta again on the new version; then open the window with <code>forchetta open</code>. The sessions at work go on. Forchetta does not look for new versions by itself: this page always has the command of the last one, and the <a href="../changelog/">changelog</a> says what it brings.</p>
 
   <h2 id="safe">What keeps it safe</h2>
   <ul>
