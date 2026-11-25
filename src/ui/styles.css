@@ -1134,17 +1134,38 @@ html[data-hidden] *::after {
 .pane-head {
   display: flex;
   flex: none;
-  align-items: baseline;
-  gap: 10px;
-  padding: 9px 10px 7px 14px;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 8px 5px 12px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
 
+/* All but ⋯ and ✕, which stay whatever is in it: what does not fit folds (fold.ts). */
+.pane-head-main {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px;
+}
+
 .pane-project {
+  flex: none;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* The last step: the name gives way too. */
+.pane-head[data-fold='3'] .pane-project,
+.pane-head-plain .pane-project {
+  flex: 0 1 auto;
+  min-width: 32px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pane-state {
@@ -1170,7 +1191,7 @@ html[data-hidden] *::after {
 
 .pane-activity {
   flex: 1;
-  min-width: 0;
+  min-width: 64px;
   overflow: hidden;
   font: 11px var(--mono);
   white-space: nowrap;
@@ -5379,4 +5400,84 @@ body.reordering * {
 
 .update-hooks p {
   margin: 0;
+}
+
+/* ——— The header of a pane, when there is no room ——— */
+
+.pane-head[data-fold='3'] .pane-activity,
+.pane-head-plain .pane-activity {
+  min-width: 0;
+}
+
+.pane-head[data-fold='3'] .pane-state,
+.pane-head .command-bar {
+  flex: none;
+}
+
+.pane-files .glyph {
+  width: 11px;
+  height: 11px;
+  margin-right: 3px;
+  vertical-align: -1px;
+}
+
+.pane-more {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex: none;
+  padding: 1px 8px 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.pane-more[hidden] {
+  display: none;
+}
+
+.pane-more:hover,
+.pane-more[aria-expanded='true'] {
+  border-color: var(--line-strong);
+  background: var(--line);
+  color: var(--text);
+}
+
+/* A subagent is at work, and its button is in the menu. */
+.pane-more-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-2);
+}
+
+.new-menu-list.pane-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 230px;
+  max-width: min(340px, calc(100vw - 16px));
+  max-height: min(420px, 70vh);
+  overflow-y: auto;
+}
+
+/* The question of /btw and the confirmation of /clear: a line of their own under the header. */
+.pane-ask {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.pane-ask .command-bar.confirm {
+  flex-wrap: wrap;
+}
+
+.pane-ask .confirm-text {
+  flex: 1 1 220px;
 }

@@ -3,6 +3,7 @@ import { type Agent, displayName, type FileChange, type SessionEdit } from '../s
 import { agoShort } from '../shared/present.ts';
 import { useReturnFocus } from './focus.ts';
 import type { Store } from './store.ts';
+import { ToolIcon } from './icons.tsx';
 
 // The changes of a session: the files it wrote, and for each two views. "Di questa sessione": what the session
 // itself changed, change by change, as Claude Code reported it. "Dall'ultimo commit": what git says changed, others'
@@ -10,20 +11,23 @@ import type { Store } from './store.ts';
 // and red: in Forchetta they mean a state.
 
 /** "3 file" in the box and in the header of a pane: opens the panel. */
-export function FilesButton({ agent, store, className }: { agent: Agent; store: Store; className?: string }) {
+export function FilesButton({ agent, store, className, short = false }: { agent: Agent; store: Store; className?: string; short?: boolean }) {
   const count = agent.filesChanged ?? 0;
   if (count === 0) return null;
   return (
     <button
       type="button"
       class={className ?? 'files-button'}
-      title="The files this session changed, with the diff since the last commit"
+      title={`${count} ${count === 1 ? 'file' : 'files'} this session changed, with the diff since the last commit`}
+      aria-label={short ? `${count} ${count === 1 ? 'file' : 'files'}` : undefined}
       onClick={(event) => {
         event.stopPropagation();
         store.showFiles(agent.id);
       }}
     >
-      {count} {count === 1 ? 'file' : 'files'}
+      {short && <ToolIcon family="edit" />}
+      {count}
+      {short ? '' : count === 1 ? ' file' : ' files'}
     </button>
   );
 }

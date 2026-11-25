@@ -83,7 +83,7 @@ export function SubagentRows({ agent, now, store }: { agent: Agent; now: number;
  * "2 subagents" in the box and in the header of a pane: opens their panel. While one of them works, the button
  * pulses as a box at work does, a little quicker (ambient.ts carries the pulse on after its first cycles).
  */
-export function SubagentsButton({ agent, store, className }: { agent: Agent; store: Store; className?: string }) {
+export function SubagentsButton({ agent, store, className, short = false }: { agent: Agent; store: Store; className?: string; short?: boolean }) {
   const ref = useRef<HTMLButtonElement>(null);
   const working = agent.subagents?.some((subagent) => subagent.state === 'running') ?? false;
   const since = useMotionAnchor(ref, working ? 'working' : 'still');
@@ -97,6 +97,7 @@ export function SubagentsButton({ agent, store, className }: { agent: Agent; sto
       class={className ?? 'files-button'}
       data-working={working ? '' : undefined}
       data-since={working ? since : undefined}
+      aria-label={short ? `${count} ${count === 1 ? 'subagent' : 'subagents'}` : undefined}
       title={running > 0 ? `${running} at work or waiting: what the subagents of this session do` : 'What the subagents of this session did'}
       onClick={(event) => {
         event.stopPropagation();
@@ -104,7 +105,9 @@ export function SubagentsButton({ agent, store, className }: { agent: Agent; sto
       }}
     >
       {working && <span class="subagents-pulse" aria-hidden="true" />}
-      {count} {count === 1 ? 'subagent' : 'subagents'}
+      {short && <ToolIcon family="agent" />}
+      {count}
+      {short ? '' : count === 1 ? ' subagent' : ' subagents'}
     </button>
   );
 }

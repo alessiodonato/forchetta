@@ -4,6 +4,7 @@ import type { Agent } from '../shared/agent.ts';
 import { type ArtifactLink, openableUrl } from '../shared/artifacts.ts';
 import { agoShort } from '../shared/present.ts';
 import { shell } from './connection.ts';
+import { ToolIcon } from './icons.tsx';
 
 // The artifacts of claude.ai a session published or opened (shared/artifacts.ts), in its box and in the header of
 // its pane: one opens with a click, several in a short list. They open in the default browser, where you are
@@ -31,7 +32,7 @@ export function menuPlace(button: { top: number; bottom: number; left: number; r
   return { ...vertical, ...horizontal };
 }
 
-export function ArtifactsButton({ agent, className }: { agent: Agent; className?: string }) {
+export function ArtifactsButton({ agent, className, short = false }: { agent: Agent; className?: string; short?: boolean }) {
   const [place, setPlace] = useState<ReturnType<typeof menuPlace>>();
   const [copied, setCopied] = useState<string>();
   const button = useRef<HTMLButtonElement>(null);
@@ -72,6 +73,7 @@ export function ArtifactsButton({ agent, className }: { agent: Agent; className?
         type="button"
         class={className ?? 'files-button'}
         title={only ? `Open "${artifactName(only)}" in the browser` : 'The artifacts of claude.ai this session published or opened'}
+        aria-label={short ? artifactsLabel(list.length) : undefined}
         aria-expanded={only ? undefined : open}
         onClick={(event) => {
           event.stopPropagation();
@@ -80,7 +82,14 @@ export function ArtifactsButton({ agent, className }: { agent: Agent; className?
           else if (button.current) setPlace(menuPlace(button.current.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight }));
         }}
       >
-        {artifactsLabel(list.length)}
+        {short ? (
+          <>
+            <ToolIcon family="web" />
+            {list.length}
+          </>
+        ) : (
+          artifactsLabel(list.length)
+        )}
       </button>
       {open && !only && createPortal(
         <div class="artifacts-menu" ref={menu} role="menu" style={place} onClick={(event) => event.stopPropagation()}>
