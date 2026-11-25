@@ -7,6 +7,7 @@ import { useMotionAnchor } from './anchor.ts';
 import { heldBackText } from './Guard.tsx';
 import { PermissionButtons } from './Permission.tsx';
 import { runningSubagentsTag } from './Subagents.tsx';
+import { moveAndKeep, moveKey, useReorder } from './reorder.ts';
 import { canOpen, type Store } from './store.ts';
 import { ColorDot } from './Team.tsx';
 
@@ -54,7 +55,12 @@ function CompactBoxView({ agent, now, open, onOpen, store, unseen, limits }: Pro
       title={title}
       onClick={() => onOpen(agent.id)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
+        // In a team the order is the one of its chart.
+        const by = event.target === event.currentTarget && !agent.team?.crew ? moveKey(event) : undefined;
+        if (by) {
+          event.preventDefault();
+          moveAndKeep(store, agent.id, by, event.currentTarget);
+        } else if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           onOpen(agent.id);
         }
@@ -221,10 +227,11 @@ function TeamGroup({
   const usage = used && (used.usd > 0 || tokens > 0) ? [used.usd > 0 ? `${used.usd >= 0.01 ? '≈ ' : ''}${usdText(used.usd)}` : '', tokens > 0 ? `${shortTokens(tokens)} tok` : ''].filter(Boolean).join(' · ') : '';
   const status = waiting > 0 ? `${waiting} ${waiting === 1 ? 'waits' : 'wait'} for you` : working > 0 ? `${working} working` : failed ? 'one stopped with an error' : 'all idle';
   return (
-    <div class="rail-team" data-state={state} data-expanded={expanded ? '' : undefined} data-open={agents.some((agent) => open.includes(agent.id)) ? '' : undefined}>
+    <div class="rail-team" data-id={`team-${crew.id}`} data-state={state} data-expanded={expanded ? '' : undefined} data-open={agents.some((agent) => open.includes(agent.id)) ? '' : undefined}>
       <button
         type="button"
         class="rail-team-head"
+        data-drag-handle=""
         aria-expanded={expanded}
         title={expanded ? `Hide the sessions of ${crew.name}` : `Show the ${agents.length} sessions of ${crew.name}`}
         onClick={onToggle}
@@ -291,6 +298,15 @@ export function Rail({
       return next;
     });
   };
+  // Dragged into another order: a session, or a team with all its sessions.
+  const column = useRef<HTMLElement>(null);
+  const items = railItems(agents, store.state.crews);
+  const idsOf = (id: string | undefined): string[] => items.filter((item) => id !== undefined && (item.kind === 'team' ? `team-${item.crew.id}` : item.agent.id) === id).flatMap((item) => (item.kind === 'team' ? item.agents.map((agent) => agent.id) : [item.agent.id]));
+  useReorder(column, store.state.order !== undefined && !hidden && items.length > 1, true, (id, before) => {
+    // Before a team: before the first of its sessions in the order of the boxes.
+    const first = new Set(idsOf(before));
+    store.moveBoxes(idsOf(id), agents.find((agent) => first.has(agent.id))?.id);
+  });
   if (hidden) {
     return (
       <nav class="rail hidden" aria-label="Sessions">
@@ -304,11 +320,11 @@ export function Rail({
     );
   }
   return (
-    <nav class="rail" aria-label="Sessions">
+    <nav class="rail" aria-label="Sessions" ref={column}>
       <button type="button" class="rail-toggle" title="Hide the column of sessions: the panes take its room" aria-expanded="true" onClick={onToggle}>
         ‹
       </button>
-      {railItems(agents, store.state.crews).map((item) =>
+      {items.map((item) =>
         item.kind === 'team' ? (
           <TeamGroup
             key={`team-${item.crew.id}`}

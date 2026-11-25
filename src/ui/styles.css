@@ -5240,3 +5240,126 @@ header.top .view-switch button:not(.on):hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ——— The order of the boxes ——— */
+
+/* The one in your hand, and the line where it goes: before or after the one it is at. */
+body.reordering,
+body.reordering * {
+  cursor: grabbing !important;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-dragged] {
+  opacity: 0.45;
+}
+
+.grid > [data-drop='before'] {
+  box-shadow: -9px 0 0 -6px var(--claude);
+}
+
+.grid > [data-drop='after'] {
+  box-shadow: 9px 0 0 -6px var(--claude);
+}
+
+.rail > [data-drop='before'] {
+  box-shadow: 0 -5px 0 -3px var(--claude);
+}
+
+.rail > [data-drop='after'] {
+  box-shadow: 0 5px 0 -3px var(--claude);
+}
+
+/* ——— Your messages in a terminal ——— */
+
+/* Over what xterm.js draws, and deaf to the mouse: a band so light that the text under it keeps its color, and a bar. */
+.terminal {
+  position: relative;
+}
+
+.message-marks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.message-marks i {
+  position: absolute;
+  right: 0;
+  left: 0;
+  background: rgba(var(--tint), 0.055);
+}
+
+.message-marks i::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -7px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--text-2);
+  content: '';
+}
+
+/* ——— The scheduled tasks of the Claude app ——— */
+
+.scheduled-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scheduled-task {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scheduled-task + .scheduled-task {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.scheduled-name {
+  color: var(--text);
+}
+
+.scheduled-about,
+.scheduled-task .setup-detail {
+  margin: 0;
+}
+
+.scheduled-about {
+  color: var(--text-2);
+}
+
+.scheduled-text {
+  overflow: auto;
+  max-height: 220px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  font: 12px/1.5 var(--mono);
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+
+/* ——— A plain terminal ——— */
+
+.chip-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scheduled-task .grow {
+  flex: 1;
+}

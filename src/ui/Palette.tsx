@@ -123,6 +123,7 @@ export const SHORTCUTS: { group: string; keys: string; what: string }[] = [
   { group: 'Anywhere', keys: '⌘,', what: 'Settings' },
   { group: 'Anywhere', keys: '⌘/', what: 'These shortcuts' },
   { group: 'Sessions', keys: '⌘1 … ⌘9', what: 'Open the first nine sessions, in the order of the boxes' },
+  { group: 'Sessions', keys: '⌥ and an arrow', what: 'On a box: move it one place earlier or later' },
   { group: 'Sessions', keys: '⌘]', what: 'The next session that waits for you' },
   { group: 'Sessions', keys: '⌘W', what: 'Close the pane in front (with none, hide the window)' },
   { group: 'Sessions', keys: 'Tab, then Enter', what: 'Open a box from the keyboard' },

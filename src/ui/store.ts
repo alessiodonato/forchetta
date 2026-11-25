@@ -3,6 +3,7 @@ import { resultAt } from '../shared/present.ts';
 import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { AutomationView } from '../shared/automation.ts';
+import { moveBefore, type Place, placesFor, sortAgents } from '../shared/order.ts';
 import type { LostSession } from '../shared/reopen.ts';
 import type { RestartsInfo } from '../shared/restarts.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset, Talk } from '../shared/crew.ts';
@@ -11,6 +12,8 @@ import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { QuickPrompt } from '../shared/prompts.ts';
 import { cleanSelection } from '../shared/selection.ts';
 import { setCustomSkills, type SkillInfo } from '../shared/skills.ts';
+import type { ScheduledTask } from '../shared/scheduled.ts';
+import { isShellId, type ShellInfo, type ShellKind } from '../shared/shells.ts';
 import type { EditableSettings, SystemInfo } from '../shared/system.ts';
 import { teamFileName, teamFileOf } from '../shared/team-file.ts';
 import { shell } from './connection.ts';
@@ -103,6 +106,18 @@ export interface UiState {
   describe?: { busy: boolean; ok?: boolean; error?: string; template?: CrewTemplate; usd?: number; note?: string; at: number };
   /** The last request sent from the panel of a team: its number once it is in the queues, or why not. */
   crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
+  /** The order of the boxes as you dragged them; undefined with a daemon that keeps none (the demo, an older one). */
+  order?: readonly Place[];
+  /** The scheduled tasks of the Claude desktop app; undefined with a daemon that does not read them. */
+  scheduled?: readonly ScheduledTask[];
+  /** The plain terminals of this window; what can run in one, undefined with a daemon that has none (the demo, an older one). */
+  shells: ReadonlyMap<string, ShellInfo>;
+  shellKinds?: readonly ShellKind[];
+  shellError?: string;
+  /** The one you wanted to close, with what runs in it: the pane asks. */
+  shellBusy?: { id: string; running: string };
+  /** A sentence for VoiceOver (Announcer.tsx): where a box went. */
+  said?: { text: string; at: number };
   /** The installation, from the daemon: checks, optional features, settings (shared/system.ts). */
   system?: SystemInfo;
   /** Saving the settings from their panel: under way, or how it went (and what waits for a restart). */
@@ -171,7 +186,7 @@ const BUSY_KEYS = ['recall', 'selectionSend', 'promptsSave', 'spawn', 'crewSpawn
 export const NOT_SENT = 'not sent: the daemon of Forchetta is not connected (the page reconnects by itself; try again in a moment)';
 
 export class Store {
-  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], automations: [], templates: [], roles: [], customSkills: [], prompts: [] };
+  state: UiState = { agents: new Map(), connected: false, ready: false, visible: true, panes: emptyPanes(), shells: new Map(), settings: { replace: 'lru', arricurdaiNotes: false }, crews: [], automations: [], templates: [], roles: [], customSkills: [], prompts: [] };
   /** Sends a message to the daemon (set by the connection). */
   /** Sends a message to the daemon (connection.ts); false when it could not go. */
   send: (message: ClientMessage) => boolean = () => false;
@@ -270,6 +285,27 @@ export class Store {
     }
     if (message.type === 'reopenList') {
       this.set({ reopen: message.sessions });
+      return;
+    }
+    if (message.type === 'scheduled') {
+      this.set({ scheduled: message.tasks });
+      return;
+    }
+    if (message.type === 'shellOpened') {
+      if (message.ok && message.shell) this.showShell(message.shell);
+      else this.set({ shellError: message.error ?? 'the terminal did not open' });
+      return;
+    }
+    if (message.type === 'shellClosed') {
+      this.shellGone(message.id);
+      return;
+    }
+    if (message.type === 'shellBusy') {
+      this.set({ shellBusy: { id: message.id, running: message.running } });
+      return;
+    }
+    if (message.type === 'order') {
+      this.set({ order: message.order });
       return;
     }
     if (message.type === 'restarts') {
@@ -391,6 +427,7 @@ export class Store {
     }
     const agents = new Map(this.state.agents);
     const extra: Partial<UiState> = {};
+    let comeBack: readonly ShellInfo[] = [];
     switch (message.type) {
       case 'hello':
         // A new connection: the reads asked on the old one get no answer.
@@ -409,6 +446,11 @@ export class Store {
         extra.automations = message.automations ?? [];
         extra.reopen = message.reopen;
         extra.restarts = message.restarts;
+        extra.order = message.order;
+        extra.scheduled = message.scheduled;
+        extra.shellKinds = message.shells?.kinds;
+        // Opened by this window before it reloaded: their panes open again.
+        comeBack = message.shells?.waiting ?? [];
         extra.templates = message.templates ?? [];
         extra.roles = message.roles ?? [];
         setCustomSkills(message.skills ?? []);
@@ -425,9 +467,10 @@ export class Store {
         break;
     }
     // A pane whose agent went away closes; one whose session ended stays, showing its last screen.
-    extra.panes = prunePanes(this.state.panes, (id) => agents.has(id));
+    extra.panes = prunePanes(this.state.panes, (id) => agents.has(id) || this.state.shells.has(id));
     this.noteSeen(agents, message.type === 'hello', extra.panes.open);
     this.set({ ...extra, agents, ready: true });
+    for (const shell of comeBack) if (!this.state.shells.has(shell.id)) this.showShell(shell);
     if (this.pendingOpen.some((id) => agents.has(id))) {
       const waiting = this.pendingOpen;
       this.pendingOpen = [];
@@ -527,18 +570,55 @@ export class Store {
     this.set({ panes: openPane(this.state.panes, id, Date.now(), this.state.settings.replace) });
   }
 
-  /** The answer to "which pane do I replace?". */
+  /** A plain terminal in the folder of a session: the daemon opens it, and its pane comes. */
+  openShell(agentId: string, kind?: string): void {
+    this.set({ shellError: undefined });
+    this.send({ type: 'openShell', agentId, ...(kind ? { kind } : {}) });
+  }
+
+  private showShell(shell: ShellInfo): void {
+    this.set({ shells: new Map(this.state.shells).set(shell.id, shell), panes: openPane(this.state.panes, shell.id, Date.now(), this.state.settings.replace), shellError: undefined });
+  }
+
+  /** Closes a plain terminal; when something runs in it the daemon says so, and its pane asks. */
+  closeShell(id: string, force = false): void {
+    // Not connected: what it was is gone, or cannot be told.
+    if (!this.send({ type: 'closeShell', id, ...(force ? { force } : {}) })) this.shellGone(id);
+  }
+
+  dismissShellError(): void {
+    this.set({ shellError: undefined });
+  }
+
+  keepShell(): void {
+    this.set({ shellBusy: undefined });
+  }
+
+  /** A plain terminal ended: its pane goes. */
+  shellGone(id: string): void {
+    const shells = new Map(this.state.shells);
+    shells.delete(id);
+    const panes = closePane(this.state.panes, id);
+    this.set({ shells, panes: panes.asking === id ? cancelAsking(panes) : panes, ...(this.state.shellBusy?.id === id ? { shellBusy: undefined } : {}) });
+  }
+
+  /** The answer to "which pane do I replace?". A plain terminal ends with its pane. */
   replace(victim: string): void {
     const asking = this.state.panes.asking;
     if (!asking) return;
+    if (isShellId(victim)) this.send({ type: 'closeShell', id: victim, force: true });
     this.set({ panes: replacePane(cancelAsking(this.state.panes), victim, asking, Date.now()) });
   }
 
   cancelAsking(): void {
+    // A plain terminal with no pane to open in does not stay behind.
+    const { asking } = this.state.panes;
+    if (asking && isShellId(asking)) return this.closeShell(asking, true);
     this.set({ panes: cancelAsking(this.state.panes) });
   }
 
   close(id: string): void {
+    if (isShellId(id)) return this.closeShell(id);
     this.set({ panes: closePane(this.state.panes, id), ...(this.state.selection?.agentId === id ? { selection: undefined, selectionSend: undefined } : {}) });
   }
 
@@ -578,6 +658,16 @@ export class Store {
   spawn(cwd: string, prompt: string, choices: { model?: string; mode?: string; worktree?: string | boolean } = {}): void {
     this.set({ spawn: { busy: true } });
     this.send({ type: 'spawn', cwd, prompt, ...choices });
+  }
+
+  /** The instructions of a scheduled task as a new session: it opens as one started from its panel. */
+  runScheduled(id: string, cwd: string): void {
+    this.set({ spawn: { busy: true } });
+    this.send({ type: 'runScheduled', id, cwd });
+  }
+
+  refreshScheduled(): void {
+    this.send({ type: 'scheduled' });
   }
 
   endSpawn(): void {
@@ -835,9 +925,35 @@ export class Store {
     this.send({ type: 'system' });
   }
 
+  /** The sessions in the order of the boxes. */
+  sorted(): Agent[] {
+    return sortAgents(this.state.agents.values(), this.state.order);
+  }
+
+  /** Boxes dragged before another one, or to the end: at once here, and kept by the daemon. */
+  moveBoxes(ids: readonly string[], before: string | undefined): void {
+    if (!this.state.order) return;
+    const current = this.sorted();
+    const was = current.map((agent) => agent.id);
+    const next = moveBefore(was, ids, before);
+    if (next.every((id, index) => id === was[index])) return;
+    this.set({ order: placesFor(next, current, this.state.order) });
+    this.send({ type: 'order', ids: next });
+  }
+
+  /** A box one place earlier or later, from the keyboard. */
+  moveBox(id: string, by: -1 | 1): void {
+    const ids = this.sorted().map((agent) => agent.id);
+    const at = ids.indexOf(id);
+    const to = at + by;
+    if (!this.state.order || at < 0 || to < 0 || to >= ids.length) return;
+    this.moveBoxes([id], by < 0 ? ids[to] : ids[to + 1]);
+    this.set({ said: { text: `Moved to place ${to + 1} of ${ids.length}`, at: Date.now() } });
+  }
+
   /** The next session that waits for you, after the one shown last (in the order of the boxes); undefined if none. */
   nextWaiting(): string | undefined {
-    const waiting = [...this.state.agents.values()].filter((agent) => agent.state === 'waiting').sort((a, b) => a.createdAt - b.createdAt);
+    const waiting = this.sorted().filter((agent) => agent.state === 'waiting');
     if (waiting.length === 0) return undefined;
     const current = waiting.findIndex((agent) => agent.id === this.state.panes.active);
     return waiting[(current + 1) % waiting.length]!.id;

@@ -6,6 +6,8 @@
 // or click in it: that only counts for choosing which pane a fifth session replaces. Typing in a small pane must
 // not make the layout jump, and using a pane must never move the keyboard to another one.
 
+import { isShellId } from '../shared/shells.ts';
+
 export const MAX_PANES = 4;
 
 export type ReplacePolicy = 'lru' | 'chiedi';
@@ -25,9 +27,9 @@ export interface PaneState {
 
 export const emptyPanes = (): PaneState => ({ open: [], used: {} });
 
-/** The open pane used longest ago. */
+/** The open pane used longest ago; not a plain terminal, which would end with its pane. */
 export function leastRecentlyUsed(state: PaneState): string | undefined {
-  return [...state.open].sort((a, b) => (state.used[a] ?? 0) - (state.used[b] ?? 0))[0];
+  return [...state.open].filter((id) => !isShellId(id)).sort((a, b) => (state.used[a] ?? 0) - (state.used[b] ?? 0))[0];
 }
 
 function mostRecentlyUsed(open: readonly string[], used: Record<string, number>): string | undefined {
@@ -47,8 +49,9 @@ export function openPane(state: PaneState, id: string, now: number, policy: Repl
   if (state.open.includes(id)) return { ...state, active: id, activatedAt: now, used: { ...state.used, [id]: now }, asking: undefined };
   if (state.open.length < MAX_PANES) return { open: [...state.open, id], active: id, activatedAt: now, used: { ...state.used, [id]: now } };
   if (policy === 'chiedi') return { ...state, asking: id };
+  // Four plain terminals: you say which one goes.
   const victim = leastRecentlyUsed(state);
-  return victim ? replacePane(state, victim, id, now) : state;
+  return victim ? replacePane(state, victim, id, now) : { ...state, asking: id };
 }
 
 /** Typing or clicking in a pane: it becomes the most recently used, without moving. */

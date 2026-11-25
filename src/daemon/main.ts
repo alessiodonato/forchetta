@@ -57,6 +57,10 @@ import { anySubagentActive, applySubagentHook, checkSubagents, readSubagentThrea
 import { sameTokens, subagentKey, sumTokens } from '../shared/present.ts';
 import { PANE_MODES_FORMAT, paneModes, scrolledBack } from './scrollback.ts';
 import { type Agent, markEnded, startsTurn } from './state.ts';
+import { Order } from './order.ts';
+import { loadPty } from './pty.ts';
+import { Scheduled } from './scheduled.ts';
+import { Shells, userShell } from './shells.ts';
 import { Reopener } from './reopen.ts';
 import { Restarter } from './restarts.ts';
 import { endedAtShutdown, endedByRestart } from '../shared/reopen.ts';
@@ -306,6 +310,8 @@ function main(): void {
     if (rules !== spec.rules) log(`team in ${spec.cwd}: with the rules of ${REPO_RULES}`);
     return { ...spec, ...(rules ? { rules } : {}) };
   };
+  // The scheduled tasks of the Claude desktop app: their list, their runs, starting one.
+  let scheduled: Scheduled | undefined;
   const notes = new ArricurdaiNotes(arricurdai);
   let notesSupported = false;
   void notes.supported().then((supported) => {
@@ -321,6 +327,7 @@ function main(): void {
       commander?.agentChanged(agent);
       permissions?.agentChanged(agent);
       attention.agentChanged(agent);
+      scheduled?.agentChanged(agent);
       if (agent.state === 'ended' && agent.conflicts) updateConflicts();
       if (agent.state === 'ended') guard?.ended(agent);
       if (agent.state === 'ended' && !endedInLedger.has(agent.id)) {
@@ -337,6 +344,7 @@ function main(): void {
       hub?.agentsRemoved(ids);
       summarizer?.forget(ids);
       attention.forget(ids);
+      scheduled?.forget(ids);
       for (const id of ids) conflicts.forget(id);
       for (const id of ids) tokensCountedAt.delete(id);
       for (const id of ids) {
@@ -561,6 +569,20 @@ function main(): void {
   const selections = new SelectionReader(tmux);
   const quickPrompts = new QuickPrompts(paths.prompts, log);
 
+  const tasks = new Scheduled({
+    folder: join(claudeConfigDir(), 'scheduled-tasks'),
+    file: paths.scheduled,
+    log,
+    agent: (agentId) => registry.agents.get(agentId),
+    spawn: (input, extras) => spawnSession({ tmux, registry, claude, log, teamMcp }, input, extras),
+    onChange: () => hub?.scheduledChanged(),
+  });
+  scheduled = tasks;
+  // The order of the boxes, as you dragged them.
+  const order = new Order(paths.order, log);
+  // The plain terminals, in the folders of the sessions.
+  const shells = new Shells({ pty: loadPty, programs: userShell, log });
+
   hub = new Hub({
     token,
     port: () => config.port,
@@ -644,6 +666,16 @@ function main(): void {
     reopenList: () => reopener.list(),
     onReopen: (agentIds) => reopener.reopen(agentIds),
     onDismissReopen: (agentIds) => reopener.dismiss(agentIds),
+    scheduled: () => tasks.list(),
+    onRunScheduled: (id, cwd) => tasks.run(id, cwd),
+    shells: () => ({ kinds: shells.kinds(), waiting: shells.waiting() }),
+    onOpenShell: (agentId, kind) => {
+      const agent = registry.agents.get(agentId);
+      return agent ? shells.start(agent, kind) : { ok: false, error: 'this session is gone' };
+    },
+    onCloseShell: (id, force) => shells.close(id, force),
+    order: () => order.list(),
+    onOrder: (ids) => order.set(ids, registry.list()),
     onSaveAutomation: (input, id) => {
       if (!automations) return { ok: false, error: 'the daemon is starting' };
       // The folder as a session started from the panel keeps it: ~ and the rest resolved.
@@ -848,7 +880,7 @@ function main(): void {
     // A run of an automation is over: the next one need not wait for the next tick.
     if (crew.auto) setTimeout(() => void automations?.tick(), 1000);
   };
-  const terminals = new Terminals({ token, port: () => config.port, registry, tmux, log });
+  const terminals = new Terminals({ token, port: () => config.port, registry, tmux, shells, log });
   commander = new Commander({
     registry,
     tmux,
@@ -979,7 +1011,10 @@ function main(): void {
         registry.touch(agent);
       }
       readArtifacts(agent);
-      if (startsTurn(payload) && !payload.agent_id) watchPrompt(agent, agent.lastEvent.at, payload.prompt ?? '');
+      if (startsTurn(payload) && !payload.agent_id) {
+        watchPrompt(agent, agent.lastEvent.at, payload.prompt ?? '');
+        scheduled?.prompt(agent, payload.prompt ?? '');
+      }
       if (applySubagentHook(agent, payload, Date.now())) registry.touch(agent);
       const loopBefore = agent.loop?.since;
       if (loops.hook(agent, payload, Date.now())) {

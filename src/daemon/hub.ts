@@ -4,6 +4,9 @@ import type { Duplex } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
 import type { AutomationView } from '../shared/automation.ts';
+import type { Place } from '../shared/order.ts';
+import type { ScheduledTask } from '../shared/scheduled.ts';
+import type { ShellInfo, ShellKind } from '../shared/shells.ts';
 import type { LostSession } from '../shared/reopen.ts';
 import type { RestartsInfo } from '../shared/restarts.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
@@ -20,7 +23,17 @@ import type { SystemInfo } from '../shared/system.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[]; reopen?: LostSession[]; restarts?: RestartsInfo }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[]; reopen?: LostSession[]; restarts?: RestartsInfo; order?: Place[]; shells?: { kinds: ShellKind[]; waiting: ShellInfo[] }; scheduled?: ScheduledTask[] }
+  /** The scheduled tasks of the Claude desktop app, read again or after a run moved. */
+  | { type: 'scheduled'; now: number; tasks: ScheduledTask[] }
+  /** A plain terminal opened, for the window that asked, or why not. */
+  | { type: 'shellOpened'; now: number; ok: boolean; shell?: ShellInfo; error?: string }
+  /** A plain terminal is closed, for the window that asked. */
+  | { type: 'shellClosed'; now: number; id: string }
+  /** A plain terminal was not closed: something runs in it. */
+  | { type: 'shellBusy'; now: number; id: string; running: string }
+  /** The order of the boxes, after you dragged one. */
+  | { type: 'order'; now: number; order: Place[] }
   /** The installation (checks, optional features, settings), when it changed. */
   | { type: 'system'; now: number; system: SystemInfo }
   /** How saving the settings went, for the window that asked; what takes effect only after a restart. */
@@ -132,6 +145,14 @@ export type ClientMessage =
   /** These sessions restart on the Claude Code installed; or the others go on, after one that stopped them. */
   | { type: 'restart'; agentIds: string[] }
   | { type: 'restartsGoOn'; goOn: boolean }
+  /** The scheduled tasks, read again; the instructions of one as a new session, in a folder (answered with spawned). */
+  | { type: 'scheduled' }
+  | { type: 'runScheduled'; id: string; cwd: string }
+  /** A plain terminal in the folder of a session; closing one (force: whatever runs in it). */
+  | { type: 'openShell'; agentId: string; kind?: string }
+  | { type: 'closeShell'; id: string; force?: boolean }
+  /** The boxes in the order you dragged them into: the ids of the sessions. */
+  | { type: 'order'; ids: string[] }
   /** A team that starts by itself, new or changed (id), as the panel writes it (shared/automation.ts checks it). */
   | { type: 'saveAutomation'; id?: string; automation: unknown }
   | { type: 'deleteAutomation'; id: string }
@@ -259,6 +280,16 @@ export interface HubOptions {
   restarts?: () => RestartsInfo;
   onRestart?: (agentIds: string[]) => void;
   onRestartsGoOn?: (goOn: boolean) => void;
+  /** The scheduled tasks of the Claude desktop app (daemon/scheduled.ts), and starting one. */
+  scheduled?: () => ScheduledTask[];
+  onRunScheduled?: (id: string, cwd: string) => Promise<{ ok: true; agentId: string } | { ok: false; error: string }>;
+  /** The plain terminals (daemon/shells.ts): what can run in one, those whose page went away, opening and closing one. */
+  shells?: () => { kinds: ShellKind[]; waiting: ShellInfo[] };
+  onOpenShell?: (agentId: string, kind: string | undefined) => { ok: true; shell: ShellInfo } | { ok: false; error: string };
+  onCloseShell?: (id: string, force: boolean) => Promise<{ ok: boolean; running?: string }>;
+  /** The order of the boxes (daemon/order.ts), and a new one. */
+  order?: () => Place[];
+  onOrder?: (ids: string[]) => void;
   /** Called when the number of windows that can be seen goes from 0 to more, or back. */
   onWatched?: (watched: boolean) => void;
   log: (message: string, level?: 'info' | 'warn' | 'error') => void;
@@ -319,6 +350,9 @@ export class Hub {
       automations: this.options.automations?.(),
       reopen: this.options.reopenList?.(),
       restarts: this.options.restarts?.(),
+      order: this.options.order?.(),
+      shells: this.options.shells?.(),
+      scheduled: this.options.scheduled?.(),
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -533,6 +567,27 @@ export class Hub {
           if (result.ok) this.broadcast({ type: 'prompts', now: Date.now(), prompts: this.options.prompts?.() ?? [] });
         } else if (message.type === 'restart' && Array.isArray(message.agentIds)) {
           this.options.onRestart?.(message.agentIds.filter((id): id is string => typeof id === 'string').slice(0, 200));
+        } else if (message.type === 'scheduled' && this.options.scheduled) {
+          this.send(ws, { type: 'scheduled', now: Date.now(), tasks: this.options.scheduled() });
+        } else if (message.type === 'runScheduled' && typeof message.id === 'string' && typeof message.cwd === 'string' && this.options.onRunScheduled) {
+          void this.options.onRunScheduled(message.id, message.cwd.slice(0, 4096)).then(
+            (result) => this.send(ws, { type: 'spawned', now: Date.now(), ...result }),
+            (error: unknown) => this.send(ws, { type: 'spawned', now: Date.now(), ok: false, error: String(error) }),
+          );
+        } else if (message.type === 'openShell' && typeof message.agentId === 'string' && this.options.onOpenShell) {
+          this.send(ws, { type: 'shellOpened', now: Date.now(), ...this.options.onOpenShell(message.agentId, typeof message.kind === 'string' ? message.kind : undefined) });
+        } else if (message.type === 'closeShell' && typeof message.id === 'string' && this.options.onCloseShell) {
+          const id = message.id;
+          void this.options.onCloseShell(id, message.force === true).then(
+            (result) => {
+              if (result.ok) this.send(ws, { type: 'shellClosed', now: Date.now(), id });
+              else if (result.running) this.send(ws, { type: 'shellBusy', now: Date.now(), id, running: result.running });
+            },
+            (error: unknown) => this.options.log(`terminal ${id}: ${String(error)}`, 'warn'),
+          );
+        } else if (message.type === 'order' && Array.isArray(message.ids) && this.options.onOrder) {
+          this.options.onOrder(message.ids.filter((id): id is string => typeof id === 'string').slice(0, 1000));
+          this.broadcast({ type: 'order', now: Date.now(), order: this.options.order?.() ?? [] });
         } else if (message.type === 'restartsGoOn') {
           this.options.onRestartsGoOn?.(message.goOn !== false);
         } else if (message.type === 'claudeUpdate' && (message.action === 'run' || message.action === 'dismiss')) {
@@ -617,6 +672,7 @@ export class Hub {
 
   private crewsPending = false;
   private automationsPending = false;
+  private scheduledPending = false;
 
   /** The sessions to reopen changed: the page gets them again. */
   reopenChanged(): void {
@@ -669,6 +725,16 @@ export class Hub {
     if (JSON.stringify(stats) === JSON.stringify(this.guardStats)) return;
     this.guardStats = stats;
     this.broadcast({ type: 'guardStats', now: Date.now(), stats });
+  }
+
+  /** A run of a scheduled task moved: every window gets them again, once for changes close together. */
+  scheduledChanged(): void {
+    if (this.scheduledPending) return;
+    this.scheduledPending = true;
+    setImmediate(() => {
+      this.scheduledPending = false;
+      this.broadcast({ type: 'scheduled', now: Date.now(), tasks: this.options.scheduled?.() ?? [] });
+    });
   }
 
   setRestarts(restarts: RestartsInfo): void {

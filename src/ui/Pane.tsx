@@ -7,6 +7,7 @@ import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
 import { SubagentsButton } from './Subagents.tsx';
 import { SelectionMenu } from './SelectionMenu.tsx';
+import { ShellButton } from './ShellButton.tsx';
 import { ColorDot } from './Team.tsx';
 import type { Store } from './store.ts';
 import { terminalTheme } from './terminal-theme.ts';
@@ -56,6 +57,7 @@ export function Pane({ agent, area, focusKey, now, store, onClose, onUse }: Prop
         <SubagentsButton agent={agent} store={store} className="pane-files" />
         <FilesButton agent={agent} store={store} className="pane-files" />
         <ArtifactsButton agent={agent} className="pane-files" />
+        <ShellButton agent={agent} store={store} className="pane-files" />
         {!ended && <CommandBar agent={agent} store={store} />}
         <button class="pane-close" type="button" title="Close the pane: the session goes on" onClick={() => onClose(agent.id)}>
           ✕

@@ -5,7 +5,7 @@ import { announcements } from './announce.ts';
 // A live region, out of sight: VoiceOver reads what is written in it, politely (after what it is reading now).
 // It says when a session starts waiting for you (announce.ts), once.
 
-export function Announcer({ agents }: { agents: readonly Agent[] }) {
+export function Announcer({ agents, said: note }: { agents: readonly Agent[]; said?: { text: string; at: number } }) {
   const waiting = useRef<Map<string, string> | undefined>(undefined);
   const pending = useRef<string[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -24,6 +24,12 @@ export function Announcer({ agents }: { agents: readonly Agent[] }) {
       pending.current = [];
     }, 50);
   }, [agents]);
+  useEffect(() => {
+    if (!note) return;
+    setText('');
+    const later = setTimeout(() => setText(note.text), 50);
+    return () => clearTimeout(later);
+  }, [note?.at]);
   return (
     <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
       {text}

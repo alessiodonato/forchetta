@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { EditableSettings, OptionalFeature, SetupCheck, SystemInfo } from '../shared/system.ts';
 import { openLink } from './Artifacts.tsx';
 import { useReturnFocus } from './focus.ts';
-import { FONT_MAX, FONT_MIN, onTerminalFontSize, setTerminalFontSize, terminalFontSize } from './prefs.ts';
+import { FONT_MAX, FONT_MIN, messageMarks, onTerminalFontSize, setMessageMarks, setTerminalFontSize, terminalFontSize } from './prefs.ts';
 import type { Store } from './store.ts';
 import { applyTheme, currentTheme, type Theme } from './theme.ts';
 
@@ -126,6 +126,7 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
   }, [system]);
   const [theme, setTheme] = useState<Theme>(currentTheme);
   const [font, setFont] = useState(terminalFontSize);
+  const [marked, setMarked] = useState(messageMarks);
   useEffect(() => onTerminalFontSize(setFont), []);
   const saving = store.state.settingsSave;
   const opened = useRef(Date.now());
@@ -255,6 +256,16 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
           <span>Text of the terminals</span>
           <input id="setting-font" type="range" min={FONT_MIN} max={FONT_MAX} value={font} onInput={(event) => setTerminalFontSize(Number((event.target as HTMLInputElement).value))} />
           <span>{font} px</span>
+        </label>
+        <label class="setting-check">
+          <input type="checkbox" checked={marked} onChange={(event) => {
+            const on = (event.target as HTMLInputElement).checked;
+            setMarked(on);
+            setMessageMarks(on);
+          }} />
+          <span>
+            Mark my messages in the terminals <span class="setup-detail">— a bar on their left, to tell them from the answers of Claude</span>
+          </span>
         </label>
         <p class="setup-detail">The whole page: View → Zoom In / Zoom Out in the app (⌘+ ⌘− ⌘0).</p>
       </div>

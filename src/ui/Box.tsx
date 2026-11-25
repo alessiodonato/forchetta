@@ -32,11 +32,13 @@ import { CommandBar, CommandStatus, currentCommand } from './Commands.tsx';
 import { ReopenButton } from './Reopen.tsx';
 import { OldVersionTag } from './Restarts.tsx';
 import { animateEnter, animateShake } from './motion.ts';
+import { moveAndKeep, moveKey } from './reorder.ts';
 import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
 import { SubagentRows, SubagentsButton } from './Subagents.tsx';
 import { PermissionOutcomeLine, PermissionPrompt, visibleOutcome } from './Permission.tsx';
 import { GuardLines } from './Guard.tsx';
+import { ShellButton } from './ShellButton.tsx';
 import { ColorDot, roleText, TeamEditor } from './Team.tsx';
 import { canOpen, type Store } from './store.ts';
 
@@ -259,7 +261,14 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
       aria-label={boxLabel(agent, line.text, openable)}
       onClick={() => onOpen(agent.id)}
       onKeyDown={(event) => {
-        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+        if (event.target !== event.currentTarget) return;
+        const by = moveKey(event);
+        if (by) {
+          event.preventDefault();
+          moveAndKeep(store, agent.id, by, event.currentTarget);
+          return;
+        }
+        if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         onOpen(agent.id);
       }}
@@ -356,6 +365,7 @@ function BoxView({ agent, now, entering, onEntered, onOpen, store, crewLine, uns
           {!commanding && shownSubagents(agent, now).length === 0 && <SubagentsButton agent={agent} store={store} />}
           {!commanding && <FilesButton agent={agent} store={store} />}
           {!commanding && <ArtifactsButton agent={agent} />}
+          {!commanding && <ShellButton agent={agent} store={store} />}
           <CommandBar agent={agent} store={store} onModeChange={setCommanding} />
         </div>
       )}

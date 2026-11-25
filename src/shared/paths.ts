@@ -71,6 +71,8 @@ export interface Paths {
   automations: string;
   /** The sessions that ended with the Mac, to reopen (daemon/reopen.ts). */
   reopen: string;
+  order: string;
+  scheduled: string;
   /** What the guard did, counted by day (daemon/guard-stats.ts). */
   guardStats: string;
   /** The MCP server of the tools of a team (mcp/team.ts). */
@@ -112,6 +114,8 @@ export function pathsFor(varDir: string, root = ROOT): Paths {
     crewRoles: join(varDir, 'crew-roles.json'),
     automations: join(varDir, 'automations.json'),
     reopen: join(varDir, 'reopen.json'),
+    order: join(varDir, 'order.json'),
+    scheduled: join(varDir, 'scheduled.json'),
     guardStats: join(varDir, 'guard-stats.json'),
     patches: join(varDir, 'patches'),
     claudeUpdate: join(varDir, 'claude-update.json'),
