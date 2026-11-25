@@ -159,6 +159,7 @@
       <ul>
         <li>It downloads Forchetta and checks it. Without Node.js 22 it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
         <li>It lists the hooks it adds to <code>.claude\settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
+        <li>It adds <code>.local\bin</code>, in your user folder, to your <code>PATH</code>: for your user only, where the installer of Claude Code puts its own command.</li>
       </ul>
       <p class="done">Done when it says <code>Ready. Open Forchetta with: forchetta open</code>.</p>
     </li>
@@ -204,6 +205,7 @@
     <li><strong>The hooks and the sessions talk to it on pipes of Windows</strong> with a name made at random and a key. Each end proves to the other that it has the key before anything passes: a program that takes the place of Forchetta gets nothing, and neither does one that calls it.</li>
     <li><strong>The window has a profile of its own</strong> in Edge or Chrome, without your extensions, which could read your terminals. If it can't have one, <code>forchetta open</code> tells you.</li>
     <li><strong>Its data is in your user folder</strong>, which other users of the PC can't open. No telemetry.</li>
+    <li><strong>The sessions it starts</strong>, with <strong>+ new</strong> or <code>forchetta run</code>, get one more MCP server, <code>forchetta</code>, with the tools of the templates of teams. It is given to them when they start, not written in your settings.</li>
     <li><strong>No program of mine to trust.</strong> What runs is Node.js, with the code of Forchetta, which you can read. GitHub builds it from the source and signs which commit it comes from; the installer takes that archive and no other.</li>
   </ul>
   <p>What it can't protect you from: a program that runs as you can read your files, those of Forchetta too. And the guard reads the commands of Bash and of PowerShell, not what a script does by itself.</p>
@@ -234,6 +236,7 @@ forchetta daemon stop
 cmd /c rmdir "$HOME\.local\lib\forchetta"
 Remove-Item -Recurse -Force "$HOME\.local\lib\forchetta-versions", "$HOME\.local\lib\forchetta-node", "$HOME\.local\share\forchetta" -ErrorAction SilentlyContinue
 Remove-Item "$HOME\.local\bin\forchetta*", "$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk" -ErrorAction SilentlyContinue</code></pre><button type="button" data-copy="forchetta hooks uninstall --yes&#10;forchetta daemon stop&#10;cmd /c rmdir &quot;$HOME\.local\lib\forchetta&quot;&#10;Remove-Item -Recurse -Force &quot;$HOME\.local\lib\forchetta-versions&quot;, &quot;$HOME\.local\lib\forchetta-node&quot;, &quot;$HOME\.local\share\forchetta&quot; -ErrorAction SilentlyContinue&#10;Remove-Item &quot;$HOME\.local\bin\forchetta*&quot;, &quot;$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk&quot; -ErrorAction SilentlyContinue" aria-label="Copy the command">Copy</button></div>
+  <p><code>.local\bin</code> stays in your <code>PATH</code>: Claude Code has its command there too.</p>
 </article>
 </main>
 
