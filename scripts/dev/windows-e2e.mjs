@@ -74,6 +74,10 @@ console.log(`# ${claude}: ${spawnSync(claude, ['--version'], { encoding: 'utf8' 
 writeFileSync(join(home, 'mine.js'), 'let t="";process.stdin.on("data",c=>t+=c).on("end",()=>console.log("my line "+JSON.parse(t).session_id.slice(0,4)))');
 mkdirSync(join(home, '.claude'), { recursive: true });
 writeFileSync(join(home, '.claude', 'settings.json'), JSON.stringify({ statusLine: { type: 'command', command: `node "${slashes(join(home, 'mine.js'))}"` } }));
+const settingsFile = join(home, '.claude', 'settings.json');
+const mine = readFileSync(settingsFile, 'utf8');
+const unasked = forchetta('setup', '--no-restart');
+check('setup with nobody to ask changes nothing, and its exit code says so', unasked.status === 2 && readFileSync(settingsFile, 'utf8') === mine && !/Ready/.test(unasked.stdout), `${unasked.status}: ${unasked.stdout}${unasked.stderr}`);
 const setup = forchetta('setup', '--yes', '--no-restart');
 check('setup', setup.status === 0, setup.status === 0 ? '' : setup.stdout + setup.stderr);
 console.log(setup.stdout.split('\n').slice(0, 9).map((line) => `     ${line}`).join('\n'));
@@ -81,6 +85,17 @@ const settings = JSON.parse(readFileSync(join(home, '.claude', 'settings.json'),
 check('the hooks start a program, with no shell', settings.hooks.PreToolUse?.some((group) => group.hooks[0]?.args?.[1] === 'guard' && group.matcher?.includes('PowerShell')), JSON.stringify(settings.hooks.PreToolUse?.at(-1)));
 check('the status line', Boolean(settings.statusLine?.command), settings.statusLine?.command);
 check('setup again changes nothing', /already in/.test(forchetta('setup', '--yes', '--no-restart').stdout));
+check('its help has no app to build', !/--app-dir|--force|~\/Applications/.test(forchetta('setup', '--help').stdout));
+// An update of Node.js took its folder away: the hooks are on nothing, and so is what the setup saved.
+const gone = 'C:/gone/node-v24.20.0-win-x64/node.exe';
+const configFile = join(varDir, 'config.json');
+const config = JSON.parse(readFileSync(configFile, 'utf8'));
+const running = settings.hooks.PreToolUse[0].hooks[0].command;
+writeFileSync(configFile, JSON.stringify({ ...config, paths: { ...config.paths, node: gone } }));
+const onHooks = (node) => ({ ...settings, hooks: Object.fromEntries(Object.entries(settings.hooks).map(([event, groups]) => [event, groups.map((group) => ({ ...group, hooks: group.hooks.map((hook) => ({ ...hook, command: node })) }))])) });
+writeFileSync(settingsFile, JSON.stringify(onHooks(gone)));
+check('doctor says that their Node.js is gone', /not there any more/.test(forchetta('doctor').stdout));
+check('setup again puts the hooks on the one that runs', forchetta('setup', '--yes', '--no-restart').status === 0 && JSON.stringify(JSON.parse(readFileSync(settingsFile, 'utf8')).hooks) === JSON.stringify(onHooks(running).hooks), JSON.stringify(JSON.parse(readFileSync(settingsFile, 'utf8')).hooks.PreToolUse));
 check('daemon start', forchetta('daemon', 'start').status === 0);
 const info = JSON.parse(readFileSync(join(varDir, 'daemon.json'), 'utf8'));
 check('the pipe of the hooks', Boolean(await until(() => existsSync(join(varDir, 'hooks-pipe.json')), 5000)));
@@ -159,6 +174,17 @@ term.type('typed in the page');
 check('what you type in it reaches Claude', Boolean(await until(() => shows(term, 'typed in the page'), 8000)), JSON.stringify(term.text.slice(-300)));
 term.type('\x15');
 await sleep(800);
+// Shift+Enter, as the page sends it (src/ui/layout.ts): one line more in the prompt, and nothing leaves.
+term.type('the first line');
+await until(() => shows(term, 'the first line'), 8000);
+term.type('\x1b\r');
+await sleep(1000);
+term.type('the second line');
+check('Shift+Enter is a new line', Boolean(await until(() => shows(term, 'the second line'), 8000)) && !api.prompts.some((text) => text.includes('the first line')), JSON.stringify(api.prompts.slice(-1)));
+await sleep(800);
+term.type('\r');
+check('and Enter sends the two lines together', Boolean(await until(() => api.prompts.some((text) => /the first line\r?\n\s*the second line/.test(text)), 15_000)), JSON.stringify(api.prompts.slice(-2)));
+await until(() => state(a) === 'idle');
 const permFile = join(project, 'asked.txt');
 send({ type: 'ask', agentId: a, text: `WRITE "${slashes(permFile)}"` });
 // You typed in it: the daemon waits ten seconds before it types.

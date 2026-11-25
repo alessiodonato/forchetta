@@ -128,9 +128,13 @@ jobs:
       - name: Build the CLI, the daemon and the page
         run: pnpm build
 
-      # No hook is written: without --yes, and with no terminal, the setup only checks and shows.
+      # No hook is written: without --yes, and with no terminal, the setup only checks and shows, and says so (exit code 2).
       - name: The setup finds everything
-        run: bin/forchetta setup --no-restart
+        run: |
+          status=0
+          bin/forchetta setup --no-restart || status=$?
+          test "$status" -eq 2
+          if grep -qs forchetta "$HOME/.claude/settings.json"; then echo "hooks were written"; exit 1; fi
 
       - name: The page opens with a code, good once, only at its own address
         run: |

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { closest, code, commandHelp, mainHelp, suggestCommand } from '../src/cli/help.ts';
 import { paintChange } from '../src/cli/hooks.ts';
+import { PLATFORM } from '../src/shared/platform.ts';
 import { colorLevel, makeStyle, paintDiff, pairs, plain, tildify, visibleLength } from '../src/cli/style.ts';
 
 // How the CLI looks: colors only where they can be seen, the help, and the command you probably meant.
@@ -60,7 +61,8 @@ describe('help', () => {
   });
 
   it('has a page for each command, and none for the rest', () => {
-    expect(commandHelp('setup', plain)).toContain('--app-dir <folder>');
+    // There is an app to build only on a Mac.
+    for (const option of ['--app-dir <folder>', '--force']) expect(commandHelp('setup', plain)!.includes(option)).toBe(PLATFORM === 'macos');
     expect(commandHelp('daemon', plain)).toContain('status');
     expect(commandHelp('nope', plain)).toBeUndefined();
   });

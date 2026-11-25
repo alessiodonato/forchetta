@@ -9,7 +9,7 @@ import { ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
 import { PLATFORM } from '../shared/platform.ts';
 import { VERSION } from '../shared/version.ts';
 import { code } from './help.ts';
-import { hooksCommand } from './hooks.ts';
+import { hooksCommand, NOT_APPLIED } from './hooks.ts';
 import type { RunIO } from './run.ts';
 import { checkLinux, type SetupStep } from './setup-linux.ts';
 import { checkWindows } from './setup-windows.ts';
@@ -152,8 +152,10 @@ export async function setupCommand(options: SetupOptions, io: RunIO): Promise<nu
     step('Data', s.dim(tildify(paths.varDir)));
     io.stdout('\n');
     const installed = await hooksCommand('install', { yes: options.yes, diff: options.diff }, io);
-    if (installed !== 0) return installed;
+    if (installed !== 0 && installed !== NOT_APPLIED) return installed;
     if (options.restart !== false) await restartOldDaemon(io);
+    // Not ready: the hooks are not all there.
+    if (installed !== 0) return installed;
     io.stdout(
       `\n${s.mark('✓', 'green', s.bold('Ready.'))} Open Forchetta${PLATFORM === 'wsl' ? ' in a window of Windows' : PLATFORM === 'windows' ? '' : ' in your browser'} with:\n\n    ${s.claude('forchetta open')}\n\n` +
         `${code('Sessions started with `forchetta run claude`, or from the page, also open in its terminals.', s)}\n`,
@@ -188,9 +190,11 @@ export async function setupCommand(options: SetupOptions, io: RunIO): Promise<nu
   io.stdout('\n');
 
   const status = await hooksCommand('install', { yes: options.yes, diff: options.diff }, io);
-  if (status !== 0) return status;
+  if (status !== 0 && status !== NOT_APPLIED) return status;
   // After an upgrade the daemon that runs is the old one: it starts again on this version (the sessions go on).
   if (options.restart !== false) await restartOldDaemon(io);
+  // Not ready: the hooks are not all there.
+  if (status !== 0) return status;
   io.stdout(
     `\n${s.mark('✓', 'green', s.bold('Ready.'))} Open the app with:\n\n    ${s.claude(`open ${JSON.stringify(app)}`)}\n\n` +
       `${code('Sessions started with `forchetta run claude`, or from the app, also open in its terminals.', s)}\n`,

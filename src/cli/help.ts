@@ -40,13 +40,14 @@ const COMMANDS: Record<string, CommandHelp> = {
             'shows what it changes and asks first (d shows the whole diff). Run it again after every upgrade.',
           ],
     options: [
-      { name: '--yes', text: 'Install the hooks without asking' },
-      { name: '--force', text: 'Build the app again, even when it is up to date' },
+      { name: '--yes', text: 'Install the hooks without asking (a script needs it: with no terminal it changes nothing, exit code 2)' },
+      // Only a Mac has an app to build. Elsewhere the two options do nothing.
+      ...(PLATFORM === 'macos' ? [{ name: '--force', text: 'Build the app again, even when it is up to date' }] : []),
       { name: '--diff', text: 'Show the whole diff of ~/.claude/settings.json before asking' },
-      { name: '--app-dir', args: '<folder>', text: 'Where the app goes (default: ~/Applications)' },
+      ...(PLATFORM === 'macos' ? [{ name: '--app-dir', args: '<folder>', text: 'Where the app goes (default: ~/Applications)' }] : []),
       { name: '--no-restart', text: 'Leave a daemon of another version running (by default it starts again on this one)' },
     ],
-    examples: ['forchetta setup', 'forchetta setup --yes --app-dir /Applications'],
+    examples: ['forchetta setup', PLATFORM === 'macos' ? 'forchetta setup --yes --app-dir /Applications' : 'forchetta setup --yes'],
   },
   open: {
     summary: PLATFORM === 'macos' ? 'Open the app' : PLATFORM === 'windows' ? 'Open the window of Forchetta' : 'Open Forchetta in a browser',
@@ -198,7 +199,7 @@ const COMMANDS: Record<string, CommandHelp> = {
       { name: 'uninstall', text: 'Remove them, and give you back the status line you had' },
     ],
     options: [
-      { name: '--yes', text: 'Apply the changes without asking' },
+      { name: '--yes', text: 'Apply the changes without asking (a script needs it: with no terminal it changes nothing, exit code 2)' },
       { name: '--diff', text: 'Show the whole diff before asking' },
     ],
   },

@@ -33,6 +33,9 @@ export interface HooksOptions {
   diff: boolean;
 }
 
+/** The exit code when there was something to change and nobody to ask: a script must not take it for done. An error is 1. */
+export const NOT_APPLIED = 2;
+
 /** On Windows the diff is that of git, when there is one: without it the list of the changes has to do. */
 function gitDiff(a: string, b: string, label: string): string {
   const git = windowsGit();
@@ -182,7 +185,9 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
   if (options.diff) showDiff();
 
   if (!options.yes && !(await confirm(io, options.diff ? undefined : showDiff))) {
-    if (process.stdin.isTTY) io.stdout(`${s.mark('○', 'gray', 'No change.')}\n`);
+    // A no is an answer; nobody to ask is not.
+    if (!process.stdin.isTTY) return NOT_APPLIED;
+    io.stdout(`${s.mark('○', 'gray', 'No change.')}\n`);
     return 0;
   }
   const now = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
