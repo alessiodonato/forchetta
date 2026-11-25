@@ -4,6 +4,7 @@ import { subagentActive, subagentKey } from '../shared/present.ts';
 import type { ClientMessage, ServerMessage, UiSettings } from '../daemon/hub.ts';
 import type { AutomationView } from '../shared/automation.ts';
 import type { LostSession } from '../shared/reopen.ts';
+import type { RestartsInfo } from '../shared/restarts.ts';
 import type { CrewMemberSpec, CrewRequest, CrewSpec, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset, Talk } from '../shared/crew.ts';
 import type { ReplayData } from '../shared/replay.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
@@ -63,6 +64,8 @@ export interface UiState {
   reopen?: readonly LostSession[];
   /** Reopening sessions: under way, then which reopened and why the others did not. */
   reopening?: { busy: boolean; agentIds: string[]; reopened?: { agentId: string; newAgentId: string; name: string }[]; failed?: { agentId: string; name: string; error: string }[]; at: number };
+  /** The restarts of the sessions on an older Claude Code; undefined with a daemon that cannot (the demo, an older one). */
+  restarts?: RestartsInfo;
   /** The last change of an automation asked from its panel, and how it went. */
   autoEdit?: { action: string; busy: boolean; ok?: boolean; error?: string; id?: string; added?: number; at: number };
   /** A team being started from its panel; when it started, its id; what did not start, if anything. */
@@ -269,6 +272,10 @@ export class Store {
       this.set({ reopen: message.sessions });
       return;
     }
+    if (message.type === 'restarts') {
+      this.set({ restarts: message.restarts });
+      return;
+    }
     if (message.type === 'reopened') {
       this.set({ reopening: { busy: false, agentIds: this.state.reopening?.agentIds ?? [], reopened: message.reopened, failed: message.failed, at: Date.now() } });
       return;
@@ -401,6 +408,7 @@ export class Store {
         extra.crews = message.crews ?? [];
         extra.automations = message.automations ?? [];
         extra.reopen = message.reopen;
+        extra.restarts = message.restarts;
         extra.templates = message.templates ?? [];
         extra.roles = message.roles ?? [];
         setCustomSkills(message.skills ?? []);
@@ -626,6 +634,16 @@ export class Store {
     if (agentIds.length === 0 || this.state.reopening?.busy) return;
     this.set({ reopening: { busy: true, agentIds: [...agentIds], at: Date.now() } });
     this.send({ type: 'reopen', agentIds: [...agentIds] });
+  }
+
+  /** These sessions restart on the Claude Code installed, one after the other, those that can. */
+  restart(agentIds: readonly string[]): void {
+    if (agentIds.length > 0) this.send({ type: 'restart', agentIds: [...agentIds] });
+  }
+
+  /** After a restart that stopped the others: they go on, or are left as they are. */
+  restartsGoOn(goOn: boolean): void {
+    this.send({ type: 'restartsGoOn', goOn });
   }
 
   /** Not now: the sessions ended with the Mac (all, or these) are offered no more. */

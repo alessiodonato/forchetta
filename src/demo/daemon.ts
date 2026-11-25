@@ -178,7 +178,7 @@ export class DemoDaemon {
           { id: 'haiku', on: false, label: 'One-line summaries by Haiku', why: 'off: the line of each box comes from its events' },
         ],
         claude: { tested: TESTED_CLAUDE, installed: TESTED_CLAUDE },
-        settings: { guard: { files: true, git: true, notes: true, servers: true }, stallMin: 10, endedRetentionMin: 10, replace: 'lru', hotkey: 'ctrl+alt+f', port: 47821, haiku: false },
+        settings: { guard: { files: true, git: true, notes: true, servers: true }, stallMin: 10, endedRetentionMin: 10, autoRestart: false, replace: 'lru', hotkey: 'ctrl+alt+f', port: 47821, haiku: false },
         varDir: '~/Library/Application Support/Forchetta',
         logFile: '~/Library/Application Support/Forchetta/daemon.log',
       }),

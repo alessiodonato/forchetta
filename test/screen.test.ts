@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { readPromptBox, screenShows } from '../src/daemon/screen.ts';
+import { readPromptBox, restartAnswer, restartOffer, restartWorked, screenShows } from '../src/daemon/screen.ts';
 
 // Screens of Claude Code 2.1.322 captured with `tmux capture-pane -p -e` during the tests of Phase 4.
 const screen = (name: string): string => readFileSync(join(import.meta.dirname, 'fixtures', 'screens', `${name}.txt`), 'utf8');
@@ -46,5 +46,36 @@ describe('the input box of Claude Code', () => {
     const rule = '─'.repeat(60);
     const question = ['❯ la richiesta di prima', rule, ' ☐ Colore', 'Preferisci il rosso o il blu?', '❯ 1. Rosso', '  2. Blu', rule, '  4. Chat about this'].join('\n');
     expect(readPromptBox(question).found).toBe(false);
+  });
+});
+
+describe('/restart on screen', () => {
+  it('is offered by the menu under the box, on a newer version, in a wide pane and in a narrow one', () => {
+    expect(readPromptBox(screen('restart-menu'))).toEqual({ found: true, typed: '/restart' });
+    expect(restartOffer(screen('restart-menu'))).toBe('newer');
+    expect(restartOffer(screen('restart-menu-60'))).toBe('newer');
+  });
+
+  const RULE = '─'.repeat(40);
+  const menu = (...lines: string[]): string => ['⏺ ok', RULE, '❯ /restart', RULE, ...lines].join('\n');
+  it('is not taken for what it is not: another command first, one of yours, the version it already has, no menu', () => {
+    expect(restartOffer(menu('  ❯ /deep-research     [dynamic workflow] Deep research', '    /restart     Restart on 2.1.331 and keep this session'))).toBeUndefined();
+    expect(restartOffer(menu('  ❯ /restart     Restart the dev server'))).toBeUndefined();
+    expect(restartOffer(menu('  ❯ /restart     Restart Claude Code and keep this session'))).toBe('same');
+    expect(restartOffer(menu('  footer'))).toBeUndefined();
+    // The same words above the box are of the conversation.
+    expect(restartOffer(['  ❯ /restart     Restart on 2.1.331 and keep this session', RULE, '❯ /restart', RULE, '  footer'].join('\n'))).toBeUndefined();
+    expect(restartOffer('')).toBeUndefined();
+  });
+
+  it('is answered under it, also on more lines: the last answer counts', () => {
+    const refused = ['❯ /restart', "  ⎿  Can't restart while work is running in the background. Wait for it to finish or stop it in /tasks, then", '     try again.', '', RULE, '❯ ', RULE].join('\n');
+    expect(restartAnswer(refused)).toBe("Can't restart while work is running in the background. Wait for it to finish or stop it in /tasks, then try again.");
+    const worked = ['❯ /restart', "  ⎿  Can't restart", '', '❯ /restart', '  ⎿  Successfully updated from 2.1.328 to version 2.1.331', '', RULE, '❯ ', RULE].join('\n');
+    expect(restartAnswer(worked)).toBe('Successfully updated from 2.1.328 to version 2.1.331');
+    expect(restartWorked(restartAnswer(worked)!)).toBe(true);
+    expect(restartWorked('Session resumed')).toBe(true);
+    expect(restartWorked(restartAnswer(refused)!)).toBe(false);
+    expect(restartAnswer(screen('restart-menu'))).toBeUndefined();
   });
 });

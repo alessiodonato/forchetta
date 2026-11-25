@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseAgents, readClaudeAgents, withShells } from '../src/daemon/claude-agents.ts';
+import { parseAgents, readClaudeAgents, readSessionFile, withFiles } from '../src/daemon/claude-agents.ts';
 import { tempDir } from './helpers.ts';
 
 // `claude agents --json` says "busy" both for a session at work and for one at rest with a shell in the background:
@@ -19,7 +19,7 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 const file = (pid: number, content: unknown): void => writeFileSync(join(sessions, `${pid}.json`), typeof content === 'string' ? content : JSON.stringify(content));
-const statusOf = async (status: string, pid: number | undefined = 11): Promise<string | undefined> => (await withShells([{ pid, status }], sessions))[0]!.status;
+const statusOf = async (status: string, pid: number | undefined = 11): Promise<string | undefined> => (await withFiles([{ pid, status }], sessions))[0]!.status;
 
 describe('a session that only has a shell running', () => {
   it('is told from one at work', async () => {
@@ -45,7 +45,17 @@ describe('a session that only has a shell running', () => {
     file(11, { pid: 11, status: 'shell' });
     expect(await statusOf('idle')).toBe('idle');
     expect(await statusOf('waiting')).toBe('waiting');
-    expect((await withShells([{ status: 'busy', sessionId: 's' }], sessions))[0]).toEqual({ status: 'busy', sessionId: 's' });
+    expect((await withFiles([{ status: 'busy', sessionId: 's' }], sessions))[0]).toEqual({ status: 'busy', sessionId: 's' });
+  });
+
+  it('says the version of the process, and whether Remote Control is connected', async () => {
+    file(11, { pid: 11, status: 'idle', version: '2.1.328', bridgeSessionId: 'session_1' });
+    expect(await readSessionFile(11, sessions)).toEqual({ status: 'idle', version: '2.1.328', remoteControl: true });
+    expect((await withFiles([{ pid: 11, status: 'idle' }], sessions))[0]).toEqual({ pid: 11, status: 'idle', version: '2.1.328', remoteControl: true });
+    // Disconnected: an empty id, or none.
+    file(11, { pid: 11, status: 'idle', version: '2.1.331', bridgeSessionId: '' });
+    expect(await readSessionFile(11, sessions)).toEqual({ status: 'idle', version: '2.1.331', remoteControl: false });
+    expect(await readSessionFile(12, sessions)).toBeUndefined();
   });
 
   it('comes out of readClaudeAgents, with the other sessions as they are', async () => {

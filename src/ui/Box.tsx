@@ -30,6 +30,7 @@ import { Check, ToolIcon } from './icons.tsx';
 import { useMotionAnchor } from './anchor.ts';
 import { CommandBar, CommandStatus, currentCommand } from './Commands.tsx';
 import { ReopenButton } from './Reopen.tsx';
+import { OldVersionTag } from './Restarts.tsx';
 import { animateEnter, animateShake } from './motion.ts';
 import { ArtifactsButton } from './Artifacts.tsx';
 import { FilesButton } from './Files.tsx';
@@ -151,6 +152,7 @@ function Meta({ agent, now, store }: { agent: Agent; now: number; store: Store }
           guard
         </span>
       )}
+      <OldVersionTag agent={agent} store={store} now={now} />
       {/* One group, on the right: when the box is too narrow for one line, it goes whole to the next line. */}
       <span class="meta-end">
         {/* Its rows open the panel while they are in the box: the button only after. */}

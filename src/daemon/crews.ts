@@ -979,6 +979,22 @@ export class Crews {
     }
   }
 
+  /** Whether a request is open for this session, or one it passed on: its work is not over, also between turns. */
+  hasOpenWork(agentId: string): boolean {
+    for (const crew of this.crews.values()) {
+      if (crew.stoppedAt) continue;
+      const name = Object.entries(crew.agents).find(([, id]) => id === agentId)?.[0];
+      if (!name) continue;
+      for (const request of crew.requests ?? []) {
+        for (const delivery of request.deliveries) {
+          if (!OPEN.includes(delivery.status)) continue;
+          if (delivery.agentId === agentId || request.from === name) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /**
    * Whether the work a session passed on, while it worked on request n, is still going: a request of its own with n
    * as parent still open, or an answer or a question on its way to it. `own`: at its own Stop, what was pasted in

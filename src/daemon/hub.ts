@@ -5,6 +5,7 @@ import { type WebSocket, WebSocketServer } from 'ws';
 import type { Agent, ClaudeUpdateInfo, FileChange, RecallMatch, SubagentStep, TodayInfo, UsageLimits } from '../shared/agent.ts';
 import type { AutomationView } from '../shared/automation.ts';
 import type { LostSession } from '../shared/reopen.ts';
+import type { RestartsInfo } from '../shared/restarts.ts';
 import type { GuardStatsInfo } from '../shared/guard-stats.ts';
 import type { CrewRequest, CrewSummary, CrewTemplate, Delivered, ReviewRecord, RolePreset } from '../shared/crew.ts';
 import type { ReplayData } from '../shared/replay.ts';
@@ -19,7 +20,7 @@ import type { SystemInfo } from '../shared/system.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[]; reopen?: LostSession[] }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[]; reopen?: LostSession[]; restarts?: RestartsInfo }
   /** The installation (checks, optional features, settings), when it changed. */
   | { type: 'system'; now: number; system: SystemInfo }
   /** How saving the settings went, for the window that asked; what takes effect only after a restart. */
@@ -56,6 +57,8 @@ export type ServerMessage =
   | { type: 'automations'; now: number; automations: AutomationView[] }
   /** The sessions that ended with the Mac, to reopen, after any change. */
   | { type: 'reopenList'; now: number; sessions: LostSession[] }
+  /** The restarts of the sessions on an older Claude Code, after any change. */
+  | { type: 'restarts'; now: number; restarts: RestartsInfo }
   /** How reopening went, for the window that asked: the sessions that reopened, and why the others did not. */
   | { type: 'reopened'; now: number; reopened: { agentId: string; newAgentId: string; name: string }[]; failed: { agentId: string; name: string; error: string }[] }
   /** How a change of an automation went, for the window that asked. */
@@ -126,6 +129,9 @@ export type ClientMessage =
   /** Sessions that ended, each on its conversation again; or not now (all of them, or these). */
   | { type: 'reopen'; agentIds: string[] }
   | { type: 'dismissReopen'; agentIds?: string[] }
+  /** These sessions restart on the Claude Code installed; or the others go on, after one that stopped them. */
+  | { type: 'restart'; agentIds: string[] }
+  | { type: 'restartsGoOn'; goOn: boolean }
   /** A team that starts by itself, new or changed (id), as the panel writes it (shared/automation.ts checks it). */
   | { type: 'saveAutomation'; id?: string; automation: unknown }
   | { type: 'deleteAutomation'; id: string }
@@ -249,6 +255,10 @@ export interface HubOptions {
   claudeUpdate?: () => ClaudeUpdateInfo;
   /** `claude update` from the top line, or its line hidden. */
   onClaudeUpdate?: (action: 'run' | 'dismiss') => void;
+  /** The restarts of the sessions on an older Claude Code (daemon/restarts.ts). */
+  restarts?: () => RestartsInfo;
+  onRestart?: (agentIds: string[]) => void;
+  onRestartsGoOn?: (goOn: boolean) => void;
   /** Called when the number of windows that can be seen goes from 0 to more, or back. */
   onWatched?: (watched: boolean) => void;
   log: (message: string, level?: 'info' | 'warn' | 'error') => void;
@@ -308,6 +318,7 @@ export class Hub {
       system: this.options.system?.(),
       automations: this.options.automations?.(),
       reopen: this.options.reopenList?.(),
+      restarts: this.options.restarts?.(),
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -520,6 +531,10 @@ export class Hub {
           const result = this.options.onSavePrompts(message.prompts);
           this.send(ws, { type: 'promptsSaved', now: Date.now(), ...result });
           if (result.ok) this.broadcast({ type: 'prompts', now: Date.now(), prompts: this.options.prompts?.() ?? [] });
+        } else if (message.type === 'restart' && Array.isArray(message.agentIds)) {
+          this.options.onRestart?.(message.agentIds.filter((id): id is string => typeof id === 'string').slice(0, 200));
+        } else if (message.type === 'restartsGoOn') {
+          this.options.onRestartsGoOn?.(message.goOn !== false);
         } else if (message.type === 'claudeUpdate' && (message.action === 'run' || message.action === 'dismiss')) {
           this.options.onClaudeUpdate?.(message.action);
         } else if (message.type === 'scrollEnd' && typeof message.agentId === 'string') {
@@ -654,6 +669,10 @@ export class Hub {
     if (JSON.stringify(stats) === JSON.stringify(this.guardStats)) return;
     this.guardStats = stats;
     this.broadcast({ type: 'guardStats', now: Date.now(), stats });
+  }
+
+  setRestarts(restarts: RestartsInfo): void {
+    this.broadcast({ type: 'restarts', now: Date.now(), restarts });
   }
 
   setClaudeUpdate(update: ClaudeUpdateInfo): void {

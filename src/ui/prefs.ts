@@ -32,6 +32,26 @@ export function setTerminalFontSize(size: number): void {
   for (const listener of listeners) listener(next);
 }
 
+const LATER_KEY = 'forchetta.restartsLater';
+let later: string | undefined;
+try {
+  later = localStorage.getItem(LATER_KEY) ?? undefined;
+} catch {
+  // Offered again.
+}
+
+/** The version of Claude Code for which this window does not offer to restart the sessions: "not now". */
+export const restartsLater = (): string | undefined => later;
+
+export function setRestartsLater(version: string): void {
+  later = version;
+  try {
+    localStorage.setItem(LATER_KEY, version);
+  } catch {
+    // For this time only.
+  }
+}
+
 export function onTerminalFontSize(listener: (size: number) => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);

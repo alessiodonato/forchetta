@@ -181,6 +181,12 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
                 <input id="setting-ended" type="number" min={1} max={1440} value={draft.endedRetentionMin} onInput={(event) => set({ endedRetentionMin: Number((event.target as HTMLInputElement).value) })} />
                 <span>minutes</span>
               </label>
+              <label class="setting-check">
+                <input type="checkbox" checked={draft.autoRestart === true} onChange={(event) => set({ autoRestart: (event.target as HTMLInputElement).checked })} />
+                <span>
+                  Sessions restart by themselves on a new Claude Code <span class="setup-detail">— with /restart, which keeps the conversation: only at rest, one at a time, once their prompt cache is over</span>
+                </span>
+              </label>
               <div class="setting-row" role="group" aria-label="A fifth pane">
                 <span>A fifth pane</span>
                 <button type="button" class={`chip${draft.replace === 'lru' ? ' on' : ''}`} aria-pressed={draft.replace === 'lru'} onClick={() => set({ replace: 'lru' })}>

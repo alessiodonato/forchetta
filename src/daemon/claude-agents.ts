@@ -28,30 +28,54 @@ export function parseAgents(stdout: string): AgentsEntry[] {
     }));
 }
 
+const sessionsFolder = (): string => join(claudeConfigDir(), 'sessions');
+
 /**
- * Tells the sessions at work from those at rest with a shell still running in the background (a dev server, a
- * command that outlived its time). `claude agents --json` calls both "busy"; the file Claude Code keeps for each
- * process, sessions/<pid>.json, calls the second "shell" (seen with 2.1.328 and 2.1.331). The file is not
- * documented: without it, or without that word in it, "busy" stays.
+ * What the file Claude Code keeps for each process, sessions/<pid>.json, adds to `claude agents --json` (seen with
+ * 2.1.328 and 2.1.331). It is not documented: without it, or without a field, nothing changes.
  */
-export async function withShells(entries: readonly AgentsEntry[], sessionsDir: string): Promise<AgentsEntry[]> {
+export interface SessionFile {
+  status?: string;
+  /** The Claude Code the process runs. */
+  version?: string;
+  /** Remote Control is connected: the file has the id of its session on claude.ai. */
+  remoteControl: boolean;
+}
+
+export async function readSessionFile(pid: number, sessionsDir = sessionsFolder()): Promise<SessionFile | undefined> {
+  try {
+    const file: unknown = JSON.parse(await readFile(join(sessionsDir, `${pid}.json`), 'utf8'));
+    if (!file || typeof file !== 'object' || (file as { pid?: unknown }).pid !== pid) return undefined;
+    const { status, version, bridgeSessionId } = file as Record<string, unknown>;
+    return { status: text(status), version: text(version), remoteControl: text(bridgeSessionId) !== undefined };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The entries with what their files add: the version of each, Remote Control, and "shell" for a session at rest with
+ * a command still running in the background (a dev server, one that outlived its time), which `claude agents --json`
+ * calls "busy" as one at work.
+ */
+export async function withFiles(entries: readonly AgentsEntry[], sessionsDir: string): Promise<AgentsEntry[]> {
   return Promise.all(
     entries.map(async (entry) => {
-      if (entry.status !== 'busy' || entry.pid === undefined) return entry;
-      try {
-        const file: unknown = JSON.parse(await readFile(join(sessionsDir, `${entry.pid}.json`), 'utf8'));
-        const { pid, status } = (file ?? {}) as { pid?: unknown; status?: unknown };
-        return pid === entry.pid && status === 'shell' ? { ...entry, status: 'shell' } : entry;
-      } catch {
-        return entry;
-      }
+      const file = entry.pid === undefined ? undefined : await readSessionFile(entry.pid, sessionsDir);
+      if (!file) return entry;
+      return {
+        ...entry,
+        ...(entry.status === 'busy' && file.status === 'shell' ? { status: 'shell' } : {}),
+        ...(file.version ? { version: file.version } : {}),
+        remoteControl: file.remoteControl,
+      };
     }),
   );
 }
 
-/** The sessions of Claude Code now, with the ones that only have a shell running told apart. */
-export async function readClaudeAgents(claude: string, sessionsDir = join(claudeConfigDir(), 'sessions')): Promise<AgentsEntry[]> {
-  return withShells(await listClaudeAgents(claude), sessionsDir);
+/** The sessions of Claude Code now, with what their files add. */
+export async function readClaudeAgents(claude: string, sessionsDir = sessionsFolder()): Promise<AgentsEntry[]> {
+  return withFiles(await listClaudeAgents(claude), sessionsDir);
 }
 
 function listClaudeAgents(claude: string): Promise<AgentsEntry[]> {

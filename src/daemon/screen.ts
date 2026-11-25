@@ -76,6 +76,54 @@ export function keepsWorktree(capture: string): boolean {
   return keep && !remove;
 }
 
+/**
+ * What the menu under the input box offers for "/restart": its own line, the chosen one (verified with 2.1.328):
+ *
+ *   ❯ /restart                    Restart on 2.1.331 and keep this session
+ *     /deep-research              [dynamic workflow] …
+ *
+ * 'newer': a restart would bring the version installed. 'same': the session is already on it. Anything else is not
+ * the command of Claude Code (one of yours with the same name, or a version without it, where Enter would take the
+ * first line of the menu, whatever it is).
+ */
+export function restartOffer(capture: string): 'newer' | 'same' | undefined {
+  const lines = capture.split('\n').map(plain);
+  // Below the input box only: the conversation above it can hold any text.
+  const box = lines.findLastIndex((line) => RULE.test(line.trim()));
+  for (const line of box < 0 ? [] : lines.slice(box + 1)) {
+    const what = /^\s*❯\s*\/restart\s{2,}(\S.*)$/.exec(line)?.[1];
+    if (what === undefined) continue;
+    if (/^Restart on v?\d+\./.test(what)) return 'newer';
+    if (/^Restart Claude Code/.test(what)) return 'same';
+    return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * What Claude Code last answered to a /restart on this screen:
+ *
+ *   ❯ /restart
+ *     ⎿  Can't restart while work is running in the background. Wait for it to finish or stop it in /tasks, then
+ *        try again.
+ */
+export function restartAnswer(capture: string): string | undefined {
+  const lines = capture.split('\n').map(plain);
+  let answer: string | undefined;
+  lines.forEach((line, index) => {
+    if (!/^❯\s*\/restart$/.test(line)) return;
+    const first = /^\s+⎿\s+(\S.*)$/.exec(lines[index + 1] ?? '')?.[1];
+    if (first === undefined) return;
+    const rest: string[] = [];
+    for (let next = index + 2; /^\s{3,}\S/.test(lines[next] ?? ''); next++) rest.push(lines[next]!.trim());
+    answer = [first, ...rest].join(' ');
+  });
+  return answer;
+}
+
+/** The answers of Claude Code to a /restart that worked. */
+export const restartWorked = (answer: string): boolean => /^(Successfully (updated|downgraded)|Session resumed)/.test(answer);
+
 /** Whether the screen shows a line with this text (the question of /btw in its answer box, for example). */
 export function screenShows(capture: string, text: string): boolean {
   const flat = capture

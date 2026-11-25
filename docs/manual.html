@@ -243,6 +243,16 @@ forchetta setup</pre>
           <li>The box of any session that ended has <span class="ui">reopen</span> too, while it shows. The runs of <a href="#auto">automatic teams</a> are not offered: their automation pauses, and <span class="ui">again</span> starts them over.</li>
         </ul>
         <p>From a terminal: <code>forchetta reopen</code> lists them, <code>forchetta reopen --all</code> reopens every one, <code>forchetta reopen api "Studio"</code> those named (a team: all its sessions).</p>
+
+        <h3 id="restart">On a new Claude Code</h3>
+        <p>Claude Code updates itself, but a session keeps the version it started with until it restarts (<span class="ui">Update installed · Restart to update</span>). A line under the top one says how many sessions run an older one, with <span class="ui">Restart the 7 at rest</span>: one after the other they go on with the version installed, each in its box and its pane.</p>
+        <ul>
+          <li><strong>The conversation stays.</strong> Forchetta types <code>/restart</code>, the command of Claude Code for it: the model, the permission mode, the system prompt, the MCP servers, the rules and the timers stay too.</li>
+          <li><strong>Only a session at rest</strong>: not one with a command in the background, a subagent at work, a request of its team open, or a draft in its prompt. One at work is offered when it is done. Enter is pressed only when the menu shows the command of Claude Code; after that, no key at all.</li>
+          <li><strong>It counts when the version changed.</strong> What Claude Code refuses stays as it is, with the reason under <span class="ui">Choose…</span> and in a tag of its box. One that does not go as expected stops the others until you click <span class="ui">Go on</span>.</li>
+          <li>With Remote Control connected, Claude Code does not restart: once you disconnect it, the session is offered. For a session outside the tmux of Forchetta, type <code>/restart</code> in its terminal.</li>
+          <li><strong>By themselves</strong>, when you turn it on in <a href="#settings">Settings</a>: with no click, once their prompt cache is over (after an hour at rest, without arricurdAI), so a restart never makes a conversation still in cache be read again.</li>
+        </ul>
       </section>
 
       <section id="terminals">
@@ -702,7 +712,7 @@ Read them again before you write code that relies on them.</code></pre>
         <p><span class="ui">⚙</span> at the top, or <kbd>⌘,</kbd>, opens the settings. What is not in place yet comes first (the hooks, the status line, tmux, Claude Code), each with the command that fixes it and a <span class="ui">copy</span> button; the same list shows in the empty window at the first start. Then:</p>
         <ul>
           <li><strong>The guard</strong>: its four parts, as in the <a href="#config">configuration</a>. A repository can change them for itself in <code>.forchetta/guard.json</code>.</li>
-          <li><strong>Sessions</strong>: after how long a session at work seems stuck, how long a finished one stays, what a fifth pane does.</li>
+          <li><strong>Sessions</strong>: after how long a session at work seems stuck, how long a finished one stays, whether they restart by themselves <a href="#restart">on a new Claude Code</a>, what a fifth pane does.</li>
           <li><strong>The app</strong>: the shortcut that shows Forchetta from anywhere, the port, the summaries by Haiku. The port and Haiku wait for a restart of the daemon; the rest counts at once.</li>
           <li><strong>This window</strong>: the theme (dark, light, as the system) and the size of the text of the terminals.</li>
           <li><strong>Optional features</strong>: arricurdAI, the note before <code>/clear</code>, the summaries by Haiku, the daemon kept alive by macOS: on or off, and why, with how to turn them on.</li>
@@ -781,6 +791,7 @@ Read them again before you write code that relies on them.</code></pre>
           <thead><tr><th>Key</th><th>Default</th><th>What it sets</th></tr></thead>
           <tbody>
             <tr><td><code>stallMin</code></td><td><code>10</code></td><td>Minutes with no event before a working session counts as stuck.</td></tr>
+            <tr><td><code>restarts</code></td><td><code>{"auto": false}</code></td><td>Whether the sessions at rest restart by themselves <a href="#restart">on a new Claude Code</a>.</td></tr>
             <tr><td><code>panes.replace</code></td><td><code>"lru"</code></td><td>The fifth terminal replaces the one used longest ago; <code>"chiedi"</code> asks which one.</td></tr>
             <tr><td><code>hotkey</code></td><td><code>"ctrl+alt+f"</code></td><td>The shortcut that shows Forchetta: letters, digits or <code>space</code>, with at least one modifier; <code>""</code> turns it off.</td></tr>
             <tr><td><code>endedRetentionMin</code></td><td><code>10</code></td><td>How long an ended session stays in the window.</td></tr>
@@ -823,6 +834,7 @@ Read them again before you write code that relies on them.</code></pre>
             <tr><td>A team starts only its first session</td><td>Claude Code does not trust the folder yet: answer the trust dialog in that terminal, and the rest of the team starts.</td></tr>
             <tr><td>A worktree session ends at once</td><td>The folder is not in git, or not trusted by Claude Code: open it once with <code>claude</code> and accept the dialog.</td></tr>
             <tr><td><span class="ui">Claude Code auto-update failed</span> at the top</td><td>The last automatic update of Claude Code failed (hover it for when). Click <span class="ui">update</span>: it runs <code>claude update</code> and says what it did. New sessions use the new version; the open ones keep theirs until they restart.</td></tr>
+            <tr><td><span class="ui">Update installed · Restart to update</span> in a session</td><td>A newer Claude Code is installed: see <a href="#restart">On a new Claude Code</a>.</td></tr>
             <tr><td><span class="ui">Daemon unreachable</span></td><td><code>forchetta daemon status</code>, then <code>forchetta daemon start</code>. The sessions are not affected.</td></tr>
             <tr><td>The app cannot find the daemon, from a clone on the Desktop</td><td>macOS asks whether Forchetta may access that folder: allow it in System Settings → Privacy &amp; Security → Files and Folders.</td></tr>
             <tr><td>No boxes at all</td><td>The hooks are missing: <code>forchetta hooks install</code>. Sessions already open pick them up by themselves.</td></tr>

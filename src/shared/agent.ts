@@ -370,7 +370,7 @@ export const displayName = (agent: Pick<Agent, 'project' | 'team'>): string => a
  * session that a file it was stopped on is free (daemon/guard.ts); exit: /exit of a run of an automation that is
  * over (daemon/automations.ts), never sent from the page.
  */
-export type CommandKind = 'btw' | 'compact' | 'clear' | 'request' | 'ask' | 'free' | 'exit';
+export type CommandKind = 'btw' | 'compact' | 'clear' | 'request' | 'ask' | 'free' | 'exit' | 'restart';
 
 export type CommandStatus =
   /** Waits for the session to be ready for input. */
@@ -429,6 +429,11 @@ export interface Agent {
   turnStartedAt?: number;
   /** Its turn is over, but a shell it started still runs in the background (Claude Code says so). */
   backgroundShell?: boolean;
+  /** The Claude Code its process runs, and whether Remote Control is connected: from its session file. */
+  version?: string;
+  remoteControl?: boolean;
+  /** Claude Code did not restart it (daemon/restarts.ts): why, when, and the version it was for. */
+  restartRefused?: { version: string; reason: string; at: number };
   compactTrigger?: string;
   beforeCompact?: AgentState;
   /** A SessionEnd with reason clear or resume: the SessionStart of the same process follows. */

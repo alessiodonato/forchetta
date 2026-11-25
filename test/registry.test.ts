@@ -278,6 +278,19 @@ describe('sessions found without forchetta run', () => {
     expect(agent).toMatchObject({ state: 'working', backgroundShell: undefined });
   });
 
+  it('knows the Claude Code of each session, and whether Remote Control is connected', () => {
+    started();
+    const agent = registry.agents.get(AGENT)!;
+    const read = (extra: object): boolean => registry.reconcile([{ pid: 4242, sessionId: S1, status: 'idle', ...extra }], [], () => true);
+    read({ version: '2.1.328', remoteControl: true });
+    expect(agent).toMatchObject({ version: '2.1.328', remoteControl: true });
+    expect(read({ version: '2.1.328', remoteControl: true })).toBe(false);
+    // A file that cannot be read changes nothing.
+    expect(read({})).toBe(false);
+    expect(read({ version: '2.1.331', remoteControl: false })).toBe(true);
+    expect(agent).toMatchObject({ version: '2.1.331', remoteControl: undefined });
+  });
+
   it('finds a session that rests with a shell in the background', () => {
     fresh();
     registry.reconcile([{ pid: 111, sessionId: S1, cwd: CWD, kind: 'interactive', status: 'shell' }], [], () => true);

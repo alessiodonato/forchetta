@@ -5232,3 +5232,11 @@ header.top .view-switch button:not(.on):hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* The sessions on an older Claude Code (Restarts.tsx): why one is not restarted, on one line. */
+.restart-why {
+  overflow: hidden;
+  max-width: 64ch;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -22,6 +22,7 @@ import { Studio } from './Studio.tsx';
 import { TeamPanel } from './TeamRequests.tsx';
 import { AutoPanel } from './Automations.tsx';
 import { ReopenNotice } from './Reopen.tsx';
+import { RestartNotice } from './Restarts.tsx';
 import type { AutomationView } from '../shared/automation.ts';
 import { crewLineOf } from '../shared/crew.ts';
 import { PromptsPanel } from './PromptsPanel.tsx';
@@ -418,6 +419,7 @@ export function App({ store }: { store: Store }) {
         </div>
       </header>
       {state.ready && <ReopenNotice store={store} />}
+      {state.ready && <RestartNotice agents={agents} store={store} />}
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
       {state.ready && panel === 'new' && <NewSessionPanel agents={agents} store={store} onClose={() => toggle('new')} />}
       {state.ready && panel === 'team' && (

@@ -312,8 +312,13 @@ export function applyHook(agent: Agent, payload: HookPayload, now: number): void
   }
 }
 
-/** What `claude agents --json` reports for a session; its status can also be "shell" (daemon/claude-agents.ts). */
+/**
+ * What `claude agents --json` reports for a session; its status can also be "shell". The version and Remote Control
+ * come from its session file (daemon/claude-agents.ts).
+ */
 export interface AgentsEntry {
+  version?: string;
+  remoteControl?: boolean;
   pid?: number;
   sessionId?: string;
   cwd?: string;

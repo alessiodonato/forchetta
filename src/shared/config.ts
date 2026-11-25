@@ -32,6 +32,8 @@ export interface Config {
   reconcileIntervalMin: number;
   /** A session "al lavoro" with no event for this long is shown as stalled. */
   stallMin: number;
+  /** The sessions at rest restart by themselves on a new Claude Code (daemon/restarts.ts). Off unless turned on. */
+  restarts: { auto: boolean };
   /** The shortcut that shows or hides the app from anywhere, read by the app: "ctrl+alt+f", or "" for none. */
   hotkey: string;
   /**
@@ -61,6 +63,7 @@ export const DEFAULT_CONFIG: Config = {
   endedRetentionMin: 10,
   reconcileIntervalMin: 5,
   stallMin: 10,
+  restarts: { auto: false },
   hotkey: 'ctrl+alt+f',
   guard: { files: true, git: true, notes: true, servers: true },
 };
@@ -103,6 +106,7 @@ export function loadConfig(file = paths.config, log: (message: string, level?: '
     endedRetentionMin: positive(raw.endedRetentionMin, DEFAULT_CONFIG.endedRetentionMin),
     reconcileIntervalMin: positive(raw.reconcileIntervalMin, DEFAULT_CONFIG.reconcileIntervalMin),
     stallMin: positive(raw.stallMin, DEFAULT_CONFIG.stallMin),
+    restarts: { auto: (raw.restarts as { auto?: unknown } | undefined)?.auto === true },
     hotkey: typeof raw.hotkey === 'string' ? raw.hotkey : DEFAULT_CONFIG.hotkey,
     // On unless turned off: only false counts.
     guard: { files: guard.files !== false, git: guard.git !== false, notes: guard.notes !== false, servers: guard.servers !== false },
