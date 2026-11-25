@@ -47,6 +47,9 @@ export function unifiedDiff(before: string, after: string, label: string): strin
   }
 }
 
+/** The exit code when there was something to change and nobody to ask: a script must not take it for done. An error is 1. */
+export const NOT_APPLIED = 2;
+
 /** The answer to a question on the terminal, trimmed and in lower case. */
 export async function ask(question: string, choices: string, io: RunIO): Promise<string> {
   const s = io.style;
@@ -171,7 +174,9 @@ export async function hooksCommand(action: 'install' | 'uninstall', options: Hoo
   if (options.diff) showDiff();
 
   if (!options.yes && !(await confirm(io, options.diff ? undefined : showDiff))) {
-    if (process.stdin.isTTY) io.stdout(`${s.mark('○', 'gray', 'No change.')}\n`);
+    // A no is an answer; nobody to ask is not.
+    if (!process.stdin.isTTY) return NOT_APPLIED;
+    io.stdout(`${s.mark('○', 'gray', 'No change.')}\n`);
     return 0;
   }
   const now = existsSync(file) ? readFileSync(file, 'utf8') : undefined;

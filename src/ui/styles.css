@@ -5363,3 +5363,20 @@ body.reordering * {
 .scheduled-task .grow {
   flex: 1;
 }
+
+/* The hooks of a new version, to look at before they are applied. */
+.update-hooks pre {
+  overflow: auto;
+  max-height: 180px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  font: 12px/1.5 var(--mono);
+  color: var(--text-2);
+}
+
+.update-hooks p {
+  margin: 0;
+}

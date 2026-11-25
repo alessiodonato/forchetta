@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { migrateData, readDataJson, writeDataJson } from '../shared/data-file.ts';
@@ -60,6 +60,9 @@ import { type Agent, markEnded, startsTurn } from './state.ts';
 import { Order } from './order.ts';
 import { loadPty } from './pty.ts';
 import { Scheduled } from './scheduled.ts';
+import { Updates } from './updates.ts';
+import { daemonEnv } from '../cli/pane-env.ts';
+import { installKind, latestVersion } from '../shared/install.ts';
 import { Shells, userShell } from './shells.ts';
 import { Reopener } from './reopen.ts';
 import { Restarter } from './restarts.ts';
@@ -578,6 +581,38 @@ function main(): void {
     onChange: () => hub?.scheduledChanged(),
   });
   scheduled = tasks;
+  // A new version of Forchetta: for one that can install it.
+  const cliJs = join(ROOT, 'dist', 'cli.js');
+  const updates =
+    installKind() === 'brew'
+      ? new Updates({
+          current: VERSION,
+          command: 'forchetta update',
+          file: paths.updates,
+          runFile: paths.updateRun,
+          enabled: () => config.updates.check,
+          latest: () => latestVersion(),
+          // Apart from the daemon, which it restarts: in a group of its own, its words in the log.
+          start: () => {
+            const child = spawn(resolveTool('node', config), [cliJs, 'update', '--page'], { detached: true, stdio: 'ignore', cwd: homedir(), env: daemonEnv(process.env) });
+            child.on('error', (error) => log(`update not started: ${String(error)}`, 'warn'));
+            child.unref();
+          },
+          applyHooks: () =>
+            new Promise((done) => {
+              execFile(resolveTool('node', config), [cliJs, 'hooks', 'install', '--yes'], { encoding: 'utf8', timeout: 60_000 }, (error, stdout, stderr) => done({ ok: !error, text: (stderr || stdout).trim().split('\n').at(-1) ?? '' }));
+            }),
+          onChange: () => hub?.updatesChanged(),
+          alive: isAlive,
+          log,
+        })
+      : undefined;
+  const onUpdate = (action: 'install' | 'hide' | 'forget' | 'hooks' | 'noHooks', version?: string): void => {
+    if (action === 'install') updates?.install();
+    else if (action === 'hide' && version) updates?.hide(version);
+    else if (action === 'forget') updates?.forget();
+    else if (action === 'hooks' || action === 'noHooks') void updates?.hooks(action === 'hooks').then(() => hub?.systemChanged());
+  };
   // The order of the boxes, as you dragged them.
   const order = new Order(paths.order, log);
   // The plain terminals, in the folders of the sessions.
@@ -615,7 +650,7 @@ function main(): void {
       const next = checked.settings;
       // Saved over what the file has (paths of the tools, context windows…): only these fields change.
       const stored = loadConfig(paths.config, log);
-      const saved = { ...stored, guard: next.guard, stallMin: next.stallMin, endedRetentionMin: next.endedRetentionMin, restarts: { auto: next.autoRestart }, panes: { replace: next.replace }, hotkey: next.hotkey, port: next.port, summaries: { ...stored.summaries, haiku: next.haiku } };
+      const saved = { ...stored, guard: next.guard, stallMin: next.stallMin, endedRetentionMin: next.endedRetentionMin, restarts: { auto: next.autoRestart }, updates: { check: next.checkUpdates }, panes: { replace: next.replace }, hotkey: next.hotkey, port: next.port, summaries: { ...stored.summaries, haiku: next.haiku } };
       try {
         saveConfig(saved);
       } catch (error) {
@@ -626,6 +661,9 @@ function main(): void {
       config.stallMin = next.stallMin;
       config.endedRetentionMin = next.endedRetentionMin;
       config.restarts = { auto: next.autoRestart };
+      config.updates = { check: next.checkUpdates };
+      hub?.updatesChanged();
+      void updates?.look();
       hub?.setRestarts(restarter.info());
       config.panes = { replace: next.replace };
       config.hotkey = next.hotkey;
@@ -666,6 +704,7 @@ function main(): void {
     reopenList: () => reopener.list(),
     onReopen: (agentIds) => reopener.reopen(agentIds),
     onDismissReopen: (agentIds) => reopener.dismiss(agentIds),
+    ...(updates ? { updates: () => updates.info(), onUpdate } : {}),
     scheduled: () => tasks.list(),
     onRunScheduled: (id, cwd) => tasks.run(id, cwd),
     shells: () => ({ kinds: shells.kinds(), waiting: shells.waiting() }),
@@ -1236,6 +1275,8 @@ function main(): void {
       }, QUIET_CHECK_MS),
       setInterval(() => void reconcile('periodic'), config.reconcileIntervalMin * 60_000),
       setInterval(() => restarter.tick(), LIVENESS_MS),
+      // A new version: soon after the start, then when a day went by.
+      setInterval(() => void updates?.look(), 60_000),
       // The teams that start by themselves: their runs, their schedules, GitHub.
       setInterval(() => void automations?.tick(), AUTO_TICK_MS),
       setInterval(() => {

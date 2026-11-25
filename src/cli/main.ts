@@ -13,6 +13,7 @@ import { pairs, styleFor, tildify } from './style.ts';
 import { autoCommand } from './auto.ts';
 import { reopenCommand } from './reopen.ts';
 import { flushingOutput } from './output.ts';
+import { updateCommand } from './update.ts';
 import { teamCommand } from './team.ts';
 import { reportCommand } from './report.ts';
 import { doctorCommand } from './doctor.ts';
@@ -158,6 +159,9 @@ async function main(argv: string[]): Promise<number> {
       );
       return setupCommand({ yes: args.includes('--yes'), force: args.includes('--force'), diff: args.includes('--diff'), appDir, restart: !args.includes('--no-restart') }, io);
     }
+    case 'update':
+      checkOptions('update', rest, ['--check', '--page']);
+      return updateCommand({ check: rest.includes('--check'), page: rest.includes('--page') }, io);
     case 'team':
       return teamCommand(rest, io);
     case 'auto':

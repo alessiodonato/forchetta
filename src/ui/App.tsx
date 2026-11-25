@@ -29,9 +29,11 @@ import { crewLineOf } from '../shared/crew.ts';
 import { PromptsPanel } from './PromptsPanel.tsx';
 import { ScheduledPanel } from './Scheduled.tsx';
 import { ShellPanel } from './Shells.tsx';
+import { UpdateNotice } from './Updates.tsx';
 import { RecallPanel } from './Recall.tsx';
 import { hasGroups, OrgChart } from './Team.tsx';
 import { animateMove, onReducedMotionChange } from './motion.ts';
+import { isBehind, loadAgain } from './reload.ts';
 import { useReorder } from './reorder.ts';
 import type { Store, UiState } from './store.ts';
 import { Workspace } from './Workspace.tsx';
@@ -346,6 +348,14 @@ export function App({ store }: { store: Store }) {
     }
   };
   const system = state.system;
+  // After an update: the page loads again, unless you are in the middle of something in it.
+  const behind = state.connected && isBehind(system?.version) ? system?.version : undefined;
+  const free = !panel && !studio && !overlay && !state.selection;
+  useEffect(() => {
+    if (!behind || !free) return;
+    const soon = setTimeout(() => loadAgain(behind, store.state.panes.open, store.state.panes.active), 400);
+    return () => clearTimeout(soon);
+  }, [behind, free]);
   const claudeNotice = system?.claude.newer === 'minor' ? `claude-${system.claude.installed}` : undefined;
   const hooksMissing = system?.checks.find((check) => check.id === 'hooks' && !check.ok);
   // "Nuova sessione…" from the menu of the icon; the quick prompts from the menu of a selection.
@@ -443,6 +453,15 @@ export function App({ store }: { store: Store }) {
           )}
         </div>
       </header>
+      {state.ready && <UpdateNotice info={state.updates} store={store} />}
+      {state.ready && behind && (
+        <p class="notice" role="status">
+          Forchetta {state.system?.version} is running: this window is of the version before.{' '}
+          <button type="button" class="primary" onClick={() => loadAgain(behind, state.panes.open, state.panes.active)}>
+            Load it again
+          </button>
+        </p>
+      )}
       {state.ready && <ReopenNotice store={store} />}
       {state.ready && <RestartNotice agents={agents} store={store} />}
       {state.ready && panel === 'broadcast' && <BroadcastPanel agents={agents} store={store} onClose={() => setPanel(undefined)} />}
