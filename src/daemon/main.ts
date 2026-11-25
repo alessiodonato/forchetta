@@ -985,7 +985,10 @@ function main(): void {
     if (interactiveByPid.size > 500) interactiveByPid.clear();
     const asked = readCommandLine(pid).then((line) => {
       // Not told this time: asked again at the next permission.
-      if (line === undefined) interactiveByPid.delete(pid);
+      if (line === undefined) {
+        interactiveByPid.delete(pid);
+        log(`the command line of process ${pid} could not be read: its permission stays in its terminal`, 'warn');
+      }
       return isInteractiveCommand(line);
     });
     interactiveByPid.set(pid, asked);

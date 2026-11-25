@@ -163,6 +163,13 @@ function terminal(id) {
     socket.on('error', fail);
   });
 }
+const logTail = () => {
+  try {
+    return readFileSync(join(varDir, 'daemon.log'), 'utf8').trim().split('\n').slice(-14).join('\n       ');
+  } catch (error) {
+    return String(error);
+  }
+};
 /** Whether a terminal drew a text: Windows moves the cursor over the spaces instead of writing them. */
 const shows = (term, text) => plain(term.text).replace(/\s+/g, '').includes(text.replace(/\s+/g, ''));
 const plain = (text) => text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
@@ -175,7 +182,15 @@ check('its turn ends in the box', Boolean(await until(() => state(a) === 'idle')
 check('its box says the folder', agents.get(a)?.cwd === slashes(project), agents.get(a)?.cwd);
 check('its status line reaches the box', Boolean(await until(() => agents.get(a)?.usage || agents.get(a)?.context, 15_000)), JSON.stringify({ usage: agents.get(a)?.usage, context: agents.get(a)?.context }));
 const term = await terminal(a);
-check('its terminal opens in the page', Boolean(await until(() => shows(term, 'say hello'), 8000)), plain(term.text).slice(-200));
+const opened = Boolean(await until(() => shows(term, 'say hello'), 8000));
+check('its terminal opens in the page', opened, plain(term.text).slice(-200));
+if (!opened) {
+  // Never drawn, or lost on its way to this window? Another one says which.
+  const other = await terminal(a);
+  const there = Boolean(await until(() => shows(other, 'say hello'), 4000));
+  other.socket.close();
+  console.log(`     another window ${there ? 'shows it: this one lost it' : 'does not show it either'}; its start: ${JSON.stringify(term.text.slice(0, 400))}`);
+}
 check('with the status line you had', Boolean(await until(() => shows(term, 'my line '), 8000)));
 term.text = '';
 term.type('typed in the page');
@@ -199,6 +214,7 @@ send({ type: 'ask', agentId: a, text: `WRITE "${slashes(permFile)}"` });
 const asked = await until(() => agents.get(a)?.permission, 45_000);
 check('a command of the box is typed, and the permission comes to the box', Boolean(asked), JSON.stringify(agents.get(a)?.queue ?? state(a)));
 if (asked) send({ type: 'permission', agentId: a, ticket: asked.ticket, behavior: 'allow' });
+else console.log(`     the log of the daemon: ${logTail()}`);
 check('answered from the box, Claude goes on', Boolean(await until(() => existsSync(permFile))) && Boolean(await until(() => state(a) === 'idle')), state(a));
 if (state(a) === 'waiting') {
   console.log(`     the terminal: ${plain(term.text).replace(/\s+/g, ' ').slice(-700)}`);
@@ -357,7 +373,9 @@ check('it finds the sessions again', agents.get(a)?.state !== 'ended' && agents.
 const again = await terminal(a);
 check('and their terminals', Boolean(await until(() => shows(again, 'say hello'), 8000)));
 send({ type: 'ask', agentId: a, text: 'are you still there?' });
-check('a command of the box reaches it', Boolean(await until(() => api.prompts.some((text) => text.includes('are you still there')), 45_000)), JSON.stringify(agents.get(a)?.queue ?? ''));
+const reached = Boolean(await until(() => api.prompts.some((text) => text.includes('are you still there')), 45_000));
+check('a command of the box reaches it', reached, JSON.stringify(agents.get(a)?.commands ?? ''));
+if (!reached) console.log(`     the terminal: ${plain(again.text).replace(/\s+/g, ' ').slice(-400)}\n     the log of the daemon: ${logTail()}`);
 await until(() => state(a) === 'idle');
 const listed = forchetta('ls').stdout;
 check('forchetta ls', listed.includes('my shop'), listed.split('\n').slice(0, 4).join(' | '));
