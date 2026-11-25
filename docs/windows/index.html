@@ -127,7 +127,7 @@
 <article>
   <h1>Forchetta on Windows</h1>
   <p class="sub">A beta that needs people to try it.</p>
-  <p class="meta">Version 0.13.0-beta.2, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. The first reports from a PC are in, from Windows 11.</p>
+  <p class="meta">Version 0.13.0-beta.3, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. The first reports from a PC are in, from Windows 11.</p>
 
   <p>Forchetta runs on Windows itself: no WSL, no Ubuntu, no administrator. The Claude Code it shows is the one you have, with your account and your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use Forchetta from a window of Edge or Chrome: the same page as on a Mac.</p>
   <p>Do you work inside WSL? <a href="wsl/">There is a guide for that</a> too.</p>
@@ -155,9 +155,9 @@
     </li>
     <li id="step-2">
       <p>Forchetta <span class="place">PowerShell</span></p>
-      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
+      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
       <ul>
-        <li>It downloads Forchetta and checks it. Without Node.js 22 it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
+        <li>It downloads Forchetta and checks it. Without Node.js 22, or with one in a folder of its version, as winget and nvm may keep it, it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
         <li>It lists the hooks it adds to <code>.claude\settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
         <li>It adds <code>.local\bin</code>, in your user folder, to your <code>PATH</code>: for your user only, where the installer of Claude Code puts its own command.</li>
       </ul>

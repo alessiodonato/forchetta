@@ -88,7 +88,7 @@ Forchetta gira direttamente su Windows: niente WSL, niente amministratore. Il Cl
 Serve qualcuno che la provi: i suoi test girano su Windows con il vero Claude Code, e sono arrivate le prime segnalazioni da un PC (Windows 11). In PowerShell, non come amministratore:
 
 ```powershell
-irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex
+irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.ps1 | iex
 ```
 
 Mostra gli hook che aggiunge e chiede conferma: rispondi `y`. Poi `forchetta open`, oppure Forchetta nel menu Start. Servono Windows 10 1809 o successivo e [Claude Code per Windows](https://code.claude.com/docs/en/setup); Node.js arriva da solo, se non c'è.
@@ -96,7 +96,7 @@ Mostra gli hook che aggiunge e chiede conferma: rispondi `y`. Poi `forchetta ope
 Su Linux, con `curl`, `tmux` e `lsof` installati, e dentro WSL se lavori lì:
 
 ```sh
-curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.sh &&
+curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.3/install.sh &&
 sh ~/forchetta-install.sh
 ```
 
