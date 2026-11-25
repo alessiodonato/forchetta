@@ -56,7 +56,7 @@ Screenshots for a pull request come from the simulation too, so they show no per
 These are promises Forchetta makes to the people who install it:
 
 - **Hooks never get in the way of a session.** The hook scripts in `bin/` print nothing, always exit with 0, and run in the background for frequent events. With the daemon off, a session behaves exactly as without Forchetta.
-- **Nothing leaves the Mac.** The daemon listens on `127.0.0.1` only, with a token. The one outside call is the optional summary from the Claude API, off by default. No telemetry.
+- **Nothing of yours leaves the Mac.** The daemon listens on `127.0.0.1` only, with a token. The one outside call that carries anything of a session is the optional summary from the Claude API, off by default. Once a day it asks GitHub for the last version, with nothing of yours in the request, unless it is turned off; nothing installs without a click. No telemetry.
 - **`~/.claude/settings.json` is changed only on request:** by `forchetta hooks install` and `uninstall`, after showing every change and asking, with a backup.
 - **Commands go into a session only when it's safe:** the session is idle, nobody is typing, the prompt is empty.
 - **It stays light.** At rest, the app, the page and the daemon together stay under 1% of CPU, and with Reduce Motion on nothing moves.

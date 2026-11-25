@@ -857,7 +857,7 @@
         <li>
           <p>Build the app on your Mac and add its hooks to Claude Code. You see every change to your settings first.</p>
           <button class="copy" type="button" data-copy="forchetta setup" aria-label="Copy: forchetta setup"><span class="cmd"><span class="prompt">$ </span>forchetta setup</span><span class="copy-label" aria-hidden="true">Copy</span></button>
-          <small>Built on your Mac, the app opens with no warning from macOS. To update: <code>brew upgrade forchetta &amp;&amp; forchetta setup</code> (<a href="manual.html#update">more</a>).</small>
+          <small>Built on your Mac, the app opens with no warning from macOS. A new version is then one click, in the window (<a href="manual.html#update">how it updates</a>).</small>
         </li>
         <li>
           <p>Open the app. Sessions already running appear on their own.</p>
@@ -865,7 +865,7 @@
           <small>To open a session's terminal from the app, start it with <code>forchetta run claude</code>, or with New session in the app.</small>
         </li>
       </ol>
-      <p><b>It stays on your Mac.</b> The daemon listens on <code>127.0.0.1</code> only, and your sessions are not sent anywhere: the one exception is an optional one-line summary by the Claude API, off unless you turn it on. The open-source skills a team uses are fetched from GitHub when it starts, at a pinned commit, and the MCP servers you give an agent from npm, at a pinned version. A team that starts from GitHub reads it with your <code>gh</code>, and never writes there. Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change and asks.</p>
+      <p><b>It stays on your Mac.</b> The daemon listens on <code>127.0.0.1</code> only, and your sessions are not sent anywhere: the one exception is an optional one-line summary by the Claude API, off unless you turn it on. Once a day it asks GitHub for its last version, with nothing of yours in the request, unless you turn that off. The open-source skills a team uses are fetched from GitHub when it starts, at a pinned commit, and the MCP servers you give an agent from npm, at a pinned version. A team that starts from GitHub reads it with your <code>gh</code>, and never writes there. Before it changes <code>~/.claude/settings.json</code>, Forchetta shows you every change and asks.</p>
       <p>Everything else is in the <a href="manual.html">manual</a>: commands to a session, the command line, settings and shortcuts, reports. The <a href="https://github.com/alessiodonato/forchetta#readme">README</a> is in English and in Italian.</p>
     </section>
 
