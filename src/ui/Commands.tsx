@@ -90,30 +90,42 @@ export function CommandStatus({ agent, store, now }: { agent: Agent; store: Stor
   );
 }
 
-type Mode = 'idle' | 'btw' | 'clear';
+/** What a command asks before it goes: the question of /btw, the confirmation of /clear. */
+export type Ask = 'btw' | 'clear';
 
-/** The buttons, the field of /btw and the confirmation of /clear. */
-export function CommandBar({ agent, store, onModeChange }: { agent: Agent; store: Store; onModeChange?: (active: boolean) => void }) {
-  const [mode, setMode] = useState<Mode>('idle');
+// Clicks and keys stay here: they must not open the box, nor reach a terminal.
+const stop = (event: Event): void => event.stopPropagation();
+
+/** The three buttons. */
+export function CommandButtons({ agent, store, onAsk }: { agent: Agent; store: Store; onAsk: (ask: Ask) => void }) {
+  return (
+    <div class="command-bar" onClick={stop} onMouseDown={stop}>
+      <button type="button" title="A side question, kept out of the conversation" onClick={() => onAsk('btw')}>
+        btw…
+      </button>
+      <button type="button" title="Summarizes the conversation and frees context" onClick={() => store.command(agent.id, 'compact')}>
+        compact
+      </button>
+      <button type="button" title="A new conversation: asks first" onClick={() => onAsk('clear')}>
+        clear
+      </button>
+    </div>
+  );
+}
+
+/** The field of /btw, or the confirmation of /clear. */
+export function CommandAsk({ agent, store, ask, onDone }: { agent: Agent; store: Store; ask: Ask; onDone: () => void }) {
   const [question, setQuestion] = useState('');
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    onModeChange?.(mode !== 'idle');
-    if (mode === 'btw') field.current?.focus();
-  }, [mode]);
+    if (ask === 'btw') field.current?.focus();
+  }, [ask]);
 
-  // Clicks and keys stay here: they must not open the box, nor reach a terminal.
-  const stop = (event: Event): void => event.stopPropagation();
-  const close = (): void => {
-    setMode('idle');
-    setQuestion('');
-  };
-
-  if (mode === 'btw') {
+  if (ask === 'btw') {
     const send = (): void => {
       if (!question.trim()) return;
       store.command(agent.id, 'btw', question);
-      close();
+      onDone();
     };
     return (
       <div class="command-bar" onClick={stop} onMouseDown={stop}>
@@ -128,57 +140,48 @@ export function CommandBar({ agent, store, onModeChange }: { agent: Agent; store
           onKeyDown={(event) => {
             event.stopPropagation();
             if (event.key === 'Enter') send();
-            if (event.key === 'Escape') close();
+            if (event.key === 'Escape') onDone();
           }}
         />
         <button type="button" onClick={send} disabled={!question.trim()}>
           Send
         </button>
-        <button type="button" class="quiet" onClick={close}>
+        <button type="button" class="quiet" onClick={onDone}>
           Cancel
         </button>
       </div>
     );
   }
 
-  if (mode === 'clear') {
-    const tokens = agent.context ? ` (${shortTokens(agent.context.tokens)} tokens)` : '';
-    const notes = store.state.settings.arricurdaiNotes
-      ? 'arricurdAI first writes a note for the new session.'
-      : 'This version of arricurdAI cannot save a note: the transcript stays on disk, and recall finds it.';
-    return (
-      <div class="command-bar confirm" onClick={stop} onMouseDown={stop}>
-        <span class="confirm-text">
-          Clear <strong>{displayName(agent)}</strong>? Its context{tokens} will be emptied. {notes}
-        </span>
-        <button
-          type="button"
-          class="danger"
-          onClick={() => {
-            store.command(agent.id, 'clear', undefined, true);
-            close();
-          }}
-        >
-          Clear
-        </button>
-        <button type="button" class="quiet" onClick={close}>
-          Cancel
-        </button>
-      </div>
-    );
-  }
-
+  const tokens = agent.context ? ` (${shortTokens(agent.context.tokens)} tokens)` : '';
+  const notes = store.state.settings.arricurdaiNotes
+    ? 'arricurdAI first writes a note for the new session.'
+    : 'This version of arricurdAI cannot save a note: the transcript stays on disk, and recall finds it.';
   return (
-    <div class="command-bar" onClick={stop} onMouseDown={stop}>
-      <button type="button" title="A side question, kept out of the conversation" onClick={() => setMode('btw')}>
-        btw…
+    <div class="command-bar confirm" onClick={stop} onMouseDown={stop}>
+      <span class="confirm-text">
+        Clear <strong>{displayName(agent)}</strong>? Its context{tokens} will be emptied. {notes}
+      </span>
+      <button
+        type="button"
+        class="danger"
+        onClick={() => {
+          store.command(agent.id, 'clear', undefined, true);
+          onDone();
+        }}
+      >
+        Clear
       </button>
-      <button type="button" title="Summarizes the conversation and frees context" onClick={() => store.command(agent.id, 'compact')}>
-        compact
-      </button>
-      <button type="button" title="A new conversation: asks first" onClick={() => setMode('clear')}>
-        clear
+      <button type="button" class="quiet" onClick={onDone}>
+        Cancel
       </button>
     </div>
   );
+}
+
+/** The buttons, the field of /btw and the confirmation of /clear, in one place (the box). */
+export function CommandBar({ agent, store, onModeChange }: { agent: Agent; store: Store; onModeChange?: (active: boolean) => void }) {
+  const [ask, setAsk] = useState<Ask>();
+  useEffect(() => onModeChange?.(ask !== undefined), [ask]);
+  return ask ? <CommandAsk agent={agent} store={store} ask={ask} onDone={() => setAsk(undefined)} /> : <CommandButtons agent={agent} store={store} onAsk={setAsk} />;
 }

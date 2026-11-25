@@ -28,13 +28,15 @@ export function ShellPane({ shell, area, focusKey, store, onUse }: PaneProps) {
   return (
     <section class="pane pane-shell" data-id={shell.id} style={{ gridArea: area }}>
       <header class="pane-head">
-        <span class="pane-project" title={shell.cwd}>
-          {shell.name}
-        </span>
-        <span class="pane-state">{shell.label}</span>
-        <span class="pane-activity" title={shell.cwd}>
-          a plain terminal, no Claude in it
-        </span>
+        <div class="pane-head-main pane-head-plain">
+          <span class="pane-project" title={shell.cwd}>
+            {shell.name}
+          </span>
+          <span class="pane-state">{shell.label}</span>
+          <span class="pane-activity" title={shell.cwd}>
+            a plain terminal, no Claude in it
+          </span>
+        </div>
         <button class="pane-close" type="button" title="Close the terminal: what runs in it ends" aria-label="Close the terminal" onClick={() => store.closeShell(shell.id)}>
           ✕
         </button>

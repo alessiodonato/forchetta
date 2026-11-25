@@ -339,7 +339,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = [regex]::Match((Get-Content -Raw release\install.ps1), "PinnedVersion = '([^']+)'").Groups[1].Value
           $others = (($env:Path -split ';') | Where-Object { $_ -and -not (Test-Path (Join-Path $_ 'node.exe')) }) -join ';'
-          foreach ($before in '0.13.0-beta.2', '0.13.0-beta.3') {
+          foreach ($before in '0.13.0-beta.2', '0.13.0-beta.3', '0.13.0-beta.4') {
             $userHome = Join-Path $env:RUNNER_TEMP "home-from-$before"
             New-Item -ItemType Directory -Force $userHome | Out-Null
             $env:USERPROFILE = $userHome
@@ -358,7 +358,22 @@ jobs:
             $named = (Get-Content -Raw $file) -match 'node-v22\.0\.0'
             if ($before -eq '0.13.0-beta.2' -and -not $named) { throw "$before does not name a version of Node.js: this tries nothing" }
             $env:FORCHETTA_RELEASES = Join-Path $env:RUNNER_TEMP 'releases'
-            Get-Content -Raw release\install.ps1 | Invoke-Expression
+            $installer = (Resolve-Path release\install.ps1).Path
+            $digest = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+            $source = Join-Path $userHome 'releases.json'
+            $list = ConvertTo-Json -Depth 5 -InputObject @(@{ tag_name = "v$version"; draft = $false; assets = @(@{ name = 'install.ps1'; browser_download_url = $installer; digest = "sha256:$digest" }) })
+            [IO.File]::WriteAllText($source, $list)
+            if ($before -in '0.13.0-beta.2', '0.13.0-beta.3') {
+              Get-Content -Raw release\install.ps1 | Invoke-Expression
+            } else {
+              # From beta.4, the click: its own update, not the one of this version.
+              $env:FORCHETTA_UPDATE_SOURCE = $source
+              & $forchetta update --page
+              $code = $LASTEXITCODE
+              $state = Get-Content -Raw (Join-Path $userHome '.local\share\forchetta\update-run.json')
+              if ($code -ne 0 -or $state -notmatch '"state": "done"') { throw "the click of ${before}: $code $state" }
+              Remove-Item Env:FORCHETTA_UPDATE_SOURCE
+            }
             if ((& $forchetta --version) -ne $version) { throw "$before was not updated" }
             & $forchetta setup --yes
             if ($LASTEXITCODE -ne 0) { throw "setup over $before" }
@@ -374,11 +389,6 @@ jobs:
             if ($LASTEXITCODE -ne 0 -or $status -notmatch [regex]::Escape($version)) { throw "over ${before}, the daemon is not the new one: $status" }
             if ((& $forchetta open --print) -notmatch '^http://127\.0\.0\.1:47821/#open=') { throw "open over $before" }
             # And once more, as the page does: the installer of the release, with its checksum, then the setup of what it put there.
-            $installer = (Resolve-Path release\install.ps1).Path
-            $digest = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
-            $source = Join-Path $userHome 'releases.json'
-            $list = ConvertTo-Json -Depth 5 -InputObject @(@{ tag_name = "v$version"; draft = $false; assets = @(@{ name = 'install.ps1'; browser_download_url = $installer; digest = "sha256:$digest" }) })
-            [IO.File]::WriteAllText($source, $list)
             $env:FORCHETTA_UPDATE_SOURCE = $source
             $env:FORCHETTA_UPDATE_FROM = '0.0.1'
             & $forchetta update --page
