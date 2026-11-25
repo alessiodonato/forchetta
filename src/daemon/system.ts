@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir, join } from '../shared/fspath.ts';
 import { type Config, which } from '../shared/config.ts';
-import { hookTargets } from '../shared/hook-targets.ts';
+import { hookTargets, nodeOfHooks } from '../shared/hook-targets.ts';
 import { claudeConfigDir, paths } from '../shared/paths.ts';
 import { installHint, PLATFORM, type Platform } from '../shared/platform.ts';
 import { isOurStatusLine, withForchettaHooks } from '../shared/settings.ts';
@@ -43,7 +43,7 @@ export function readClaudeSettings(): string | undefined {
   }
 }
 
-export function setupChecks(inputs: SystemInputs, platform: Platform | undefined = PLATFORM): SetupCheck[] {
+export function setupChecks(inputs: SystemInputs, platform: Platform | undefined = PLATFORM, there: (path: string) => boolean = existsSync): SetupCheck[] {
   let settings: Record<string, unknown> | undefined;
   try {
     const parsed = inputs.settingsText ? (JSON.parse(inputs.settingsText) as unknown) : {};
@@ -53,10 +53,19 @@ export function setupChecks(inputs: SystemInputs, platform: Platform | undefined
   }
   const file = tilde(join(claudeConfigDir(), 'settings.json'));
   let hooksOk = false;
+  /** Windows: the hooks are ours, on a Node.js that is not there any more. */
+  let nodeGone: string | undefined;
   if (settings) {
     try {
-      hooksOk =
-        withForchettaHooks(settings, hookTargets(inputs.config)).changes.length === 0;
+      const targets = hookTargets(inputs.config);
+      // They may run on another Node.js than the one this daemon knows, as long as it is there.
+      const node = targets.windows && nodeOfHooks(settings);
+      if (targets.windows && node) targets.windows.node = node;
+      hooksOk = withForchettaHooks(settings, targets).changes.length === 0;
+      if (hooksOk && node && !there(node)) {
+        hooksOk = false;
+        nodeGone = node;
+      }
     } catch {
       hooksOk = false;
     }
@@ -67,7 +76,7 @@ export function setupChecks(inputs: SystemInputs, platform: Platform | undefined
       id: 'hooks',
       ok: hooksOk,
       label: `Hooks in ${file}`,
-      detail: hooksOk ? 'installed, for this copy of Forchetta' : settings ? 'missing, or of another copy of Forchetta' : `${file} is not valid JSON`,
+      detail: hooksOk ? 'installed, for this copy of Forchetta' : nodeGone ? `their Node.js is not there any more: ${tilde(nodeGone)}` : settings ? 'missing, or of another copy of Forchetta' : `${file} is not valid JSON`,
       ...(hooksOk ? {} : { fix: 'forchetta hooks install' }),
     },
     {

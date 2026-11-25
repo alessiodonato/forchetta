@@ -19,8 +19,11 @@ import { killTargets, placedCommands, shellWrites } from '../src/daemon/shell.ts
 import { claudeStart } from '../src/daemon/spawn.ts';
 import { LIST_ARGS, matchingProcesses, namesFolder, parseNetstat, parseProcesses, windowsLook } from '../src/daemon/windows-processes.ts';
 import { ofWindows, windowsPayload } from '../src/daemon/windows-payload.ts';
+import { setupChecks, type SystemInputs } from '../src/daemon/system.ts';
 import { isFullPath, projectOf } from '../src/shared/agent.ts';
+import { DEFAULT_CONFIG, lastingNode, nodeOfAVersion } from '../src/shared/config.ts';
 import { fromGitBash, realWindowsPath, slashes } from '../src/shared/fspath.ts';
+import { hookTargets, nodeOfHooks } from '../src/shared/hook-targets.ts';
 import { pathsFor, ROOT } from '../src/shared/paths.ts';
 import { acceptPipe, newPipe, parsePipe, type PipeInfo } from '../src/shared/pipe.ts';
 import { GUARD_MATCHER, isOurHook, isOurStatusLine, windowsStatusCommand, WINDOWS_GUARD_MATCHER, withForchettaHooks, withForchettaStatusLine, withoutForchettaHooks, withoutForchettaStatusLine } from '../src/shared/settings.ts';
@@ -362,6 +365,59 @@ describe('the programs of Windows', () => {
     const none = windowsSteps({ release: '10.0.22631', node: '22.1.0', pty: 'blocked by policy' });
     expect(none).not.toHaveProperty('error');
     expect(none.steps.filter((step) => step.mark === '▲').map((step) => step.label)).toEqual(['Terminals', 'claude', 'git']);
+    const node = (nodePath: string) => windowsSteps({ release: '10.0.22631', node: '24.20.0', nodePath }).steps.find((step) => step.label === 'Node.js');
+    expect(node('C:/Program Files/nodejs/node.exe')).toMatchObject({ mark: '✓', detail: '24.20.0' });
+    expect(node('C:/nvm/v24.20.0/node.exe')).toMatchObject({ mark: '▲', detail: expect.stringContaining('forchetta setup') });
+  });
+});
+
+describe('the Node.js of the hooks', () => {
+  const winget = 'C:/Users/me/AppData/Local/Microsoft/WinGet/Packages/OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe/node-v24.20.0-win-x64/node.exe';
+  const own = 'C:/Users/me/.local/lib/forchetta-node/node.exe';
+  const system = 'C:/Program Files/nodejs/node.exe';
+  const has = (...found: string[]) => (path: string): boolean => found.includes(path);
+  const targets = (node: string) => ({ port: 47821, hookScript: '', permissionScript: '', guardScript: '', windows: { node, hookJs: 'C:/Users/me/.local/lib/forchetta/dist/windows/forchetta-hooks.js' } });
+
+  it('is of a version when an update of Node.js takes its folder away', () => {
+    for (const path of [winget, 'C:/Users/me/AppData/Roaming/nvm/v22.11.0/node.exe', 'C:/Users/me/AppData/Local/Volta/tools/image/node/22.11.0/node.exe', 'C:/Users/me/AppData/Local/fnm_multishells/123_456/node.exe']) expect(nodeOfAVersion(path), path).toBe(true);
+    for (const path of [own, system, 'C:/nvm4w/nodejs/node.exe', 'C:/Users/me/scoop/apps/nodejs/current/node.exe', 'C:/Users/me.1.2.3/.local/lib/forchetta-node/node.exe']) expect(nodeOfAVersion(path), path).toBe(false);
+  });
+
+  it('is the saved one while it is there, and one that stays before one of a version', () => {
+    expect(lastingNode(undefined, system, has(), true)).toBe(system);
+    expect(lastingNode(system, winget, has(system), true)).toBe(system);
+    expect(lastingNode(winget, own, has(), true)).toBe(own);
+    expect(lastingNode(winget, own, has(winget), true)).toBe(own);
+    expect(lastingNode(winget, 'C:/nvm/v22.11.0/node.exe', has(winget), true)).toBe(winget);
+  });
+
+  it('on a Mac, and on Linux, is the saved one as long as it is there', () => {
+    const nvm = '/Users/dev/.nvm/versions/node/v22.11.0/bin/node';
+    expect(lastingNode(nvm, '/usr/local/bin/node', has(nvm), false)).toBe(nvm);
+    expect(lastingNode(nvm, '/usr/local/bin/node', has(), false)).toBe('/usr/local/bin/node');
+  });
+
+  it('changes in every hook, and no hook is there twice', () => {
+    const mine = { type: 'command', command: 'node', args: ['C:/mine/check.js', 'hook'] };
+    const before = withForchettaHooks({ hooks: { Stop: [{ hooks: [mine] }] } }, targets(winget)).settings;
+    expect(nodeOfHooks(before)).toBe(winget);
+    const after = withForchettaHooks(before, targets(own));
+    expect(after.changes.every((line) => line.startsWith('~'))).toBe(true);
+    expect(after.settings).toEqual(withForchettaHooks({ hooks: { Stop: [{ hooks: [mine] }] } }, targets(own)).settings);
+    expect(nodeOfHooks(after.settings)).toBe(own);
+  });
+
+  it('is read only from the hooks of Forchetta', () => {
+    for (const settings of [{}, { hooks: null }, { hooks: { Stop: 'no' } }, { hooks: { Stop: [null, { hooks: [null, { type: 'command', command: 'node', args: ['C:/mine/check.js', 'hook'] }] }] } }]) expect(nodeOfHooks(settings as Record<string, unknown>)).toBeUndefined();
+  });
+
+  it.runIf(WINDOWS)('is missed by the checklist when it is gone, and may be another than the one of the daemon', () => {
+    const config = { ...DEFAULT_CONFIG, port: 47821 };
+    const { hookJs } = hookTargets(config).windows!;
+    const on = (node: string): SystemInputs => ({ config, notesSupported: false, haikuOn: false, socket: true, hookSeen: false, sessions: 0, settingsText: JSON.stringify(withForchettaHooks({}, { ...targets(node), windows: { node, hookJs } }).settings) });
+    const hooks = (node: string, there: (path: string) => boolean) => setupChecks(on(node), 'windows', there).find((check) => check.id === 'hooks');
+    expect(hooks(own, has(own))).toMatchObject({ ok: true });
+    expect(hooks(winget, has())).toMatchObject({ ok: false, detail: expect.stringContaining('not there any more'), fix: 'forchetta hooks install' });
   });
 });
 

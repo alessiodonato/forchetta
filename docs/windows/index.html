@@ -157,7 +157,7 @@
       <p>Forchetta <span class="place">PowerShell</span></p>
       <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
       <ul>
-        <li>It downloads Forchetta and checks it. Without Node.js 22 it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
+        <li>It downloads Forchetta and checks it. Without Node.js 22, or with one in a folder of its version, as winget and nvm may keep it, it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
         <li>It lists the hooks it adds to <code>.claude\settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
         <li>It adds <code>.local\bin</code>, in your user folder, to your <code>PATH</code>: for your user only, where the installer of Claude Code puts its own command.</li>
       </ul>

@@ -1,6 +1,6 @@
 import { release } from 'node:os';
 import { ptyProblem } from '../daemon/pty.ts';
-import { which } from '../shared/config.ts';
+import { loadConfig, nodeOfAVersion, resolveTool, which } from '../shared/config.ts';
 import { UserError } from '../shared/errors.ts';
 import { paths } from '../shared/paths.ts';
 import { compareVersions } from '../shared/system.ts';
@@ -19,6 +19,8 @@ export interface WindowsFacts {
   /** 10.0.22631 */
   release: string;
   node: string;
+  /** The node the hooks run on. */
+  nodePath?: string;
   claude?: string;
   git?: string;
   bash?: string;
@@ -35,7 +37,9 @@ export function windowsSteps(facts: WindowsFacts): { steps: SetupStep[] } | { st
   if ((Number(facts.release.split('.')[2]) || MIN_BUILD) < MIN_BUILD) return stop(`${windowsName(facts.release)} is too old: Forchetta needs Windows 10 1809 or later`, 'update Windows');
   steps.push({ label: 'Windows', detail: windowsName(facts.release), mark: '✓' });
   if (compareVersions(facts.node, '22.0.0') < 0) return stop(`Node.js ${facts.node} is too old: Forchetta needs 22 or later`, 'install it from https://nodejs.org');
-  steps.push({ label: 'Node.js', detail: facts.node, mark: '✓' });
+  // With it the hooks stop at the next update of Node.js, and nothing would say why.
+  if (facts.nodePath && nodeOfAVersion(facts.nodePath)) steps.push({ label: 'Node.js', detail: `${facts.node}, in a folder of its version: when it is updated the hooks stop, until you run \`forchetta setup\` again (install.ps1 gives Forchetta a Node.js that stays)`, mark: '▲' });
+  else steps.push({ label: 'Node.js', detail: facts.node, mark: '✓' });
   if (facts.pty) steps.push({ label: 'Terminals', detail: `they cannot open: ${facts.pty}. The sessions you start in a terminal show up all the same, and so do the guard and the permissions`, mark: '▲' });
   else steps.push({ label: 'Terminals', detail: 'they open', mark: '✓' });
   if (facts.claude) steps.push({ label: 'claude', detail: tildify(facts.claude), mark: '✓' });
@@ -51,7 +55,7 @@ export function windowsFacts(): WindowsFacts {
   const git = windowsGit();
   const bash = gitBash();
   const pty = ptyProblem();
-  return { release: release(), node: process.versions.node, ...(claude ? { claude } : {}), ...(git ? { git } : {}), ...(bash ? { bash } : {}), ...(pty ? { pty } : {}) };
+  return { release: release(), node: process.versions.node, nodePath: resolveTool('node', loadConfig()), ...(claude ? { claude } : {}), ...(git ? { git } : {}), ...(bash ? { bash } : {}), ...(pty ? { pty } : {}) };
 }
 
 /** Looks, and says each step; stops with what to do when something Forchetta cannot do without is missing. */

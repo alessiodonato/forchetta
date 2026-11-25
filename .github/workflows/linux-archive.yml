@@ -276,6 +276,54 @@ jobs:
           if (($path -split ';' | Where-Object { $_ -eq (Join-Path $userHome '.local\bin') }).Count -gt 1) { throw "twice in the PATH: $path" }
           if (-not (Get-ChildItem -Recurse -Filter Forchetta.lnk (Join-Path $userHome 'AppData'), (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'))) { throw 'no shortcut' }
 
+      # As winget and the version managers keep it: an update takes that folder away, and the hooks would stop.
+      - name: The hooks run on no Node.js that an update takes away
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = [regex]::Match((Get-Content -Raw release\install.ps1), "PinnedVersion = '([^']+)'").Groups[1].Value
+          # The Node.js that the step before took, put where one of the PC could be.
+          $node = Join-Path $env:RUNNER_TEMP 'Ada Lovelace\.local\lib\forchetta-node\node.exe'
+          $others = (($env:Path -split ';') | Where-Object { $_ -and -not (Test-Path (Join-Path $_ 'node.exe')) }) -join ';'
+          $env:FORCHETTA_RELEASES = Join-Path $env:RUNNER_TEMP 'releases'
+          $env:FORCHETTA_NO_SETUP = '1'
+          $env:FORCHETTA_NO_SHORTCUT = '1'
+          $cases = @(
+            @{ Name = 'versioned'; Folder = 'node-v22.0.0-win-x64'; Reach = $true; Own = $true },
+            @{ Name = 'lasting'; Folder = 'nodejs'; Reach = $false; Own = $false },
+            @{ Name = 'offline'; Folder = 'node-v22.0.0-win-x64'; Reach = $false; Own = $false }
+          )
+          foreach ($case in $cases) {
+            $userHome = Join-Path $env:RUNNER_TEMP "home-$($case.Name)"
+            $there = Join-Path $env:RUNNER_TEMP $case.Folder
+            New-Item -ItemType Directory -Force $userHome, $there | Out-Null
+            Copy-Item -LiteralPath $node -Destination (Join-Path $there 'node.exe') -Force
+            $env:USERPROFILE = $userHome
+            $env:Path = "$there;$others"
+            # A place with nothing in it is a nodejs.org that does not answer.
+            if ($case.Reach) { $env:FORCHETTA_NODE_DIST = '' } else { $env:FORCHETTA_NODE_DIST = Join-Path $env:RUNNER_TEMP 'no-such-place' }
+            Get-Content -Raw release\install.ps1 | Invoke-Expression
+            $forchetta = Join-Path $userHome '.local\bin\forchetta.cmd'
+            if ((& $forchetta --version) -ne $version) { throw "$($case.Name): the command does not answer" }
+            $own = Test-Path (Join-Path $userHome '.local\lib\forchetta-node\node.exe')
+            if ($own -ne $case.Own) { throw "$($case.Name): a Node.js of its own: $own" }
+            & $forchetta setup --yes --no-restart
+            if ($LASTEXITCODE -ne 0) { throw "$($case.Name): setup" }
+            $settings = Get-Content -Raw (Join-Path $userHome '.claude\settings.json')
+            if ($case.Own) {
+              if ($settings -notmatch 'forchetta-node/node\.exe') { throw "$($case.Name): $settings" }
+              if ($settings -match 'node-v22\.0\.0') { throw "$($case.Name): the hooks name a version of Node.js: $settings" }
+            } elseif ($settings -notmatch "$($case.Folder -replace '\.', '\.')/node\.exe") { throw "$($case.Name): $settings" }
+          }
+          # As who has a beta that wrote the versioned one: the installer again, and the hooks move to the one that stays.
+          $userHome = Join-Path $env:RUNNER_TEMP 'home-offline'
+          $env:FORCHETTA_NODE_DIST = ''
+          Get-Content -Raw release\install.ps1 | Invoke-Expression
+          $forchetta = Join-Path $userHome '.local\bin\forchetta.cmd'
+          & $forchetta setup --yes --no-restart
+          if ($LASTEXITCODE -ne 0) { throw 'setup again' }
+          $settings = Get-Content -Raw (Join-Path $userHome '.claude\settings.json')
+          if ($settings -notmatch 'forchetta-node/node\.exe' -or $settings -match 'node-v22\.0\.0') { throw "again: $settings" }
+
       - name: A changed archive is refused
         run: |
           $version = [regex]::Match((Get-Content -Raw release\install.ps1), "PinnedVersion = '([^']+)'").Groups[1].Value

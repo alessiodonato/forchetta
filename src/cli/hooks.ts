@@ -118,7 +118,7 @@ function withToolPaths(config: Config, settingsText: string | undefined): Config
     ...config,
     paths: {
       // node of Homebrew lives in a folder per version: its opt path survives `brew upgrade node`.
-      node: stablePath(config.paths.node ?? resolveTool('node', config)),
+      node: stablePath(resolveTool('node', config)),
       // No tmux on Windows: each session has a host of its own.
       ...(WINDOWS ? {} : { tmux: config.paths.tmux ?? which('tmux') }),
       claude: config.paths.claude ?? which('claude'),

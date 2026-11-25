@@ -174,8 +174,26 @@ function onWindows(name: string, env: NodeJS.ProcessEnv): string | undefined {
   return findExe(name, [join(homedir(), '.local', 'bin')], env);
 }
 
+/**
+ * Whether a node is in a folder of its version, as winget, nvm, fnm and Volta keep it (forward slashes): an update takes that
+ * folder away. The one docs/install.ps1 puts next to Forchetta stays where it is.
+ */
+export const nodeOfAVersion = (path: string): boolean => {
+  const folder = path.slice(0, path.lastIndexOf('/') + 1);
+  return !folder.endsWith('/forchetta-node/') && (/\d+\.\d+\.\d+/.test(folder) || folder.includes('/fnm_multishells/'));
+};
+
+/**
+ * The node Forchetta runs on: the one a setup saved while it is there (the app looks for it the same way), else the one that
+ * runs now. On Windows the hooks name it: between the two, the one an update leaves where it is.
+ */
+export function lastingNode(saved: string | undefined, current: string, there: (path: string) => boolean = executable, windows = WINDOWS): string {
+  if (!saved || !there(saved)) return current;
+  return windows && nodeOfAVersion(saved) && !nodeOfAVersion(current) ? current : saved;
+}
+
 export function resolveTool(tool: Tool, config: Config): string {
-  if (tool === 'node' && !config.paths.node) return WINDOWS ? slashes(process.execPath) : process.execPath;
+  if (tool === 'node') return lastingNode(config.paths.node, WINDOWS ? slashes(process.execPath) : process.execPath);
   const found = config.paths[tool] ?? which(tool);
   if (!found) throw new UserError(`${tool} not found: install it, or write its path in ${paths.config}`);
   return found;

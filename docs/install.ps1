@@ -3,9 +3,9 @@
 #   irm https://forchetta.dev/install.ps1 | iex
 #
 # It needs no administrator: Forchetta goes in %USERPROFILE%\.local\lib\forchetta, its command in %USERPROFILE%\.local\bin, its
-# data in %USERPROFILE%\.local\share\forchetta. Without Node.js 22 or later, one from nodejs.org goes in
-# %USERPROFILE%\.local\lib\forchetta-node, only for Forchetta. Run it again to update. Nothing here asks Windows to trust a
-# program of ours: what runs is Node.js.
+# data in %USERPROFILE%\.local\share\forchetta. Without Node.js 22 or later, or with one that its next update
+# would move, one from nodejs.org goes in %USERPROFILE%\.local\lib\forchetta-node, only for Forchetta. Run it again to update.
+# Nothing here asks Windows to trust a program of ours: what runs is Node.js.
 & {
   $ErrorActionPreference = 'Stop'
   $ProgressPreference = 'SilentlyContinue'
@@ -61,6 +61,14 @@
     return ''
   }
   function Test-Recent($version) { ($version -match '^(\d+)\.') -and ([int]$Matches[1] -ge 22) }
+  # Not in a folder of its version, as winget, nvm, fnm and Volta keep it: an update takes that folder away, and the hooks, which
+  # name it, would stop. What counts is the program that runs, not the one that starts it (src/shared/config.ts has the same rule).
+  function Test-Lasting($node) {
+    $path = Read-Program $node @('-p', 'process.execPath')
+    if (-not $path) { return $false }
+    $folder = [IO.Path]::GetDirectoryName($path) + '\'
+    ($folder -notmatch '\d+\.\d+\.\d+') -and ($folder -notmatch '[\\/]fnm_multishells[\\/]')
+  }
 
   function Expand-Tar($file, $to) {
     New-Item -ItemType Directory -Force -Path $to | Out-Null
@@ -81,12 +89,23 @@
   function Install-Node($work, $arch) {
     $ownNode = Join-Path $NodeLib 'node.exe'
     $own = if (Test-Path -LiteralPath $ownNode) { Read-Program $ownNode @('-p', 'process.versions.node') } else { '' }
+    # The Node.js of this PC when its next update takes it away: better than none, if nodejs.org does not answer.
+    $moves = ''
+    $stays = 'nodejs.org does not answer: the hooks run on the Node.js of this PC. After an update of it, run this again.'
     if (-not $own -and -not $env:FORCHETTA_NODE_ALWAYS) {
       $system = Get-Command node.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-      if ($system -and (Test-Recent (Read-Program $system.Source @('-p', 'process.versions.node')))) { return $system.Source }
+      if ($system -and (Test-Recent (Read-Program $system.Source @('-p', 'process.versions.node')))) {
+        if (Test-Lasting $system.Source) { return $system.Source }
+        $moves = $system.Source
+        Say 'The Node.js of this PC is in a folder that its next update takes away: Forchetta gets one of its own.'
+      }
     }
     $sums = Join-Path $work 'SHASUMS256.txt'
     try { Get-File "$NodeDist/SHASUMS256.txt" $sums } catch {
+      if ($moves) {
+        Say $stays
+        return $moves
+      }
       if (-not (Test-Recent $own)) { Stop-Here 'Node.js could not be downloaded' 'install Node.js 22 or later from https://nodejs.org, then run this again' }
       Say "nodejs.org does not answer: the Node.js of Forchetta stays at $own."
       return $ownNode
@@ -97,7 +116,11 @@
     if ($version -eq $own) { return $ownNode }
     Say 'Downloading a Node.js for Forchetta alone...'
     $zip = Join-Path $work 'node.zip'
-    Get-File "$NodeDist/$file" $zip
+    try { Get-File "$NodeDist/$file" $zip } catch {
+      if (-not $moves) { throw }
+      Say $stays
+      return $moves
+    }
     if (-not (Test-Intact $zip $want)) { Stop-Here 'the download of Node.js is not the one nodejs.org lists: nothing was installed' }
     $new = "$NodeLib.new"
     if (Test-Path -LiteralPath $new) { Remove-Item -LiteralPath $new -Recurse -Force }
