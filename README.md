@@ -83,7 +83,7 @@ To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Forchetta runs on Windows itself: no WSL, no administrator. The Claude Code it shows is the one you have, with your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use it from a window of Edge or Chrome: the same page as on a Mac, without the menu bar and the system-wide shortcut.
 
-It needs people to try it: its tests run on Windows with the real Claude Code, but no one has used it on a PC of their own yet. In PowerShell, not as administrator:
+It needs people to try it: its tests run on Windows with the real Claude Code, and the first reports from a PC are in (Windows 11). In PowerShell, not as administrator:
 
 ```powershell
 irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex

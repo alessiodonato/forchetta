@@ -85,7 +85,7 @@ Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
 Forchetta gira direttamente su Windows: niente WSL, niente amministratore. Il Claude Code che mostra è quello che hai già, con le tue impostazioni, e vede quello che vede adesso: le tue cartelle, i tuoi programmi, le periferiche collegate al PC. La usi da una finestra di Edge o Chrome: la stessa pagina del Mac, senza la barra dei menu e la scorciatoia da qualunque programma.
 
-Serve qualcuno che la provi: i suoi test girano su Windows con il vero Claude Code, ma nessuno l'ha ancora usata sul proprio PC. In PowerShell, non come amministratore:
+Serve qualcuno che la provi: i suoi test girano su Windows con il vero Claude Code, e sono arrivate le prime segnalazioni da un PC (Windows 11). In PowerShell, non come amministratore:
 
 ```powershell
 irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.2/install.ps1 | iex
