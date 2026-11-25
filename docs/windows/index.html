@@ -127,7 +127,7 @@
 <article>
   <h1>Forchetta on Windows</h1>
   <p class="sub">A beta that needs people to try it.</p>
-  <p class="meta">Version 0.13.0-beta.4, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. The first reports from a PC are in, from Windows 11.</p>
+  <p class="meta">Version 0.13.0-beta.5, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. The first reports from a PC are in, from Windows 11.</p>
 
   <p>Forchetta runs on Windows itself: no WSL, no Ubuntu, no administrator. The Claude Code it shows is the one you have, with your account and your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use Forchetta from a window of Edge or Chrome: the same page as on a Mac.</p>
   <p>Do you work inside WSL? <a href="wsl/">There is a guide for that</a> too.</p>
@@ -155,7 +155,7 @@
     </li>
     <li id="step-2">
       <p>Forchetta <span class="place">PowerShell</span></p>
-      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.4/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.4/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
+      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.5/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.5/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
       <ul>
         <li>It downloads Forchetta and checks it. Without Node.js 22, or with one in a folder of its version, as winget and nvm may keep it, it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
         <li>It lists the hooks it adds to <code>.claude\settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
@@ -198,7 +198,7 @@
 
   <h2 id="update">Update</h2>
   <p>The command of the install again, in PowerShell and not as administrator. There is nothing to uninstall:</p>
-  <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.4/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.4/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
+  <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.5/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.5/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
   <p>It shows what changes in the hooks: answer <code>y</code>. It starts Forchetta again on the new version; then open the window with <code>forchetta open</code>. The sessions at work go on. From 0.13.0-beta.4 the window says when there is a new version and <strong>Update</strong> installs it: the command is for coming to it, once. The <a href="../changelog/">changelog</a> says what each one brings.</p>
 
   <h2 id="safe">What keeps it safe</h2>

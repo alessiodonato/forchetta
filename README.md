@@ -86,7 +86,7 @@ Forchetta runs on Windows itself: no WSL, no administrator. The Claude Code it s
 It needs people to try it: its tests run on Windows with the real Claude Code, and the first reports from a PC are in (Windows 11). In PowerShell, not as administrator:
 
 ```powershell
-irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.4/install.ps1 | iex
+irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.5/install.ps1 | iex
 ```
 
 It shows the hooks it adds, and asks: answer `y`. Then `forchetta open`, or Forchetta in the Start menu. To update, run it again. You need Windows 10 1809 or later and [Claude Code for Windows](https://code.claude.com/docs/en/setup); Node.js comes if you don't have it.
@@ -94,7 +94,7 @@ It shows the hooks it adds, and asks: answer `y`. Then `forchetta open`, or Forc
 On Linux, with `curl`, `tmux` and `lsof` installed, and in WSL if you work there:
 
 ```sh
-curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.4/install.sh &&
+curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.5/install.sh &&
 sh ~/forchetta-install.sh
 ```
 
