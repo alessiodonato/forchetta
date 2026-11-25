@@ -27,6 +27,11 @@ describe('the text of a selection', () => {
     );
   });
 
+  it('loses the sign and the no-break spaces of a prompt too', () => {
+    expect(cleanSelection('❯\u00a0perché?\n  seconda\u00a0riga')).toBe('perché?\nseconda riga');
+    expect(cleanSelection('  ⎿ \u00a0risultato\n     del comando')).toBe('risultato\ndel comando');
+  });
+
   it('drops rules and the sides of boxes', () => {
     const screen = ['╭──────────────────╮', '│ Welcome to Claude │', '│   /help for help  │', '╰──────────────────╯', '────────────'].join('\n');
     expect(cleanSelection(screen)).toBe('Welcome to Claude\n  /help for help');

@@ -1,8 +1,9 @@
 // What you select in a pane, made fit to quote to Claude, and the texts the menu of the selection sends.
 //
-// The selection of tmux brings along what Claude Code draws around its text: ⏺ and ⎿ before its lines, │ at the
-// sides of its boxes, the rules, and the indentation that lines its text up after them. All of that goes; the text
-// keeps its own indentation (code, lists), relative to its least indented line.
+// The selection of tmux brings along what Claude Code draws around its text: ❯, ⏺ and ⎿ before its lines, with
+// no-break spaces after some, │ at the sides of its boxes, the rules, and the indentation that lines its text up after
+// them. All of that goes; the text keeps its own indentation (code, lists), relative to its least indented line. For
+// the clipboard the copy-command of tmux does its part of this (config/tmux.conf).
 
 export const MAX_SELECTION = 10_000;
 /** The longest question of /btw, in bytes: the same limit as the field of /btw in the box (daemon/commands.ts). */
@@ -18,6 +19,7 @@ export function cleanSelection(text: string): string {
   let lines = text
     .replace(/\r\n?/g, '\n')
     .replace(/\t/g, '  ')
+    .replace(/\u00a0/g, ' ')
     // Control characters but newlines: an Esc in a paste could close it early.
     .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '')
     .split('\n')
@@ -28,8 +30,8 @@ export function cleanSelection(text: string): string {
       // The sides of a box: "│ text │". The left one becomes a space, so that the text stays lined up.
       .replace(/^(\s*)[│┃]/, '$1 ')
       .replace(/\s*[│┃]$/, '')
-      // ⏺ before a message or a tool, ⎿ before its result: one cell each, as a space.
-      .replace(/^(\s*)[⏺⎿](?=\s|$)/, '$1 ')
+      // ❯ before your message, ⏺ before one of Claude or a tool, ⎿ before its result: one cell each, as a space.
+      .replace(/^(\s*)[❯⏺⎿](?=\s|$)/, '$1 ')
       .replace(/\s+$/, ''),
   );
   const indents = lines.filter((line) => line.trim()).map(indentOf);

@@ -6,7 +6,7 @@ import { homedir, uptime } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { contextWindowOf, detectArricurdai, loadConfig, resolveTool, saveConfig, which } from '../shared/config.ts';
 import { claudeConfigDir, ensurePrivateDir, paths, ROOT } from '../shared/paths.ts';
-import { listPanes, Tmux } from '../shared/tmux.ts';
+import { listPanes, reloadConf, Tmux } from '../shared/tmux.ts';
 import { VERSION } from '../shared/version.ts';
 import { ArricurdaiNotes, ArricurdaiPoller, readArricurdaiStatus } from './arricurdai.ts';
 import { isAlive, readClaudeAgents, readSessionFile } from './claude-agents.ts';
@@ -1308,6 +1308,7 @@ function main(): void {
         hub?.setGuardStats(guardStats.info());
       }, SWEEP_MS),
     );
+    void reloadConf(tmux);
     void reconcile('start');
     // The first look of the automations once the sessions are known again (a run at work, its sessions).
     setTimeout(() => void automations?.tick(), 15_000).unref?.();

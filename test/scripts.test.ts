@@ -237,10 +237,18 @@ describe('bin/forchetta-permission', () => {
 describe('environment of a pane', () => {
   it('keeps the terminal, drops what belongs to tmux, the outer window and a running Claude session', () => {
     const env = paneEnv(
-      { PATH: '/bin', HOME: '/h', TERM: 'xterm', TMUX: 'x', TERM_SESSION_ID: 'w', CLAUDECODE: '1', CLAUDE_PID: '9', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', FORCHETTA_ANTHROPIC_API_KEY: 'k', 'BAD-NAME': 'x' },
+      { PATH: '/bin', HOME: '/h', TERM: 'xterm', TMUX: 'x', TERM_SESSION_ID: 'w', CLAUDECODE: '1', CLAUDE_PID: '9', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', FORCHETTA_ANTHROPIC_API_KEY: 'k', 'BAD-NAME': 'x', LANG: 'it_IT.UTF-8' },
       'id-1',
     );
-    expect(env).toEqual({ PATH: '/bin', HOME: '/h', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', FORCHETTA_AGENT: 'id-1' });
+    expect(env).toEqual({ PATH: '/bin', HOME: '/h', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', LANG: 'it_IT.UTF-8', FORCHETTA_AGENT: 'id-1' });
+  });
+
+  it('gets a locale in UTF-8 when it has none, and keeps the one it has', () => {
+    const lang = (env: NodeJS.ProcessEnv) => paneEnv(env, 'id-1').LANG;
+    expect(lang({})).toBe('en_US.UTF-8');
+    expect(lang({ LANG: '', LC_ALL: '' })).toBe('en_US.UTF-8');
+    expect(lang({ LANG: 'it_IT.UTF-8' })).toBe('it_IT.UTF-8');
+    expect(lang({ LC_CTYPE: 'UTF-8' })).toBeUndefined();
   });
 
   it('the daemon, started from the shell of a session, keeps nothing of that session or of its tmux pane', () => {

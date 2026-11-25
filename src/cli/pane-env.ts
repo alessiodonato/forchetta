@@ -31,6 +31,15 @@ const FORCHETTA_ONLY = new Set(['FORCHETTA_ANTHROPIC_API_KEY', 'FORCHETTA_AGENT'
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/**
+ * A locale in UTF-8, when there is none: an app opened from the Finder has no LANG, and neither has what it starts.
+ * Without one, pbcopy takes its text for Mac Roman: "perché" in the clipboard becomes "perch√©".
+ */
+export function withUtf8<T extends NodeJS.ProcessEnv>(env: T): T {
+  if (!/UTF-?8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || '')) (env as NodeJS.ProcessEnv).LANG = 'en_US.UTF-8';
+  return env;
+}
+
 export function paneEnv(env: NodeJS.ProcessEnv, agentId: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
@@ -39,7 +48,7 @@ export function paneEnv(env: NodeJS.ProcessEnv, agentId: string): Record<string,
     out[name] = value;
   }
   out.FORCHETTA_AGENT = agentId;
-  return out;
+  return withUtf8(out);
 }
 
 /**
