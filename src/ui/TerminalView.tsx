@@ -8,7 +8,7 @@ import { linksIn } from '../shared/artifacts.ts';
 import { openLink } from './Artifacts.tsx';
 import { token } from './connection.ts';
 import { GlyphFilter } from './glyphs.ts';
-import { clipboardKey, isFocusReport, keyInput } from './layout.ts';
+import { clipboardKey, isFocusReport, takeKey } from './layout.ts';
 import { commandKey, IS_MAC, keyText } from './platform.ts';
 import type { SelectionPlace } from './store.ts';
 import { terminalTheme } from './terminal-theme.ts';
@@ -213,11 +213,10 @@ export function TerminalView({ agentId, color, hosted = false, onUse, onStatus, 
       }
       // Not read by xterm.js (it would send ^V): the browser pastes, and xterm.js takes the paste.
       if (clipboard === 'paste') return false;
-      const input = keyInput(event);
-      if (input === undefined) return true;
-      send({ type: 'input', data: input });
-      callbacks.current.onUse();
-      return false;
+      return takeKey(event, (data) => {
+        send({ type: 'input', data });
+        callbacks.current.onUse();
+      });
     });
     // An image pasted with no text: Claude Code takes it from the clipboard itself, at its own ^V.
     const onPaste = (event: ClipboardEvent): void => {

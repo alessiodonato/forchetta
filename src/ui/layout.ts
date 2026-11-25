@@ -117,7 +117,6 @@ export function layoutFor(state: PaneState): Layout {
   }
 }
 
-/** Shift+Enter becomes a new line in the prompt of Claude Code (ESC and Enter, as Option+Enter in a terminal). */
 /**
  * A key of the terminal that the browser takes, not Claude Code, on a computer that is not a Mac: Ctrl+V pastes, and
  * Ctrl+C copies when something is selected in the pane by the page (Shift-drag). Elsewhere Ctrl+C stops Claude.
@@ -129,9 +128,22 @@ export function clipboardKey(event: { type: string; key: string; shiftKey: boole
   return key === 'c' && selected ? 'copy' : undefined;
 }
 
+/** Shift+Enter becomes a new line in the prompt of Claude Code (ESC and Enter, as Option+Enter in a terminal). */
 export function keyInput(event: { type: string; key: string; shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }): string | undefined {
   if (event.type === 'keydown' && event.key === 'Enter' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) return '\u001b\r';
   return undefined;
+}
+
+/**
+ * Sends what keyInput makes of a key, and says whether xterm.js reads the key (false: it does not). The browser must stop
+ * there too: it would go on to the keypress, which xterm.js takes for an Enter, and the prompt would leave.
+ */
+export function takeKey(event: Parameters<typeof keyInput>[0] & { preventDefault(): void }, send: (data: string) => void): boolean {
+  const input = keyInput(event);
+  if (input === undefined) return true;
+  event.preventDefault();
+  send(input);
+  return false;
 }
 
 /**
