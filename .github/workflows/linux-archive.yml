@@ -339,7 +339,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = [regex]::Match((Get-Content -Raw release\install.ps1), "PinnedVersion = '([^']+)'").Groups[1].Value
           $others = (($env:Path -split ';') | Where-Object { $_ -and -not (Test-Path (Join-Path $_ 'node.exe')) }) -join ';'
-          foreach ($before in '0.13.0-beta.2', '0.13.0-beta.3', '0.13.0-beta.4') {
+          foreach ($before in '0.13.0-beta.2', '0.13.0-beta.3', '0.13.0-beta.4', '0.13.0-beta.5') {
             $userHome = Join-Path $env:RUNNER_TEMP "home-from-$before"
             New-Item -ItemType Directory -Force $userHome | Out-Null
             $env:USERPROFILE = $userHome
