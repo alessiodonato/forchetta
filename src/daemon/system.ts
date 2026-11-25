@@ -165,6 +165,7 @@ export const editableSettings = (config: Config): EditableSettings => ({
   stallMin: config.stallMin,
   endedRetentionMin: config.endedRetentionMin,
   autoRestart: config.restarts.auto,
+  checkUpdates: config.updates.check,
   replace: config.panes.replace,
   hotkey: config.hotkey,
   port: config.port,

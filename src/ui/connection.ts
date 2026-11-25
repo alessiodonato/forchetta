@@ -33,6 +33,9 @@ const tokenFromHash = (): string | undefined => /(?:^#|&)token=([0-9a-f]{16,})/.
 /** From `forchetta open`: http://127.0.0.1:47821/#open=… */
 export const openCodeIn = (hash: string): string | undefined => /(?:^#|&)open=([0-9a-f]{32})(?:&|$)/.exec(hash)?.[1];
 
+/** How long a page waits for the daemon of the new version, during an update. */
+const COME_BACK_MS = 30 * 60_000;
+
 const TOKEN_KEY = 'forchetta.token';
 /** The token of this tab: sessionStorage is of this address (with its port) and this tab, and goes with it. */
 function keptToken(): string | undefined {
@@ -62,6 +65,8 @@ export class Connection {
   private retry: ReturnType<typeof setTimeout> | undefined;
   private visible = true;
   private lastAsk = 0;
+  /** An update is under way: the code this page gets in with after it, since the daemon comes back with another token. */
+  private handover: { code: string; until: number } | undefined;
 
   constructor(private readonly store: Store) {
     store.send = (message) => {
@@ -70,6 +75,7 @@ export class Connection {
       if (!sent) store.notSent();
       return sent;
     };
+    store.onUpdating = () => this.prepareHandover();
     window.forchettaAuth = (auth) => {
       this.use(auth.token);
       this.attempts = 0;
@@ -118,6 +124,32 @@ export class Connection {
     else this.store.setNeedsOpen(true);
   }
 
+  /** In a browser there is no app to give the new token: the page leaves a code of its own with the daemon of now. */
+  private prepareHandover(): void {
+    if (shell() || IS_MAC || this.handover) return;
+    const code = [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    if (this.send({ type: 'handover', code })) this.handover = { code, until: Date.now() + COME_BACK_MS };
+  }
+
+  /** After an update: the code for the token of the new daemon, once. */
+  private async comeBack(): Promise<boolean> {
+    if (!this.handover) return false;
+    try {
+      const response = await fetch('/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: this.handover.code }) });
+      const token = response.ok ? ((await response.json()) as { token?: unknown }).token : undefined;
+      if (typeof token !== 'string') return false;
+      this.handover = undefined;
+      keepToken(token);
+      this.use(token);
+      this.attempts = 0;
+      this.open();
+      return true;
+    } catch {
+      // Not there yet.
+      return false;
+    }
+  }
+
   setVisible(visible: boolean): void {
     this.visible = visible;
     this.send({ type: 'visibility', visible });
@@ -155,11 +187,18 @@ export class Connection {
     };
     socket.onclose = () => {
       this.store.setConnected(false);
-      // Refused, or nobody there: in a browser, only `forchetta open` can help.
-      if (!opened && !shell() && !IS_MAC) this.store.setNeedsOpen(true);
+      if (this.handover && Date.now() > this.handover.until) this.handover = undefined;
+      // Refused, or nobody there: in a browser, only `forchetta open` can help; or, during an update, waiting.
+      if (!opened && !shell() && !IS_MAC && !this.handover) this.store.setNeedsOpen(true);
       if (!opened) this.askShell();
-      const delay = Math.min(10_000, 1000 * 2 ** this.attempts++);
-      this.retry = setTimeout(() => this.open(), delay);
+      const again = (): void => {
+        const delay = Math.min(this.handover ? 2000 : 10_000, 1000 * 2 ** this.attempts++);
+        this.retry = setTimeout(() => this.open(), delay);
+      };
+      if (opened || !this.handover) return again();
+      void this.comeBack().then((back) => {
+        if (!back) again();
+      });
     };
     this.socket = socket;
   }

@@ -49,6 +49,10 @@ for (const name of ['CLAUDE_CONFIG_DIR', 'FORCHETTA_VAR', 'FORCHETTA_AGENT', 'CL
 // The status line of a home with a space is the command of the installer, in the PATH.
 env.Path = `${join(root, 'bin')};${claude ? resolve(claude, '..') : ''};${process.env.PATH}`;
 delete env.PATH;
+// A new version, as GitHub would say it: its installer is never run here (linux-archive.yml does).
+const releases = join(home, 'releases.json');
+writeFileSync(releases, JSON.stringify([{ tag_name: 'v99.0.0', draft: false, prerelease: true, assets: [{ name: 'install.ps1', browser_download_url: join(home, 'install.ps1') }] }]));
+env.FORCHETTA_UPDATE_SOURCE = releases;
 const varDir = join(home, '.local', 'share', 'forchetta');
 const node = process.execPath;
 /** Whatever happens the daemon stops: the next run needs its port. */
@@ -313,6 +317,18 @@ check('its turn ends', Boolean(await until(() => state(b) === 'idle')), state(b)
 const after = await other(`WRITE "${slashes(shared)}"`);
 check('then the file is free', readFileSync(shared, 'utf8') !== held, after);
 
+// ── a new version, and the pages that are open during it ─────────────────────────────────────────────────────
+const newer = await until(() => messages.filter((message) => message.type === 'updates').at(-1)?.updates.latest ?? hello.updates?.latest, 75_000);
+check('the page says that there is a new version', newer === '99.0.0', newer);
+// The installer is not there: it fails, says why, and this version goes on.
+send({ type: 'update', action: 'install' });
+const ownCode = 'ab'.repeat(16);
+send({ type: 'handover', code: ownCode });
+const runs = () => messages.filter((message) => message.type === 'updates').at(-1)?.updates.run;
+check('an update that cannot be had says why', Boolean(await until(() => runs()?.state === 'failed', 60_000)), JSON.stringify(runs()));
+check('and this version goes on', (await fetch(`${origin}/`)).status === 200);
+check('the code of the page is kept by its hash only', existsSync(join(varDir, 'handover.json')) && !readFileSync(join(varDir, 'handover.json'), 'utf8').includes(ownCode));
+
 // ── the daemon comes and goes ────────────────────────────────────────────────────────────────────────────────
 const pid = agents.get(a)?.pid;
 check('daemon stop', forchetta('daemon', 'stop').status === 0);
@@ -331,6 +347,11 @@ check('and Claude works as usual', silent.includes('You said'), silent);
 check('daemon start again', forchetta('daemon', 'start').status === 0);
 Object.assign(info, JSON.parse(readFileSync(join(varDir, 'daemon.json'), 'utf8')));
 token = info.token;
+const enter = async (code) => fetch(`http://127.0.0.1:${info.port}/open`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ code }) });
+const back = await enter(ownCode);
+check('a page that was open gets in again with its code', back.status === 200 && (await back.json()).token === token, back.status);
+check('once', (await enter(ownCode)).status === 403);
+check('and what let it in is gone', !existsSync(join(varDir, 'handover.json')));
 await connect();
 check('it finds the sessions again', agents.get(a)?.state !== 'ended' && agents.get(a)?.pid === pid, JSON.stringify({ state: state(a), pid: agents.get(a)?.pid }));
 const again = await terminal(a);

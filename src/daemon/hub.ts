@@ -17,6 +17,7 @@ import type { SkillInfo } from '../shared/skills.ts';
 import type { SystemInfo } from '../shared/system.ts';
 import type { FolderList } from './folder-list.ts';
 import { isLocalHost, isOwnOrigin } from './origin.ts';
+import type { UpdateInfo } from '../shared/updates.ts';
 
 // The WebSocket of the app, on /ws. On connection it sends every agent; then, at most once per tick, the agents
 // that changed and the ids of those that went away. The page tells whether its window can be seen, so that the
@@ -25,7 +26,9 @@ import { isLocalHost, isOwnOrigin } from './origin.ts';
 // Only the page of the daemon may connect: the Origin must be the daemon itself and the token must match.
 
 export type ServerMessage =
-  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[]; reopen?: LostSession[]; restarts?: RestartsInfo; order?: Place[]; shells?: { kinds: ShellKind[]; waiting: ShellInfo[] }; scheduled?: ScheduledTask[] }
+  | { type: 'hello'; now: number; agents: Agent[]; settings: UiSettings; today?: TodayInfo; crews?: CrewSummary[]; templates?: CrewTemplate[]; roles?: RolePreset[]; skills?: SkillInfo[]; claudeUpdate?: ClaudeUpdateInfo; prompts?: QuickPrompt[]; limits?: UsageLimits; guardStats?: GuardStatsInfo; system?: SystemInfo; automations?: AutomationView[]; reopen?: LostSession[]; restarts?: RestartsInfo; order?: Place[]; shells?: { kinds: ShellKind[]; waiting: ShellInfo[] }; scheduled?: ScheduledTask[]; updates?: UpdateInfo }
+  /** A new version of Forchetta, an update under way, or how it went. */
+  | { type: 'updates'; now: number; updates: UpdateInfo }
   /** The scheduled tasks of the Claude desktop app, read again or after a run moved. */
   | { type: 'scheduled'; now: number; tasks: ScheduledTask[] }
   /** A plain terminal opened, for the window that asked, or why not. */
@@ -149,6 +152,10 @@ export type ClientMessage =
   /** These sessions restart on the Claude Code installed; or the others go on, after one that stopped them. */
   | { type: 'restart'; agentIds: string[] }
   | { type: 'restartsGoOn'; goOn: boolean }
+  /** A page in a browser, while an update is under way: the code it will get in with after it (daemon/open-codes.ts). */
+  | { type: 'handover'; code: string }
+  /** A new version: installed, hidden (not this one), the line of the last one hidden; its hooks applied or not. */
+  | { type: 'update'; action: 'install' | 'hide' | 'forget' | 'hooks' | 'noHooks'; version?: string }
   /** The scheduled tasks, read again; the instructions of one as a new session, in a folder (answered with spawned). */
   | { type: 'scheduled' }
   | { type: 'runScheduled'; id: string; cwd: string }
@@ -290,6 +297,11 @@ export interface HubOptions {
   restarts?: () => RestartsInfo;
   onRestart?: (agentIds: string[]) => void;
   onRestartsGoOn?: (goOn: boolean) => void;
+  /** The code a page in a browser gets in with after an update. */
+  onHandover?: (code: string) => void;
+  /** A new version of Forchetta (daemon/updates.ts); undefined for one that does not update by itself. */
+  updates?: () => UpdateInfo;
+  onUpdate?: (action: 'install' | 'hide' | 'forget' | 'hooks' | 'noHooks', version?: string) => void;
   /** The scheduled tasks of the Claude desktop app (daemon/scheduled.ts), and starting one. */
   scheduled?: () => ScheduledTask[];
   onRunScheduled?: (id: string, cwd: string) => Promise<{ ok: true; agentId: string } | { ok: false; error: string }>;
@@ -361,6 +373,7 @@ export class Hub {
       order: this.options.order?.(),
       shells: this.options.shells?.(),
       scheduled: this.options.scheduled?.(),
+      updates: this.options.updates?.(),
     });
     this.updateWatched();
     ws.on('message', (data) => {
@@ -577,6 +590,10 @@ export class Hub {
           if (result.ok) this.broadcast({ type: 'prompts', now: Date.now(), prompts: this.options.prompts?.() ?? [] });
         } else if (message.type === 'restart' && Array.isArray(message.agentIds)) {
           this.options.onRestart?.(message.agentIds.filter((id): id is string => typeof id === 'string').slice(0, 200));
+        } else if (message.type === 'handover' && typeof message.code === 'string') {
+          this.options.onHandover?.(message.code);
+        } else if (message.type === 'update' && (message.action === 'install' || message.action === 'hide' || message.action === 'forget' || message.action === 'hooks' || message.action === 'noHooks')) {
+          this.options.onUpdate?.(message.action, typeof message.version === 'string' ? message.version.slice(0, 40) : undefined);
         } else if (message.type === 'scheduled' && this.options.scheduled) {
           this.send(ws, { type: 'scheduled', now: Date.now(), tasks: this.options.scheduled() });
         } else if (message.type === 'runScheduled' && typeof message.id === 'string' && typeof message.cwd === 'string' && this.options.onRunScheduled) {
@@ -735,6 +752,12 @@ export class Hub {
     if (JSON.stringify(stats) === JSON.stringify(this.guardStats)) return;
     this.guardStats = stats;
     this.broadcast({ type: 'guardStats', now: Date.now(), stats });
+  }
+
+  /** A new version, or an update moved. */
+  updatesChanged(): void {
+    const updates = this.options.updates?.();
+    if (updates) this.broadcast({ type: 'updates', now: Date.now(), updates });
   }
 
   /** A run of a scheduled task moved: every window gets them again, once for changes close together. */

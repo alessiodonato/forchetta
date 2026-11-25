@@ -192,6 +192,14 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
                   Sessions restart by themselves on a new Claude Code <span class="setup-detail">— with /restart, which keeps the conversation: only at rest, one at a time, once their prompt cache is over</span>
                 </span>
               </label>}
+              {store.state.updates && (
+                <label class="setting-check">
+                  <input type="checkbox" checked={draft.checkUpdates} onChange={(event) => set({ checkUpdates: (event.target as HTMLInputElement).checked })} />
+                  <span>
+                    Look for a new version of Forchetta once a day <span class="setup-detail">— asks GitHub for the last one, and sends nothing of yours; it installs only when you click</span>
+                  </span>
+                </label>
+              )}
               <div class="setting-row" role="group" aria-label="A fifth pane">
                 <span>A fifth pane</span>
                 <button type="button" class={`chip${draft.replace === 'lru' ? ' on' : ''}`} aria-pressed={draft.replace === 'lru'} onClick={() => set({ replace: 'lru' })}>

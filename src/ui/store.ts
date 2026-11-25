@@ -16,6 +16,8 @@ import { setCustomSkills, type SkillInfo } from '../shared/skills.ts';
 import type { ScheduledTask } from '../shared/scheduled.ts';
 import { isShellId, type ShellInfo, type ShellKind } from '../shared/shells.ts';
 import type { EditableSettings, SystemInfo } from '../shared/system.ts';
+import type { UpdateInfo } from '../shared/updates.ts';
+import { panesBefore } from './reload.ts';
 import { teamFileName, teamFileOf } from '../shared/team-file.ts';
 import { shell } from './connection.ts';
 import { cancelAsking, closePane, emptyPanes, openPane, type PaneState, prunePanes, replacePane, usePane } from './layout.ts';
@@ -109,6 +111,8 @@ export interface UiState {
   crewRequest?: { crewId: string; busy: boolean; n?: number; error?: string };
   /** The order of the boxes as you dragged them; undefined with a daemon that keeps none (the demo, an older one). */
   order?: readonly Place[];
+  /** A new version of Forchetta; undefined with one that does not update by itself. */
+  updates?: UpdateInfo;
   /** The scheduled tasks of the Claude desktop app; undefined with a daemon that does not read them. */
   scheduled?: readonly ScheduledTask[];
   /** The plain terminals of this window; what can run in one, undefined with a daemon that has none (the demo, an older one). */
@@ -195,6 +199,8 @@ export class Store {
   /** Sends a message to the daemon (set by the connection). */
   /** Sends a message to the daemon (connection.ts); false when it could not go. */
   send: (message: ClientMessage) => boolean = () => false;
+  /** An update of Forchetta is under way (connection.ts). */
+  onUpdating: () => void = () => {};
   /** A notification asked by the daemon (see attention.ts). */
   onNotify: (message: Extract<ServerMessage, { type: 'notify' }>) => void = () => {};
   /** Agents that arrived after the first list: their box enters with an animation, once. */
@@ -290,6 +296,11 @@ export class Store {
     }
     if (message.type === 'reopenList') {
       this.set({ reopen: message.sessions });
+      return;
+    }
+    if (message.type === 'updates') {
+      this.set({ updates: message.updates });
+      if (message.updates.run?.state === 'running') this.onUpdating();
       return;
     }
     if (message.type === 'scheduled') {
@@ -436,6 +447,7 @@ export class Store {
       return;
     }
     const agents = new Map(this.state.agents);
+    const first = !this.state.ready;
     const extra: Partial<UiState> = {};
     let comeBack: readonly ShellInfo[] = [];
     switch (message.type) {
@@ -458,6 +470,7 @@ export class Store {
         extra.restarts = message.restarts;
         extra.order = message.order;
         extra.scheduled = message.scheduled;
+        extra.updates = message.updates;
         extra.shellKinds = message.shells?.kinds;
         // Opened by this window before it reloaded: their panes open again.
         comeBack = message.shells?.waiting ?? [];
@@ -480,6 +493,8 @@ export class Store {
     extra.panes = prunePanes(this.state.panes, (id) => agents.has(id) || this.state.shells.has(id));
     this.noteSeen(agents, message.type === 'hello', extra.panes.open);
     this.set({ ...extra, agents, ready: true });
+    // The page loaded again for a new version: the terminals it had (reload.ts).
+    if (first) for (const id of panesBefore()) if (agents.has(id)) this.open(id);
     for (const shell of comeBack) if (!this.state.shells.has(shell.id)) this.showShell(shell);
     if (this.pendingOpen.some((id) => agents.has(id))) {
       const waiting = this.pendingOpen;
@@ -668,6 +683,24 @@ export class Store {
   spawn(cwd: string, prompt: string, choices: { model?: string; mode?: string; worktree?: string | boolean } = {}): void {
     this.set({ spawn: { busy: true } });
     this.send({ type: 'spawn', cwd, prompt, ...choices });
+  }
+
+  /** Installs the new version of Forchetta: the daemon says how it goes. */
+  updateForchetta(): void {
+    this.send({ type: 'update', action: 'install' });
+  }
+
+  hideUpdate(version: string): void {
+    this.send({ type: 'update', action: 'hide', version });
+  }
+
+  forgetUpdate(): void {
+    this.send({ type: 'update', action: 'forget' });
+  }
+
+  /** The hooks of the new version: applied, or left as they are. */
+  updateHooks(apply: boolean): void {
+    this.send({ type: 'update', action: apply ? 'hooks' : 'noHooks' });
   }
 
   /** The instructions of a scheduled task as a new session: it opens as one started from its panel. */

@@ -50,6 +50,8 @@ export interface EditableSettings {
   endedRetentionMin: number;
   /** The sessions at rest restart by themselves on a new Claude Code. */
   autoRestart: boolean;
+  /** A new version of Forchetta is looked for once a day. */
+  checkUpdates: boolean;
   /** A fifth pane replaces the least recently used one ('lru'), or asks ('chiedi'). */
   replace: 'lru' | 'chiedi';
   /** The shortcut that shows or hides the app from anywhere: "ctrl+alt+f", or "" for none. */
@@ -119,6 +121,7 @@ export function cleanSettings(input: unknown): { settings: EditableSettings } | 
       stallMin,
       endedRetentionMin,
       autoRestart: raw.autoRestart === true,
+      checkUpdates: raw.checkUpdates !== false,
       replace: raw.replace === 'chiedi' ? 'chiedi' : 'lru',
       hotkey,
       port,

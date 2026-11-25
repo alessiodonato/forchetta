@@ -49,9 +49,12 @@ describe('on a Mac', () => {
 
   it('the daemon turns on what is of Linux and WSL only there', () => {
     const main = readFileSync(join(ROOT, 'src', 'daemon', 'main.ts'), 'utf8');
-    expect(main).toContain("...(PLATFORM === 'macos' ? {} : { browser: { codes: new OpenCodes(), localhost: PLATFORM === 'wsl', ...(PLATFORM === 'linux' ? { sameUser } : {}) } }),");
+    expect(main).toContain("...(PLATFORM === 'macos' ? {} : { browser: { codes: openCodes, localhost: PLATFORM === 'wsl', ...(PLATFORM === 'linux' ? { sameUser } : {}) } }),");
     expect(main).toContain("PLATFORM === 'macos' ? { onChooseFolder: (folder?: string) => folderChooser.choose(folder) } : { onListFolders: (folder?: string) => listFolders(folder) }");
     expect(main.match(/localhost: PLATFORM === 'wsl'/g)).toHaveLength(3);
+    // The codes of the pages that were open during an update: none on a Mac, where the app has the token.
+    expect(main).toContain("if (PLATFORM !== 'macos' && existsSync(paths.handover)) {");
+    expect(main).toContain("if (PLATFORM === 'macos' || updates?.info().run?.state !== 'running' || !openCodes.hand(code)) return;");
     expect(main).toContain("ptyProblem: PLATFORM === 'macos' ? undefined : ptyProblem(),");
   });
 

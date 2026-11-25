@@ -64,6 +64,13 @@ const COMMANDS: Record<string, CommandHelp> = {
     ...(PLATFORM === 'macos' ? {} : { options: [{ name: '--print', text: 'Only print the address, to open by hand' }] }),
     examples: PLATFORM === 'macos' ? ['forchetta open'] : ['forchetta open', 'forchetta open --print'],
   },
+  update: {
+    summary: 'Install the last version, then set it up',
+    usage: 'forchetta update [--check]',
+    about: ['Installs the last version as you installed this one, then runs its setup: it shows what changes in the hooks and', 'asks first. The sessions go on; the daemon starts again on the new version.'],
+    options: [{ name: '--check', text: 'Only say whether there is a new version' }],
+    examples: ['forchetta update', 'forchetta update --check'],
+  },
   run: {
     summary: PLATFORM === 'windows' ? 'Start Claude Code where Forchetta shows it and sends it commands' : 'Start Claude Code in tmux, where Forchetta shows it and sends it commands',
     usage: 'forchetta run claude [claude arguments]',

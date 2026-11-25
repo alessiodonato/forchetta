@@ -373,6 +373,25 @@ jobs:
             $status = (& $forchetta daemon status) -join "`n"
             if ($LASTEXITCODE -ne 0 -or $status -notmatch [regex]::Escape($version)) { throw "over ${before}, the daemon is not the new one: $status" }
             if ((& $forchetta open --print) -notmatch '^http://127\.0\.0\.1:47821/#open=') { throw "open over $before" }
+            # And once more, as the page does: the installer of the release, with its checksum, then the setup of what it put there.
+            $installer = (Resolve-Path release\install.ps1).Path
+            $digest = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+            $source = Join-Path $userHome 'releases.json'
+            $list = ConvertTo-Json -Depth 5 -InputObject @(@{ tag_name = "v$version"; draft = $false; assets = @(@{ name = 'install.ps1'; browser_download_url = $installer; digest = "sha256:$digest" }) })
+            [IO.File]::WriteAllText($source, $list)
+            $env:FORCHETTA_UPDATE_SOURCE = $source
+            $env:FORCHETTA_UPDATE_FROM = '0.0.1'
+            & $forchetta update --page
+            $code = $LASTEXITCODE
+            $state = Get-Content -Raw (Join-Path $userHome '.local\share\forchetta\update-run.json')
+            if ($code -ne 0 -or $state -notmatch '"state": "done"') { throw "update over ${before}: $code $state" }
+            # An installer that is not the one GitHub says does not run.
+            [IO.File]::WriteAllText($source, $list.Replace($digest, ('0' * 64)))
+            & $forchetta update --page
+            $code = $LASTEXITCODE
+            $state = Get-Content -Raw (Join-Path $userHome '.local\share\forchetta\update-run.json')
+            if ($code -eq 0 -or $state -notmatch 'not the one of the release') { throw "a changed installer ran: $code $state" }
+            Remove-Item Env:FORCHETTA_UPDATE_SOURCE, Env:FORCHETTA_UPDATE_FROM
             & $forchetta daemon stop
           }
 

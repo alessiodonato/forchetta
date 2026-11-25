@@ -43,7 +43,7 @@ describe('the page', () => {
     const store = new Store();
     const sent: unknown[] = [];
     store.send = (message) => (sent.push(message), true);
-    const settings = { guard: { files: true, git: true, notes: true, servers: true }, stallMin: 10, endedRetentionMin: 10, autoRestart: false, replace: 'lru' as const, hotkey: '', port: 47900, haiku: false };
+    const settings = { guard: { files: true, git: true, notes: true, servers: true }, stallMin: 10, endedRetentionMin: 10, autoRestart: false, checkUpdates: true, replace: 'lru' as const, hotkey: '', port: 47900, haiku: false };
     store.saveSettings(settings);
     expect(store.state.settingsSave?.busy).toBe(true);
     expect(sent).toEqual([{ type: 'saveSettings', settings }]);

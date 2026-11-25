@@ -75,7 +75,7 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.12.8. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. To update: `brew upgrade forchetta && forchetta setup`, then quit the app and open it again.
+Version 0.12.8. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. From 0.12.8 a new version is one click, in the window, or `forchetta update`. To come to it: `brew upgrade forchetta && forchetta setup`.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -133,7 +133,7 @@ Commands to one session or to several, text handed from one terminal to another,
 
 - **`~/.claude/settings.json`**, only with `forchetta setup` or `forchetta hooks install`, after showing you every change, and with a backup. The hooks of Forchetta go next to yours without changing them; `forchetta hooks uninstall` removes only them.
 - **The hooks are small `sh` + `curl` scripts.** They always exit with 0, and print only a decision: your answer to a permission, or the guard stopping an edit. With Forchetta off, a session behaves exactly as without it (its status line says Forchetta is off). Most run in the background; the guard makes Claude wait about 30 ms, only before edits and Bash commands. [How the hooks work](https://forchetta.dev/manual.html#hooks)
-- **Everything else** stays in `~/Library/Application Support/Forchetta`, readable only by you. The daemon listens on `127.0.0.1` only, with a token. No telemetry. The one outside call that carries anything of yours is optional and off by default: a one-line summary of a session by Haiku, through the Claude API. When a team whose agents have skills starts, Forchetta fetches those skills from GitHub at a pinned commit, into that folder. An agent you give an MCP server of the studio runs it with `npx`, at a pinned version, fetched from npm the first time. **Describe**, in the studio, sends what you write to Claude through your own Claude Code, as any session does, with none of your files or settings. A team that starts from GitHub reads the issues or pull requests with your `gh`, and never writes there.
+- **Everything else** stays in `~/Library/Application Support/Forchetta`, readable only by you. The daemon listens on `127.0.0.1` only, with a token. No telemetry. The one outside call that carries anything of yours is optional and off by default: a one-line summary of a session by Haiku, through the Claude API. Once a day Forchetta asks GitHub which version is the last, with nothing of yours in the request; Settings turns it off, and it installs only when you click. When a team whose agents have skills starts, Forchetta fetches those skills from GitHub at a pinned commit, into that folder. An agent you give an MCP server of the studio runs it with `npx`, at a pinned version, fetched from npm the first time. **Describe**, in the studio, sends what you write to Claude through your own Claude Code, as any session does, with none of your files or settings. A team that starts from GitHub reads the issues or pull requests with your `gh`, and never writes there.
 - **`~/Library/LaunchAgents/dev.forchetta.daemon.plist`**, only if you run `forchetta daemon keepalive on`, so that macOS keeps the daemon alive.
 - At rest, the app, the page and the daemon together stay under 1% of CPU.
 

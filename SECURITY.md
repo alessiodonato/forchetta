@@ -50,4 +50,6 @@ The `install.ps1` and the `install.sh` of a release have an attestation as well,
 
 ## Versions
 
-Fixes go into the latest release. Update with `brew upgrade forchetta`, then `forchetta setup`; on Windows, on Linux and in WSL, with the installer again.
+Fixes go into the latest release. The window says when there is one, and installs it when you click; `forchetta update` does the same from a terminal. By hand: `brew upgrade forchetta`, then `forchetta setup`; on Windows, on Linux and in WSL, the installer again.
+
+Updates: once a day the daemon asks GitHub for the last version, with nothing of yours in the request, unless it is turned off in Settings. Nothing installs without a click. On a Mac, Homebrew does it. On Windows and Linux the installer comes over https from the release, runs only if it has the checksum GitHub gives of it, and takes only the archive of its own checksum. The hooks of a new version go into the settings of Claude Code only after the window showed what changes. A page open in a browser leaves the daemon a code of its own, kept by its hash in the private folder: it lets that page in once, at the daemon of the new version, within 40 minutes.

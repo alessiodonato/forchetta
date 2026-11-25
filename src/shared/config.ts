@@ -35,6 +35,8 @@ export interface Config {
   stallMin: number;
   /** The sessions at rest restart by themselves on a new Claude Code (daemon/restarts.ts). Off unless turned on. */
   restarts: { auto: boolean };
+  /** A new version of Forchetta is looked for once a day (daemon/updates.ts). On unless turned off. */
+  updates: { check: boolean };
   /** The shortcut that shows or hides the app from anywhere, read by the app: "ctrl+alt+f", or "" for none. */
   hotkey: string;
   /**
@@ -65,6 +67,7 @@ export const DEFAULT_CONFIG: Config = {
   reconcileIntervalMin: 5,
   stallMin: 10,
   restarts: { auto: false },
+  updates: { check: true },
   hotkey: 'ctrl+alt+f',
   guard: { files: true, git: true, notes: true, servers: true },
 };
@@ -108,6 +111,7 @@ export function loadConfig(file = paths.config, log: (message: string, level?: '
     reconcileIntervalMin: positive(raw.reconcileIntervalMin, DEFAULT_CONFIG.reconcileIntervalMin),
     stallMin: positive(raw.stallMin, DEFAULT_CONFIG.stallMin),
     restarts: { auto: (raw.restarts as { auto?: unknown } | undefined)?.auto === true },
+    updates: { check: (raw.updates as { check?: unknown } | undefined)?.check !== false },
     hotkey: typeof raw.hotkey === 'string' ? raw.hotkey : DEFAULT_CONFIG.hotkey,
     // On unless turned off: only false counts.
     guard: { files: guard.files !== false, git: guard.git !== false, notes: guard.notes !== false, servers: guard.servers !== false },

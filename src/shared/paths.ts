@@ -95,6 +95,9 @@ export interface Paths {
   /** The sessions that ended with the Mac, to reopen (daemon/reopen.ts). */
   reopen: string;
   order: string;
+  updates: string;
+  updateRun: string;
+  handover: string;
   scheduled: string;
   /** What the guard did, counted by day (daemon/guard-stats.ts). */
   guardStats: string;
@@ -144,6 +147,9 @@ export function pathsFor(varDir: string, root = ROOT, windows = WINDOWS): Paths 
     automations: join(varDir, 'automations.json'),
     reopen: join(varDir, 'reopen.json'),
     order: join(varDir, 'order.json'),
+    updates: join(varDir, 'updates.json'),
+    updateRun: join(varDir, 'update-run.json'),
+    handover: join(varDir, 'handover.json'),
     scheduled: join(varDir, 'scheduled.json'),
     guardStats: join(varDir, 'guard-stats.json'),
     patches: join(varDir, 'patches'),
