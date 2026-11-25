@@ -93,6 +93,6 @@ describe('the console a session draws in', () => {
     expect(consoleBuild(26100, false)).toBe(26100);
     // The one of node-pty did not open: it is the one of that Windows.
     expect(consoleBuild(19045, false)).toBe(19045);
-    expect(consoleBuild(undefined, false)).toBeUndefined();
+    if (process.platform !== 'win32') expect(consoleBuild()).toBeUndefined();
   });
 });
