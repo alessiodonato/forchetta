@@ -207,6 +207,14 @@ export function SettingsPanel({ store, onClose }: { store: Store; onClose: () =>
               </div>
 
               <h2>The app</h2>
+              {draft.openAtLogin !== undefined && (
+                <label class="setting-check">
+                  <input type="checkbox" checked={draft.openAtLogin} onChange={(event) => set({ openAtLogin: (event.target as HTMLInputElement).checked })} />
+                  <span>
+                    Open Forchetta when you log in <span class="setup-detail">— a LaunchAgent opens the app once at each login</span>
+                  </span>
+                </label>
+              )}
               <label class="setting-row" for="setting-hotkey">
                 <span>Show or hide Forchetta from anywhere with</span>
                 <input id="setting-hotkey" type="text" value={draft.hotkey} placeholder="ctrl+alt+f" onInput={(event) => set({ hotkey: (event.target as HTMLInputElement).value })} />

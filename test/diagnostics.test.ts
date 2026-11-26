@@ -1,10 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { logProblems, redact } from '../src/cli/doctor.ts';
 import { launchAgentPlist } from '../src/daemon/launch-agent.ts';
 import { LogFile, logLine } from '../src/daemon/log.ts';
-import { optionalFeatures, setupChecks, type SystemInputs } from '../src/daemon/system.ts';
+import { appOfThisForchetta, openAgentFile, openAgentPlist, opensAtLogin, setOpensAtLogin } from '../src/daemon/open-at-login.ts';
+import { editableSettings, optionalFeatures, setupChecks, type SystemInputs } from '../src/daemon/system.ts';
 import { DEFAULT_CONFIG } from '../src/shared/config.ts';
 import { cleanSettings, compareVersions, needsRestart, newerThanTested, TESTED_CLAUDE } from '../src/shared/system.ts';
 import { tempDir } from './helpers.ts';
@@ -77,6 +78,41 @@ describe('the settings of the app', () => {
     expect(cleanSettings({ ...good, port: 80 })).toMatchObject({ error: expect.stringContaining('port') });
     if (!('settings' in checked)) throw new Error('not valid');
     expect(needsRestart(checked.settings, { ...checked.settings, port: 47900, guard: { ...checked.settings.guard, git: true } })).toEqual(['the port']);
+  });
+  it('open Forchetta at login only where the daemon says so', () => {
+    expect(cleanSettings({ ...good, openAtLogin: true })).toMatchObject({ settings: { openAtLogin: true } });
+    const odd = cleanSettings({ ...good, openAtLogin: 'yes' });
+    expect('settings' in odd && 'openAtLogin' in odd.settings).toBe(false);
+    expect(editableSettings(DEFAULT_CONFIG, 'linux')).not.toHaveProperty('openAtLogin');
+    expect(editableSettings(DEFAULT_CONFIG, 'darwin')).toHaveProperty('openAtLogin', expect.any(Boolean));
+  });
+});
+
+describe('Forchetta opened at login', () => {
+  it('a LaunchAgent opens the app of this Forchetta, and goes away when unticked', () => {
+    const home = join(temp.dir, 'home');
+    const root = join(temp.dir, 'my forchetta');
+    const app = join(home, 'Applications', 'Forchetta.app');
+    mkdirSync(join(app, 'Contents'), { recursive: true });
+    writeFileSync(join(app, 'Contents', 'Info.plist'), `<plist><dict><key>ForchettaRoot</key>\n  <string>${root}</string></dict></plist>`);
+    expect(appOfThisForchetta(home, root)).toBe(app);
+    expect(appOfThisForchetta(home, join(temp.dir, 'another forchetta'))).toBeUndefined();
+    expect(setOpensAtLogin(true, home, () => undefined)).toMatchObject({ ok: false, error: expect.stringContaining('forchetta setup') });
+    expect(opensAtLogin(home)).toBe(false);
+    expect(setOpensAtLogin(true, home, () => app)).toEqual({ ok: true });
+    expect(readFileSync(openAgentFile(home), 'utf8')).toBe(openAgentPlist(app));
+    expect(opensAtLogin(home)).toBe(true);
+    expect(setOpensAtLogin(false, home)).toEqual({ ok: true });
+    expect(opensAtLogin(home)).toBe(false);
+    expect(setOpensAtLogin(false, home)).toEqual({ ok: true });
+  });
+  it('opens it with open, once, and macOS names it Forchetta', () => {
+    const plist = openAgentPlist('/Users/dev/Applications/Forchetta & co.app');
+    expect(plist).toContain('<string>/usr/bin/open</string>');
+    expect(plist).toContain('<string>/Users/dev/Applications/Forchetta &amp; co.app</string>');
+    expect(plist).toMatch(/<key>RunAtLoad<\/key>\s*<true\/>/);
+    expect(plist).not.toContain('KeepAlive');
+    expect(plist).toContain('<string>local.forchetta.app</string>');
   });
 });
 

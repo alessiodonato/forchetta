@@ -46,6 +46,7 @@ import { ghRunner, githubItems } from './github.ts';
 import { Ledger, readLedger, whoOf } from './ledger.ts';
 import { describeTeam } from './describe.ts';
 import { createLog } from './log.ts';
+import { setOpensAtLogin } from './open-at-login.ts';
 import { editableSettings, readClaudeSettings, systemInfo } from './system.ts';
 import { cleanSettings, needsRestart } from '../shared/system.ts';
 import { versionIn } from './claude-update.ts';
@@ -648,6 +649,12 @@ function main(): void {
       if ('error' in checked) return { ok: false, error: checked.error };
       const before = editableSettings(config);
       const next = checked.settings;
+      // First what opens Forchetta at login, where there is one: when it cannot be written, nothing is saved.
+      if (before.openAtLogin !== undefined && next.openAtLogin !== undefined && next.openAtLogin !== before.openAtLogin) {
+        const done = setOpensAtLogin(next.openAtLogin);
+        if (!done.ok) return { ok: false, error: done.error };
+        log(`Forchetta ${next.openAtLogin ? 'opens' : 'no longer opens'} at login`);
+      }
       // Saved over what the file has (paths of the tools, context windows…): only these fields change.
       const stored = loadConfig(paths.config, log);
       const saved = { ...stored, guard: next.guard, stallMin: next.stallMin, endedRetentionMin: next.endedRetentionMin, restarts: { auto: next.autoRestart }, updates: { check: next.checkUpdates }, panes: { replace: next.replace }, hotkey: next.hotkey, port: next.port, summaries: { ...stored.summaries, haiku: next.haiku } };

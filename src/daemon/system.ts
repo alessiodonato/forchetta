@@ -7,6 +7,7 @@ import { isOurStatusLine, withForchettaHooks } from '../shared/settings.ts';
 import { type EditableSettings, newerThanTested, type OptionalFeature, PROTOCOL, type SetupCheck, type SystemInfo, TESTED_CLAUDE } from '../shared/system.ts';
 import { VERSION } from '../shared/version.ts';
 import { launchAgentFile } from './launch-agent.ts';
+import { opensAtLogin } from './open-at-login.ts';
 
 // What the daemon knows of the installation, for the checklist of the first start, the settings of the app and
 // `forchetta doctor` (shared/system.ts).
@@ -143,7 +144,7 @@ export function optionalFeatures(inputs: SystemInputs): OptionalFeature[] {
   ];
 }
 
-export const editableSettings = (config: Config): EditableSettings => ({
+export const editableSettings = (config: Config, platform: NodeJS.Platform = process.platform): EditableSettings => ({
   guard: { ...config.guard },
   stallMin: config.stallMin,
   endedRetentionMin: config.endedRetentionMin,
@@ -153,6 +154,8 @@ export const editableSettings = (config: Config): EditableSettings => ({
   hotkey: config.hotkey,
   port: config.port,
   haiku: config.summaries.haiku,
+  // Not in the file: the LaunchAgent is there or not.
+  ...(platform === 'darwin' ? { openAtLogin: opensAtLogin() } : {}),
 });
 
 export function systemInfo(inputs: SystemInputs): SystemInfo {
