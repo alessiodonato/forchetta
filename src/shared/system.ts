@@ -58,6 +58,8 @@ export interface EditableSettings {
   hotkey: string;
   port: number;
   haiku: boolean;
+  /** Forchetta opens at each login (a LaunchAgent on a Mac); only where it can, and it is not in var/config.json. */
+  openAtLogin?: boolean;
 }
 
 export interface SystemInfo {
@@ -126,6 +128,7 @@ export function cleanSettings(input: unknown): { settings: EditableSettings } | 
       hotkey,
       port,
       haiku: raw.haiku === true,
+      ...(typeof raw.openAtLogin === 'boolean' ? { openAtLogin: raw.openAtLogin } : {}),
     },
   };
 }
