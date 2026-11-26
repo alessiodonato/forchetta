@@ -3,8 +3,9 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFile
 import { createServer, type IncomingHttpHeaders } from 'node:http';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { daemonEnv, envFileText, paneEnv } from '../src/cli/pane-env.ts';
+import { daemonEnv, envFileText, paneEnv, withUtf8 } from '../src/cli/pane-env.ts';
 import { defaultVarDir, paths } from '../src/shared/paths.ts';
+import { PLATFORM } from '../src/shared/platform.ts';
 import { tempDir } from './helpers.ts';
 
 const temp = tempDir('scripts');
@@ -261,10 +262,28 @@ describe('bin/forchetta-permission', () => {
 describe('environment of a pane', () => {
   it('keeps the terminal, drops what belongs to tmux, the outer window and a running Claude session', () => {
     const env = paneEnv(
-      { PATH: '/bin', HOME: '/h', TERM: 'xterm', TMUX: 'x', TERM_SESSION_ID: 'w', CLAUDECODE: '1', CLAUDE_PID: '9', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', FORCHETTA_ANTHROPIC_API_KEY: 'k', 'BAD-NAME': 'x' },
+      { PATH: '/bin', HOME: '/h', TERM: 'xterm', TMUX: 'x', TERM_SESSION_ID: 'w', CLAUDECODE: '1', CLAUDE_PID: '9', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', FORCHETTA_ANTHROPIC_API_KEY: 'k', 'BAD-NAME': 'x', LANG: 'it_IT.UTF-8' },
       'id-1',
     );
-    expect(env).toEqual({ PATH: '/bin', HOME: '/h', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', FORCHETTA_AGENT: 'id-1' });
+    expect(env).toEqual({ PATH: '/bin', HOME: '/h', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000', LANG: 'it_IT.UTF-8', FORCHETTA_AGENT: 'id-1' });
+  });
+
+  it('gets a locale in UTF-8 when it has none, and keeps the one it has', () => {
+    const lang = (env: NodeJS.ProcessEnv) => paneEnv(env, 'id-1').LANG;
+    const utf8 = PLATFORM === 'macos' ? 'en_US.UTF-8' : 'C.UTF-8';
+    expect(lang({})).toBe(utf8);
+    expect(lang({ LANG: '', LC_ALL: '' })).toBe(utf8);
+    expect(lang({ LANG: 'it_IT.UTF-8' })).toBe('it_IT.UTF-8');
+    expect(lang({ LC_CTYPE: 'UTF-8' })).toBeUndefined();
+  });
+
+  it('the locale it gets is one its system has, and on Windows it gets none', () => {
+    expect(withUtf8({}, 'macos')).toEqual({ LANG: 'en_US.UTF-8' });
+    expect(withUtf8({}, 'linux')).toEqual({ LANG: 'C.UTF-8' });
+    expect(withUtf8({}, 'wsl')).toEqual({ LANG: 'C.UTF-8' });
+    expect(withUtf8({ LANG: 'it_IT.UTF-8' }, 'linux')).toEqual({ LANG: 'it_IT.UTF-8' });
+    expect(withUtf8({}, 'windows')).toEqual({});
+    expect(paneEnv({ LANG: '' }, 'id-1', true)).toEqual({ LANG: '', FORCHETTA_AGENT: 'id-1' });
   });
 
   it('the daemon, started from the shell of a session, keeps nothing of that session or of its tmux pane', () => {

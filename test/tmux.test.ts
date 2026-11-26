@@ -15,6 +15,11 @@ describe('tmux', () => {
     }
   });
 
+  it('reads its own configuration again, and no other file', () => {
+    expect(tmux.argv('source-file', ['/x/config/tmux.conf']).slice(-2)).toEqual(['source-file', '/x/config/tmux.conf']);
+    for (const args of [[], ['/tmp/other.conf'], ['-n', '/x/config/tmux.conf'], ['/x/config/tmux.conf', '/tmp/other.conf']]) expect(() => tmux.argv('source-file', args)).toThrow(TmuxRefused);
+  });
+
   it('refuses arguments that would chain a second command', () => {
     expect(() => tmux.argv('send-keys', ['-t', '%1', ';', 'kill-server'])).toThrow(TmuxRefused);
     expect(() => tmux.argv('send-keys', ['-t', '%1', 'echo;'])).toThrow(TmuxRefused);

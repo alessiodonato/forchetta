@@ -1,4 +1,5 @@
 import { WINDOWS } from '../shared/fspath.ts';
+import { type Platform, PLATFORM } from '../shared/platform.ts';
 
 // The environment of a Forchetta pane: the one of the terminal where `forchetta run` was typed, not the one of
 // the tmux server, which may have been started from another terminal long ago. bin/forchetta-exec loads it.
@@ -35,6 +36,17 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** Windows has names like ProgramFiles(x86), and hidden ones that start with =. */
 const WINDOWS_NAME = /^[^=\0]+$/;
 
+/**
+ * A locale in UTF-8, when there is none: an app opened from the Finder has no LANG, and neither has what it starts.
+ * Without one, pbcopy takes its text for Mac Roman: "perché" in the clipboard becomes "perch√©". Linux may have no
+ * en_US.UTF-8, and a LANG it does not have is no UTF-8 at all: there it is C.UTF-8. Windows has no LANG to give.
+ */
+export function withUtf8<T extends NodeJS.ProcessEnv>(env: T, platform: Platform | undefined = PLATFORM): T {
+  if (platform === 'windows') return env;
+  if (!/UTF-?8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || '')) (env as NodeJS.ProcessEnv).LANG = platform === 'macos' ? 'en_US.UTF-8' : 'C.UTF-8';
+  return env;
+}
+
 export function paneEnv(env: NodeJS.ProcessEnv, agentId: string, windows = WINDOWS): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
@@ -43,7 +55,7 @@ export function paneEnv(env: NodeJS.ProcessEnv, agentId: string, windows = WINDO
     out[name] = value;
   }
   out.FORCHETTA_AGENT = agentId;
-  return out;
+  return withUtf8(out, windows ? 'windows' : PLATFORM);
 }
 
 /** The environment of a session in its host (Windows): the one of a pane, and the terminal it is. */

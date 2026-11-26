@@ -3,7 +3,7 @@ import { statSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { basename, WINDOWS } from '../shared/fspath.ts';
 import type { WebSocket } from 'ws';
-import { daemonEnv } from '../cli/pane-env.ts';
+import { daemonEnv, withUtf8 } from '../cli/pane-env.ts';
 import { type Agent, displayName } from '../shared/agent.ts';
 import type { ShellInfo, ShellKind } from '../shared/shells.ts';
 import { openPty, type Pty, type PtyModule } from './pty.ts';
@@ -69,7 +69,7 @@ export function userShell(): ShellProgram[] {
 export function shellEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(daemonEnv(env))) if (value !== undefined && !name.startsWith('FORCHETTA_')) out[name] = value;
-  if (!WINDOWS && !/UTF-?8/i.test(out.LC_ALL ?? out.LC_CTYPE ?? out.LANG ?? '')) out.LANG = 'en_US.UTF-8';
+  withUtf8(out);
   return { ...out, TERM: 'xterm-256color', COLORTERM: 'truecolor', TERM_PROGRAM: 'Forchetta' };
 }
 

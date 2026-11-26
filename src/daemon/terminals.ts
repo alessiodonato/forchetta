@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
-import { PLATFORM } from '../shared/platform.ts';
+import { withUtf8 } from '../cli/pane-env.ts';
 import type { Tmux } from '../shared/tmux.ts';
 import { isLocalHost, isOwnOrigin } from './origin.ts';
 import { loadPty, type Pty } from './pty.ts';
@@ -59,10 +59,9 @@ function sameToken(given: string | null, token: string): boolean {
 /** The environment of the tmux client: a terminal that speaks UTF-8 and 256 colors, outside any other tmux. */
 function clientEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color' };
-  if (!/UTF-?8/i.test(env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? '')) env.LANG = PLATFORM === 'macos' ? 'en_US.UTF-8' : 'C.UTF-8';
   delete env.TMUX;
   delete env.TMUX_PANE;
-  return env;
+  return withUtf8(env);
 }
 
 export class Terminals {

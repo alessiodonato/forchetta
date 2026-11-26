@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -94,11 +94,13 @@ describe('on a Mac', () => {
 
 describe('what tmux copies', () => {
   const command = /^set -s copy-command '(.*)'$/m.exec(readFileSync(join(ROOT, 'config', 'tmux.conf'), 'utf8'))![1]!;
+  const awk = which('awk');
 
-  /** Runs the copy command with only these programs around it; which one took the text, and the text. */
+  /** Runs the copy command with only these programs around it, and awk, which cleans the text first; which one took the text, and the text. */
   function copy(programs: string[], env: NodeJS.ProcessEnv = {}): string | undefined {
     const dir = mkdtempSync(join(tmpdir(), 'forchetta-copy-'));
     try {
+      symlinkSync(awk!, join(dir, 'awk'));
       for (const name of programs) {
         writeFileSync(join(dir, name), `#!/bin/sh\n{ printf '%s:' ${name}; /bin/cat; } > '${dir}/out'\n`);
         chmodSync(join(dir, name), 0o755);

@@ -3,8 +3,9 @@ import type { Pty } from '../daemon/pty.ts';
 
 // The only way Forchetta talks to tmux. It runs a private tmux server, with its own socket and
 // configuration, and it can run only the commands below. None of them ends a session, a window, a pane or
-// the server: closing a pane in Forchetta detaches a client, and nothing in the code can do more. Windows has no tmux:
-// there the same commands go to the hosts of the sessions (shared/host-sessions.ts).
+// the server: closing a pane in Forchetta detaches a client, and nothing in the code can do more. source-file
+// reads the configuration of Forchetta again, and no other file. Windows has no tmux: there the same commands go to
+// the hosts of the sessions (shared/host-sessions.ts).
 
 export const TMUX_ALLOWED = [
   'new-session',
@@ -20,6 +21,8 @@ export const TMUX_ALLOWED = [
   // What you select with the mouse in a pane: tmux copies it into a buffer of its own, read for the menu of the selection.
   'list-buffers',
   'show-buffer',
+  // A server lives on when Forchetta is updated: the daemon has it read the configuration of its own version.
+  'source-file',
 ] as const;
 
 export type TmuxCommand = (typeof TMUX_ALLOWED)[number];
@@ -52,6 +55,7 @@ export class Tmux {
    */
   argv(command: string, args: readonly string[]): string[] {
     if (!allowed.has(command)) throw new TmuxRefused(`tmux command not allowed: ${command}`);
+    if (command === 'source-file' && (args.length !== 1 || args[0] !== this.conf)) throw new TmuxRefused('tmux reads no configuration but the one of Forchetta');
     for (const arg of args) {
       if (arg.endsWith(';')) throw new TmuxRefused(`tmux argument not allowed (it ends with ";"): ${JSON.stringify(arg)}`);
     }
@@ -71,6 +75,11 @@ export class Tmux {
       });
     });
   }
+}
+
+/** Has the server that was already running, if there is one, read the configuration again. It starts none. */
+export async function reloadConf(tmux: Tmux): Promise<boolean> {
+  return (await tmux.run('source-file', [tmux.conf])).code === 0;
 }
 
 export interface PaneInfo {

@@ -11,7 +11,7 @@ import { acceptPipe, newPipe } from '../shared/pipe.ts';
 import { MACHINE } from '../shared/machine.ts';
 import { installHint, PLATFORM } from '../shared/platform.ts';
 import { sessionsOf } from '../shared/sessions.ts';
-import { listPanes } from '../shared/tmux.ts';
+import { listPanes, reloadConf } from '../shared/tmux.ts';
 import { gitProgram } from '../shared/windows.ts';
 import { VERSION } from '../shared/version.ts';
 import { ArricurdaiNotes, ArricurdaiPoller, readArricurdaiStatus } from './arricurdai.ts';
@@ -1378,6 +1378,8 @@ function main(): void {
         hub?.setGuardStats(guardStats.info());
       }, SWEEP_MS),
     );
+    // Windows has no tmux, and its hosts read no configuration.
+    if (!WINDOWS) void reloadConf(tmux);
     void reconcile('start');
     // The first look of the automations once the sessions are known again (a run at work, its sessions).
     setTimeout(() => void automations?.tick(), 15_000).unref?.();
