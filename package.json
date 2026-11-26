@@ -1,6 +1,6 @@
 {
   "name": "forchetta",
-  "version": "0.13.0-beta.6",
+  "version": "0.13.0-beta.7",
   "private": true,
   "license": "Apache-2.0",
   "description": "Draw a team of Claude Code agents and put it to work: they share one folder without stepping on each other, and every session on your Mac sits in one window.",
