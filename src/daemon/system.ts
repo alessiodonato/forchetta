@@ -9,6 +9,7 @@ import { type EditableSettings, newerThanTested, type OptionalFeature, PROTOCOL,
 import { VERSION } from '../shared/version.ts';
 import { launchAgentFile } from './launch-agent.ts';
 import { opensAtLogin } from './open-at-login.ts';
+import { opensAtSignIn } from './sign-in.ts';
 
 // What the daemon knows of the installation, for the checklist of the first start, the settings of the app and
 // `forchetta doctor` (shared/system.ts).
@@ -161,7 +162,7 @@ export function optionalFeatures(inputs: SystemInputs, platform: Platform | unde
   return platform === 'macos' ? features : features.filter((feature) => feature.id !== 'keepalive');
 }
 
-export const editableSettings = (config: Config, platform: NodeJS.Platform = process.platform): EditableSettings => ({
+export const editableSettings = (config: Config, platform: Platform | undefined = PLATFORM): EditableSettings => ({
   guard: { ...config.guard },
   stallMin: config.stallMin,
   endedRetentionMin: config.endedRetentionMin,
@@ -171,8 +172,8 @@ export const editableSettings = (config: Config, platform: NodeJS.Platform = pro
   hotkey: config.hotkey,
   port: config.port,
   haiku: config.summaries.haiku,
-  // Not in the file: the LaunchAgent is there or not.
-  ...(platform === 'darwin' ? { openAtLogin: opensAtLogin() } : {}),
+  // Not in the file: the LaunchAgent, or the shortcut in the Startup folder, is there or not.
+  ...(platform === 'macos' ? { openAtLogin: opensAtLogin() } : platform === 'windows' ? { openAtLogin: opensAtSignIn() } : {}),
 });
 
 export function systemInfo(inputs: SystemInputs): SystemInfo {

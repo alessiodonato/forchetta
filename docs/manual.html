@@ -232,6 +232,7 @@ forchetta setup</pre>
         </ul>
         <h3>On Windows</h3>
         <ul>
+          <li><strong>Open it at each sign-in</strong>: tick <strong>Open Forchetta when you sign in to Windows</strong> in Settings. Its shortcut of the Start menu is copied into your Startup folder; untick it to take it away.</li>
           <li>The sessions of every terminal show up: PowerShell, Windows Terminal, Git Bash, VS Code. Those Forchetta starts open in its window too, and go on when it closes; from a terminal, <kbd>Ctrl-b</kbd> <kbd>d</kbd> leaves them. There is no copy mode: the wheel scrolls the history of the pane.</li>
           <li><strong>The guard reads Bash and PowerShell</strong>: <code>Set-Content</code>, <code>Out-File</code>, <code>&gt;</code>, <code>Remove-Item</code>, <code>Move-Item</code>, <code>Copy-Item</code>, <code>[IO.File]::WriteAllText</code> and the rest, with their short names, and the paths of Windows and of Git Bash. A path made of variables, and what a <code>ForEach-Object</code> does to each file, it doesn't follow. For a dev server it looks at the command lines of the processes, since Windows doesn't tell the folder they work in.</li>
           <li>What an agent of a team may not do in Bash, it may not do in PowerShell either.</li>

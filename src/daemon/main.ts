@@ -58,6 +58,7 @@ import { Ledger, readLedger, whoOf } from './ledger.ts';
 import { describeTeam } from './describe.ts';
 import { createLog } from './log.ts';
 import { setOpensAtLogin } from './open-at-login.ts';
+import { setOpensAtSignIn } from './sign-in.ts';
 import { editableSettings, readClaudeSettings, systemInfo } from './system.ts';
 import { cleanSettings, needsRestart } from '../shared/system.ts';
 import { versionIn } from './claude-update.ts';
@@ -688,7 +689,7 @@ function main(): void {
       const next = checked.settings;
       // First what opens Forchetta at login, where there is one: when it cannot be written, nothing is saved.
       if (before.openAtLogin !== undefined && next.openAtLogin !== undefined && next.openAtLogin !== before.openAtLogin) {
-        const done = setOpensAtLogin(next.openAtLogin);
+        const done = PLATFORM === 'windows' ? setOpensAtSignIn(next.openAtLogin) : setOpensAtLogin(next.openAtLogin);
         if (!done.ok) return { ok: false, error: done.error };
         log(`Forchetta ${next.openAtLogin ? 'opens' : 'no longer opens'} at login`);
       }

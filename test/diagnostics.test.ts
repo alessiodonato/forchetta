@@ -5,6 +5,7 @@ import { logProblems, redact } from '../src/cli/doctor.ts';
 import { launchAgentPlist } from '../src/daemon/launch-agent.ts';
 import { LogFile, logLine } from '../src/daemon/log.ts';
 import { appOfThisForchetta, openAgentFile, openAgentPlist, opensAtLogin, setOpensAtLogin } from '../src/daemon/open-at-login.ts';
+import { opensAtSignIn, setOpensAtSignIn, signInShortcut, startMenuShortcut } from '../src/daemon/sign-in.ts';
 import { editableSettings, optionalFeatures, setupChecks, type SystemInputs } from '../src/daemon/system.ts';
 import { DEFAULT_CONFIG } from '../src/shared/config.ts';
 import { cleanSettings, compareVersions, needsRestart, newerThanTested, TESTED_CLAUDE } from '../src/shared/system.ts';
@@ -84,7 +85,9 @@ describe('the settings of the app', () => {
     const odd = cleanSettings({ ...good, openAtLogin: 'yes' });
     expect('settings' in odd && 'openAtLogin' in odd.settings).toBe(false);
     expect(editableSettings(DEFAULT_CONFIG, 'linux')).not.toHaveProperty('openAtLogin');
-    expect(editableSettings(DEFAULT_CONFIG, 'darwin')).toHaveProperty('openAtLogin', expect.any(Boolean));
+    expect(editableSettings(DEFAULT_CONFIG, 'wsl')).not.toHaveProperty('openAtLogin');
+    expect(editableSettings(DEFAULT_CONFIG, 'macos')).toHaveProperty('openAtLogin', expect.any(Boolean));
+    expect(editableSettings(DEFAULT_CONFIG, 'windows')).toHaveProperty('openAtLogin', expect.any(Boolean));
   });
 });
 
@@ -113,6 +116,29 @@ describe('Forchetta opened at login', () => {
     expect(plist).toMatch(/<key>RunAtLoad<\/key>\s*<true\/>/);
     expect(plist).not.toContain('KeepAlive');
     expect(plist).toContain('<string>local.forchetta.app</string>');
+  });
+});
+
+describe('Forchetta opened at the sign-in to Windows', () => {
+  const env = (): NodeJS.ProcessEnv => ({ APPDATA: join(temp.dir, 'Roaming') });
+  const programs = (): string => join(temp.dir, 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+  it('copies the shortcut of the Start menu into the Startup folder, and takes it away', () => {
+    const forgotten: string[] = [];
+    const forget = (): void => void forgotten.push('Forchetta.lnk');
+    expect(setOpensAtSignIn(true, env(), forget)).toMatchObject({ ok: false, error: expect.stringContaining('Start menu') });
+    expect(opensAtSignIn(env())).toBe(false);
+    mkdirSync(programs(), { recursive: true });
+    writeFileSync(startMenuShortcut(env()), 'the shortcut');
+    expect(setOpensAtSignIn(true, env(), forget)).toEqual({ ok: true });
+    expect(signInShortcut(env())).toBe(join(programs(), 'Startup', 'Forchetta.lnk'));
+    expect(readFileSync(signInShortcut(env()), 'utf8')).toBe('the shortcut');
+    expect(opensAtSignIn(env())).toBe(true);
+    // Turned off in Settings → Apps → Startup before: forgotten, so that it opens again.
+    expect(forgotten).toEqual(['Forchetta.lnk']);
+    expect(setOpensAtSignIn(false, env(), forget)).toEqual({ ok: true });
+    expect(opensAtSignIn(env())).toBe(false);
+    expect(existsSync(startMenuShortcut(env()))).toBe(true);
+    expect(setOpensAtSignIn(false, env(), forget)).toEqual({ ok: true });
   });
 });
 

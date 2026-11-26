@@ -58,7 +58,7 @@ export interface EditableSettings {
   hotkey: string;
   port: number;
   haiku: boolean;
-  /** Forchetta opens at each login (a LaunchAgent on a Mac); only where it can, and it is not in var/config.json. */
+  /** Forchetta opens at each login (a LaunchAgent on a Mac, a shortcut in the Startup folder on Windows); only where it can, and it is not in var/config.json. */
   openAtLogin?: boolean;
 }
 

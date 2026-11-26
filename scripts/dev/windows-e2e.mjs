@@ -44,7 +44,7 @@ writeFileSync(
   join(home, '.claude.json'),
   JSON.stringify({ hasCompletedOnboarding: true, lastOnboardingVersion: '99.0.0', theme: 'dark', customApiKeyResponses: { approved: [key.slice(-20)], rejected: [] }, projects: Object.fromEntries([project, slashes(project)].map((folder) => [folder, { hasTrustDialogAccepted: true, hasCompletedProjectOnboarding: true }])) }),
 );
-const env = { ...process.env, USERPROFILE: home, HOME: home, ANTHROPIC_API_KEY: key, ANTHROPIC_BASE_URL: api.url, DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
+const env = { ...process.env, USERPROFILE: home, HOME: home, APPDATA: join(home, 'AppData', 'Roaming'), ANTHROPIC_API_KEY: key, ANTHROPIC_BASE_URL: api.url, DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
 for (const name of ['CLAUDE_CONFIG_DIR', 'FORCHETTA_VAR', 'FORCHETTA_AGENT', 'CLAUDECODE', 'CLAUDE_PID']) delete env[name];
 // The status line of a home with a space is the command of the installer, in the PATH.
 env.Path = `${join(root, 'bin')};${claude ? resolve(claude, '..') : ''};${process.env.PATH}`;
@@ -142,6 +142,24 @@ check('the checklist', hello.system.checks.filter((item) => !item.ok).length ===
 const send = (message) => ws.send(JSON.stringify(message));
 send({ type: 'listFolders', folder: home });
 check('the panel of the folders', Boolean(await until(() => messages.find((message) => message.type === 'folders' && message.folders.includes('my shop')), 5000)));
+
+// Open at the sign-in to Windows: the shortcut of the Start menu, copied into the Startup folder of this home.
+check('the settings have the box to open it at the sign-in, off', hello.system.settings.openAtLogin === false, JSON.stringify(hello.system.settings));
+const saveSettings = async (patch) => {
+  const from = messages.length;
+  send({ type: 'saveSettings', settings: { ...hello.system.settings, ...patch } });
+  return until(() => messages.slice(from).find((message) => message.type === 'settingsSaved'), 10_000);
+};
+const startMenu = join(env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+const refused = await saveSettings({ openAtLogin: true });
+check('with no Forchetta in the Start menu, it says so', refused?.ok === false && /Start menu/.test(refused.error), JSON.stringify(refused));
+mkdirSync(startMenu, { recursive: true });
+writeFileSync(join(startMenu, 'Forchetta.lnk'), 'the shortcut of the installer');
+const ticked = await saveSettings({ openAtLogin: true });
+check('ticked, its shortcut goes into the Startup folder', ticked?.ok === true && existsSync(join(startMenu, 'Startup', 'Forchetta.lnk')), JSON.stringify(ticked));
+check('and the settings say it', Boolean(await until(() => messages.findLast((message) => message.type === 'system')?.system.settings.openAtLogin === true, 5000)));
+const unticked = await saveSettings({ openAtLogin: false });
+check('unticked, it goes away', unticked?.ok === true && !existsSync(join(startMenu, 'Startup', 'Forchetta.lnk')), JSON.stringify(unticked));
 
 async function start(prompt, mode = 'manual') {
   const from = messages.length;
