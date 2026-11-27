@@ -127,7 +127,7 @@
 <article>
   <h1>Forchetta on Windows</h1>
   <p class="sub">A beta that needs people to try it.</p>
-  <p class="meta">Version 0.13.0-beta.7, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. The first reports from a PC are in, from Windows 11.</p>
+  <p class="meta">Version 0.13.0-beta.8, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. The first reports from a PC are in, from Windows 11.</p>
 
   <p>Forchetta runs on Windows itself: no WSL, no Ubuntu, no administrator. The Claude Code it shows is the one you have, with your account and your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use Forchetta from a window of Edge or Chrome: the same page as on a Mac.</p>
   <p>Do you work inside WSL? <a href="wsl/">There is a guide for that</a> too.</p>
@@ -155,7 +155,7 @@
     </li>
     <li id="step-2">
       <p>Forchetta <span class="place">PowerShell</span></p>
-      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.7/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.7/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
+      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
       <ul>
         <li>It downloads Forchetta and checks it. Without Node.js 22, or with one in a folder of its version, as winget and nvm may keep it, it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
         <li>It lists the hooks it adds to <code>.claude\settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
@@ -177,7 +177,7 @@
     <li><strong>To type into one from Forchetta</strong>, start it there: <strong>+ new</strong> in the window, or <code>forchetta run claude</code> in the folder of the project. Closing the window or the terminal leaves it running; <code>/exit</code> ends it. <code>Ctrl-b</code> <code>d</code> leaves it from the terminal.</li>
     <li><strong>In its terminal</strong>, drag to select, <code>Ctrl</code><code>C</code> to copy, <code>Ctrl</code><code>V</code> to paste. The shortcuts are with <code>Ctrl</code> in place of <code>⌘</code>.</li>
   </ul>
-  <p>What a Mac has and this has not: the menu bar, the shortcut from any program, and a daemon that starts at login. Here Forchetta starts when you open it.</p>
+  <p>Forchetta starts when you open it. To have it open each time you sign in to Windows, tick it in Settings, the gear at the top of the window. What a Mac has and this has not: the menu bar, the shortcut from any program, and a daemon started again if it stops by mistake.</p>
 
   <h2 id="wrong">If something goes wrong</h2>
   <div class="table"><table>
@@ -198,7 +198,7 @@
 
   <h2 id="update">Update</h2>
   <p>The command of the install again, in PowerShell and not as administrator. There is nothing to uninstall:</p>
-  <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.7/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.7/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
+  <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
   <p>It shows what changes in the hooks: answer <code>y</code>. It starts Forchetta again on the new version; then open the window with <code>forchetta open</code>. The sessions at work go on. From 0.13.0-beta.4 the window says when there is a new version and <strong>Update</strong> installs it: the command is for coming to it, once. The <a href="../changelog/">changelog</a> says what each one brings.</p>
 
   <h2 id="safe">What keeps it safe</h2>
@@ -237,7 +237,7 @@
 forchetta daemon stop
 cmd /c rmdir "$HOME\.local\lib\forchetta"
 Remove-Item -Recurse -Force "$HOME\.local\lib\forchetta-versions", "$HOME\.local\lib\forchetta-node", "$HOME\.local\share\forchetta" -ErrorAction SilentlyContinue
-Remove-Item "$HOME\.local\bin\forchetta*", "$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk" -ErrorAction SilentlyContinue</code></pre><button type="button" data-copy="forchetta hooks uninstall --yes&#10;forchetta daemon stop&#10;cmd /c rmdir &quot;$HOME\.local\lib\forchetta&quot;&#10;Remove-Item -Recurse -Force &quot;$HOME\.local\lib\forchetta-versions&quot;, &quot;$HOME\.local\lib\forchetta-node&quot;, &quot;$HOME\.local\share\forchetta&quot; -ErrorAction SilentlyContinue&#10;Remove-Item &quot;$HOME\.local\bin\forchetta*&quot;, &quot;$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk&quot; -ErrorAction SilentlyContinue" aria-label="Copy the command">Copy</button></div>
+Remove-Item "$HOME\.local\bin\forchetta*", "$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk", "$([Environment]::GetFolderPath('Startup'))\Forchetta.lnk" -ErrorAction SilentlyContinue</code></pre><button type="button" data-copy="forchetta hooks uninstall --yes&#10;forchetta daemon stop&#10;cmd /c rmdir &quot;$HOME\.local\lib\forchetta&quot;&#10;Remove-Item -Recurse -Force &quot;$HOME\.local\lib\forchetta-versions&quot;, &quot;$HOME\.local\lib\forchetta-node&quot;, &quot;$HOME\.local\share\forchetta&quot; -ErrorAction SilentlyContinue&#10;Remove-Item &quot;$HOME\.local\bin\forchetta*&quot;, &quot;$([Environment]::GetFolderPath('Programs'))\Forchetta.lnk&quot;, &quot;$([Environment]::GetFolderPath('Startup'))\Forchetta.lnk&quot; -ErrorAction SilentlyContinue" aria-label="Copy the command">Copy</button></div>
   <p><code>.local\bin</code> stays in your <code>PATH</code>: Claude Code has its command there too.</p>
 </article>
 </main>
