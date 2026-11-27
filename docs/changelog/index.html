@@ -83,6 +83,9 @@
   .beside::after { position: absolute; top: 0; bottom: 0; left: calc(var(--lane) - 1px); width: 2px; background: var(--trunk); content: ''; }
   .branch.along::after { top: 0; }
   .branch.through::after { top: 0; bottom: 0; }
+  /* Where the branch comes back into main: its line goes up the lane and bends into the node. */
+  .merge::after { position: absolute; top: var(--node); bottom: 0; left: var(--main); width: calc(var(--lane) - var(--main) + 1px); border: solid var(--trunk); border-width: 2px 2px 0 0; border-top-right-radius: 26px; content: ''; }
+  .merge > .node { z-index: 1; }
 
   .version { margin: 0; font-variant-numeric: tabular-nums; line-height: 1.4; }
   .version strong { display: block; font-size: 16px; font-weight: 600; color: var(--text-2); }
@@ -150,7 +153,22 @@
 <p class="sub">The versions that changed what Forchetta does, newest first, with the commits that did it.</p>
 
 <ol class="log">
-  <li class="branch ahead" id="v0.13.0-beta.4">
+  <li class="big merge" id="v0.13.0">
+    <span class="node" aria-hidden="true"></span>
+    <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.13.0">0.13.0</a></strong><time datetime="2026-11-27">27 Nov 2026</time></p>
+    <div class="what">
+      <h2>Windows, no longer a beta</h2>
+      <p>The branch <code>windows</code> comes back into main. Forchetta runs on Windows itself, with no WSL and no administrator, next to the Claude Code you have: one command in PowerShell installs it, and a click updates it. The installer tries again when Windows still holds a folder, and never leaves the hooks without a Node.js. On Linux and in WSL the same version is a beta.</p>
+      <p class="more"><a href="../windows/">Install it on Windows</a></p>
+      <ul class="commits" aria-label="Commits">
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/f1ed6a1a0688096df5d6734cf6d4389c4131fe7d"><code>f1ed6a1</code></a><span>Windows is no longer a beta</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/c8c63bce3e65a0ff7cfaa3ad3134ada752bc8208"><code>c8c63bc</code></a><span>The installer tries again where Windows still holds a folder</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/bf114dafbf408e4611d7f39f84e60063ad879994"><code>bf114da</code></a><span>Windows with no WSL: the sessions in hosts of their own, the hooks with no shell</span></li>
+        <li><a href="https://github.com/alessiodonato/forchetta/commit/d5326fa2b99b570a5df8779c6a5656b5486c1c09"><code>d5326fa</code></a><span>Windows, inside WSL 2, and Linux</span></li>
+      </ul>
+    </div>
+  </li>
+  <li class="branch through" id="v0.13.0-beta.4">
     <span class="node" aria-hidden="true"></span>
     <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.13.0-beta.4">0.13.0-beta.4</a> <span class="to">to</span> <a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.13.0-beta.8">0.13.0-beta.8</a></strong><time datetime="2026-11-27">27 Nov 2026</time> <span class="on">branch <code>windows</code></span></p>
     <div class="what">
@@ -168,7 +186,7 @@
       </ul>
     </div>
   </li>
-  <li class="big tip beside" id="v0.12.8">
+  <li class="big beside" id="v0.12.8">
     <span class="node" aria-hidden="true"></span>
     <p class="version"><strong><a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.12.8">0.12.8</a> <span class="to">to</span> <a href="https://github.com/alessiodonato/forchetta/releases/tag/v0.12.11">0.12.11</a></strong><time datetime="2026-11-27">27 Nov 2026</time></p>
     <div class="what">
