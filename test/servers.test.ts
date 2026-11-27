@@ -74,6 +74,32 @@ describe('the daemon itself', () => {
   });
 });
 
+describe('the Claude Code of a session', () => {
+  it('listens on a port of its own in the folder of the session, and is no dev server', async () => {
+    // As Claude Code 2.1 does: its process, named after its version, listens on 127.0.0.1 and works in the project.
+    const ps = ['    1     0 /sbin/launchd', '  100     1 /Users/me/.local/share/claude/versions/2.1.328', ' 4000   100 /bin/zsh', ' 4242  4000 node'].join('\n');
+    let listen = ['p100', 'f20', 'n127.0.0.1:49353'].join('\n');
+    const cwds = ['p100', 'fcwd', `n${REPO}`, 'p4242', 'fcwd', `n${REPO}`].join('\n');
+    const agent = newAgent({ id: 'a', cwd: REPO, control: { kind: 'tmux', session: 'fk-a' }, state: 'working' }, 0);
+    agent.pid = 100;
+    const servers = new Servers({
+      agents: () => [agent],
+      repoOf: (dir) => (dir.startsWith(REPO) ? REPO : undefined),
+      enabled: () => true,
+      self: 9999,
+      run: async (file, args) => (file.endsWith('ps') ? ps : args.includes('cwd') ? cwds : listen),
+    });
+    const start = (command: string) => servers.decide(agent, { hook_event_name: 'PreToolUse', session_id: 'a', tool_name: 'Bash', tool_input: { command } });
+    expect(await start('python3 -m http.server 8766')).toBeUndefined();
+    // A server it started is one.
+    listen = ['p100', 'f20', 'n127.0.0.1:49353', 'p4242', 'f23', 'n*:5173'].join('\n');
+    const answer = await start('pnpm dev');
+    expect(answer?.decision).toBe('deny');
+    expect(answer?.reason).toContain('http://localhost:5173 (node 4242, started by you earlier)');
+    expect(answer?.reason).not.toContain('49353');
+  });
+});
+
 describe('a second dev server', () => {
   it('is stopped once, with the address of the one running and who started it', async () => {
     const t = setup();

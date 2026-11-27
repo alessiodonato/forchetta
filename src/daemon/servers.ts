@@ -140,12 +140,20 @@ export class Servers {
   private async decideStart(agent: Agent, line: string, dir: string): Promise<GuardDecision | undefined> {
     const scope = this.options.repoOf(dir) ?? dir;
     const listening = await this.look.listening();
-    if (listening.size === 0) return undefined;
+    // The daemon listens too, and so does the Claude Code process of each session, on a port of its own and in the
+    // folder of its session: neither is a dev server.
+    const notServers = new Set<number>([this.options.self ?? process.pid]);
+    for (const session of this.options.agents()) if (session.pid !== undefined && session.state !== 'ended') notServers.add(session.pid);
+    const candidates = [...listening].filter(([pid]) => !notServers.has(pid));
+    if (candidates.length === 0) return undefined;
     const table = await this.look.table();
-    const cwds = await this.look.folders([...listening.keys()], scope, table);
+    const cwds = await this.look.folders(
+      candidates.map(([pid]) => pid),
+      scope,
+      table,
+    );
     // A server of this folder: it works inside the working tree, in the folder of the command, above it or under it.
-    const servers = [...listening].filter(([pid]) => {
-      if (pid === (this.options.self ?? process.pid)) return false;
+    const servers = candidates.filter(([pid]) => {
       const where = cwds.get(pid);
       return where !== undefined && inside(where, scope) && (inside(where, dir) || inside(dir, where));
     });
