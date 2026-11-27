@@ -145,7 +145,7 @@
 <main>
   <div class="wrap intro">
     <h1>The manual</h1>
-    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.12.11 (<a href="changelog/">what changed</a>). The buttons and messages of the app are in English, and are quoted here as they appear.</p>
+    <p>Everything Forchetta does, in the order you meet it: from the install to the teams of agents. This manual is for version 0.13.0 (<a href="changelog/">what changed</a>). The buttons and messages of the app are in English, and are quoted here as they appear.</p>
   </div>
 
   <div class="wrap layout">
@@ -215,12 +215,12 @@ forchetta setup</pre>
       </section>
 
       <section id="windows">
-        <h2>Windows and Linux (beta)</h2>
-        <p>On Windows Forchetta runs next to your Claude Code, with no WSL: each session it starts has a host of its own, in place of tmux. On Linux, and inside WSL if you work there, it runs the sessions in tmux as on a Mac. The page opens in a window of Edge or Chrome, or in your browser.</p>
+        <h2>Windows and Linux</h2>
+        <p>On Windows Forchetta runs next to your Claude Code, with no WSL: each session it starts has a host of its own, in place of tmux. On Linux, and inside WSL if you work there, it runs the sessions in tmux as on a Mac. The page opens in a window of Edge or Chrome, or in your browser. On Linux and in WSL it is a beta: its tests run on Ubuntu, but nobody has tried it on a Linux PC yet.</p>
         <p>On Windows, in PowerShell, not as administrator:</p>
-        <pre>irm https://forchetta.dev/install.ps1 | iex</pre>
-        <p>On Linux, and inside WSL:</p>
-        <pre>sudo apt install -y tmux curl &amp;&amp; curl -fsSL https://forchetta.dev/install.sh | sh</pre>
+        <pre>irm https://github.com/alessiodonato/forchetta/releases/latest/download/install.ps1 | iex</pre>
+        <p>On Linux, and inside WSL, with <code>curl</code>, <code>tmux</code> and <code>lsof</code> installed:</p>
+        <pre>curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/latest/download/install.sh &amp;&amp; sh ~/forchetta-install.sh</pre>
         <p>Neither installer needs an administrator or root: Forchetta goes in <code>~/.local/lib/forchetta</code> (on Windows <code>~</code> is <code>%USERPROFILE%</code>), and without Node.js 22 one from nodejs.org goes next to it, only for Forchetta. Then it runs <code>forchetta setup</code>, which checks what is missing and adds the hooks, showing you every change to <code>~/.claude/settings.json</code> first, and asking. To update, run the installer again. The guides say how to know that each step is done: <a href="windows/">Windows</a>, <a href="windows/wsl/">WSL</a>.</p>
         <p>Then, in a new terminal, <code>forchetta open</code> (on Windows also Forchetta in the Start menu) starts the daemon when it is off and opens the page with a code that is good once, for two minutes. After a restart of the daemon, open the page with it again. In Settings, <span class="ui">allow them</span> turns on the notifications of the browser, which come while the page is open.</p>
         <h3>What differs from a Mac, everywhere</h3>

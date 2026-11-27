@@ -140,7 +140,7 @@
 <article>
   <h1>Forchetta in WSL</h1>
   <p class="sub">For who works in WSL already. If you use Claude Code on Windows itself, <a href="../">this is the guide for you</a>: no WSL, no Ubuntu.</p>
-  <p class="meta">Version 0.13.0-beta.7, November 2026. Its tests run on Ubuntu 24.04, its installer on 22.04, 24.04 and 26.04. It has not been tried in WSL on a Windows PC yet.</p>
+  <p class="meta">Version 0.13.0, November 2026. Its tests run on Ubuntu 24.04, its installer on 22.04, 24.04 and 26.04. It has not been tried in WSL on a Windows PC yet.</p>
 
   <p>When Claude Code and your projects are inside WSL 2, the Linux that comes with Windows, Forchetta runs there too, next to them. You use it from a window of Edge or Chrome: the same page as on a Mac.</p>
   <div class="wsl" role="img" aria-label="On Windows, a window of Edge or Chrome. Through localhost it reaches WSL 2, where Forchetta, tmux, Claude Code and your projects are.">
@@ -194,8 +194,8 @@
     </li>
     <li id="step-3">
       <p>Forchetta <span class="place">Ubuntu</span></p>
-      <div class="cmd-block"><pre><code>curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.7/install.sh &amp;&amp;
-sh ~/forchetta-install.sh</code></pre><button type="button" data-copy="curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.7/install.sh &amp;&amp;&#10;sh ~/forchetta-install.sh" aria-label="Copy the command">Copy</button></div>
+      <div class="cmd-block"><pre><code>curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/latest/download/install.sh &amp;&amp;
+sh ~/forchetta-install.sh</code></pre><button type="button" data-copy="curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/latest/download/install.sh &amp;&amp;&#10;sh ~/forchetta-install.sh" aria-label="Copy the command">Copy</button></div>
       <ul>
         <li>It downloads Forchetta and checks it. Without Node.js 22 it takes one from nodejs.org, checks it too, and keeps it only for Forchetta. Nothing here runs as root.</li>
         <li>It lists the hooks it adds to <code>~/.claude/settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
@@ -238,7 +238,7 @@ sh ~/forchetta-install.sh</code></pre><button type="button" data-copy="curl -fsS
   </table></div>
 
   <h2 id="update">Update</h2>
-  <p>Run step 3 of this page again: it names the last version. Then <code>forchetta open</code>. From 0.13.0-beta.4 the window says when there is a new version, and <strong>Update</strong> installs it.</p>
+  <p>Run step 3 of this page again: it installs the last version. Then <code>forchetta open</code>. From 0.13.0-beta.4 the window says when there is a new version, and <strong>Update</strong> installs it.</p>
   <p id="before-source"><strong>If you built it from the source before</strong>, close your sessions with <code>/exit</code>, then take its hooks away and stop it. After step 3, <code>~/forchetta</code> and <code>~/forchetta-node</code> can go, with the history that one kept.</p>
   <div class="cmd-block"><pre><code>cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp; bin/forchetta daemon stop; cd ~</code></pre><button type="button" data-copy="cd ~/forchetta &amp;&amp; bin/forchetta hooks uninstall --yes &amp;&amp; bin/forchetta daemon stop; cd ~" aria-label="Copy the command">Copy</button></div>
 
@@ -250,7 +250,7 @@ sh ~/forchetta-install.sh</code></pre><button type="button" data-copy="curl -fsS
     <li><strong>GitHub builds it from the source</strong>, which you can read, and signs which commit it comes from. With the <a href="https://cli.github.com">GitHub CLI</a> signed in, the installer checks that too. Each package it uses must match the hash in the repository.</li>
   </ul>
   <p>What it can't protect you from: a program that runs as you, in Windows or in WSL, can read your files, those of Forchetta too. And Claude Code in WSL can start programs of Windows, like <code>powershell.exe</code>: the guard doesn't see what they change.</p>
-  <p>If you find a way around any of this, please <a href="https://github.com/alessiodonato/forchetta/security/advisories/new">tell me in private</a>. <a href="https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md">More on its security</a>.</p>
+  <p>If you find a way around any of this, please <a href="https://github.com/alessiodonato/forchetta/security/advisories/new">tell me in private</a>. <a href="https://github.com/alessiodonato/forchetta/blob/main/SECURITY.md">More on its security</a>.</p>
 
   <h2 id="try">What to try</h2>
   <ol class="try">

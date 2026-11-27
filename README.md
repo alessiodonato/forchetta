@@ -6,10 +6,10 @@
 
 ### Draw a team of Claude Code agents, and put it to work.
 
-Drag the agents onto a canvas, draw who leads whom, and start the team in your project. Each agent is a Claude Code session: they split the work, and Forchetta keeps them off each other's files. Every session on your Mac, in a team or not, sits in one window.
+Drag the agents onto a canvas, draw who leads whom, and start the team in your project. Each agent is a Claude Code session: they split the work, and Forchetta keeps them off each other's files. Every session on your computer, in a team or not, sits in one window.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#install)
-[![Windows: beta](https://img.shields.io/badge/Windows-beta-8b867d?style=flat-square)](#windows-and-linux-beta)
+[![Windows 10+](https://img.shields.io/badge/Windows-10+-d97757?style=flat-square)](#windows)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#install)
 [![For Claude Code](https://img.shields.io/badge/for-Claude%20Code-d97757?style=flat-square)](https://code.claude.com)
 [![Runs locally](https://img.shields.io/badge/runs-locally-46c48a?style=flat-square)](#what-it-touches-on-your-mac)
@@ -75,30 +75,32 @@ forchetta setup
 
 Open Forchetta from `~/Applications`: the sessions already running appear on their own. To make every new session one Forchetta can type into, add `alias claude='forchetta run claude'` to `~/.zshrc`.
 
-Version 0.12.11. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. From 0.12.8 a new version is one click, in the window, or `forchetta update`. To come to it: `brew upgrade forchetta && forchetta setup`.
+Version 0.13.0. You need macOS 12 or later and Claude Code (tested with 2.1.322); Homebrew brings Node.js and tmux. From 0.12.8 a new version is one click, in the window, or `forchetta update`. To come to it: `brew upgrade forchetta && forchetta setup`.
 
 To build it from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-### Windows and Linux (beta)
+### Windows
 
 Forchetta runs on Windows itself: no WSL, no administrator. The Claude Code it shows is the one you have, with your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use it from a window of Edge or Chrome: the same page as on a Mac, without the menu bar and the system-wide shortcut.
 
-It needs people to try it: its tests run on Windows with the real Claude Code, and the first reports from a PC are in (Windows 11). In PowerShell, not as administrator:
+Its tests run on Windows with the real Claude Code, and it is in use on PCs with Windows 11. In PowerShell, not as administrator:
 
 ```powershell
-irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex
+irm https://github.com/alessiodonato/forchetta/releases/latest/download/install.ps1 | iex
 ```
 
-It shows the hooks it adds, and asks: answer `y`. Then `forchetta open`, or Forchetta in the Start menu. To update, run it again. You need Windows 10 1809 or later and [Claude Code for Windows](https://code.claude.com/docs/en/setup); Node.js comes if you don't have it.
+It shows the hooks it adds, and asks: answer `y`. Then `forchetta open`, or Forchetta in the Start menu. A new version is one click, in the window. You need Windows 10 1809 or later and [Claude Code for Windows](https://code.claude.com/docs/en/setup); Node.js comes if you don't have it.
 
-On Linux, with `curl`, `tmux` and `lsof` installed, and in WSL if you work there:
+### Linux and WSL (beta)
+
+The same version runs the sessions in tmux, as on a Mac. Its tests run on Ubuntu, but nobody has tried it on a Linux PC or in WSL yet. With `curl`, `tmux` and `lsof` installed:
 
 ```sh
-curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.sh &&
+curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/latest/download/install.sh &&
 sh ~/forchetta-install.sh
 ```
 
-Each installer holds the checksum of its Forchetta and takes nothing else; GitHub builds it from the source and signs which commit it comes from ([how to check it](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows)).
+Each installer holds the checksum of its Forchetta and takes nothing else; GitHub builds it from the source and signs which commit it comes from ([how to check it](https://github.com/alessiodonato/forchetta/blob/main/SECURITY.md#what-you-install-on-linux-and-windows)).
 
 **[The guide for Windows](https://forchetta.dev/windows/)** says how to know that each step is done, what to do if something goes wrong, what to try, and where to say how it went. [The one for WSL](https://forchetta.dev/windows/wsl/) does the same.
 

@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Forchetta on Windows, a beta</title>
-<meta name="description" content="Forchetta on Windows, with no WSL: next to the Claude Code you have, in a window of Edge or Chrome. How to install the beta, what to try, and how to say how it went.">
-<meta property="og:title" content="Forchetta on Windows, a beta">
-<meta property="og:description" content="Next to the Claude Code you have, with no WSL. It needs people to try it.">
+<title>Forchetta on Windows</title>
+<meta name="description" content="Forchetta on Windows, with no WSL: next to the Claude Code you have, in a window of Edge or Chrome. How to install it, what to try, and how to say how it went.">
+<meta property="og:title" content="Forchetta on Windows">
+<meta property="og:description" content="Next to the Claude Code you have, with no WSL.">
 <meta property="og:image" content="https://forchetta.dev/img/social.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
@@ -126,8 +126,8 @@
 <main>
 <article>
   <h1>Forchetta on Windows</h1>
-  <p class="sub">A beta that needs people to try it.</p>
-  <p class="meta">Version 0.13.0-beta.8, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. The first reports from a PC are in, from Windows 11.</p>
+  <p class="sub">No longer a beta, from 0.13.0.</p>
+  <p class="meta">Version 0.13.0, November 2026. Its tests run on Windows Server 2022 and 2025 and on Windows 11 for ARM, in the machines of GitHub, with the real Claude Code and a stand-in for its API. It is in use on PCs with Windows 11.</p>
 
   <p>Forchetta runs on Windows itself: no WSL, no Ubuntu, no administrator. The Claude Code it shows is the one you have, with your account and your settings, and it sees what it sees now: your folders, your programs, the devices connected to the PC. You use Forchetta from a window of Edge or Chrome: the same page as on a Mac.</p>
   <p>Do you work inside WSL? <a href="wsl/">There is a guide for that</a> too.</p>
@@ -155,7 +155,7 @@
     </li>
     <li id="step-2">
       <p>Forchetta <span class="place">PowerShell</span></p>
-      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
+      <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/latest/download/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/latest/download/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
       <ul>
         <li>It downloads Forchetta and checks it. Without Node.js 22, or with one in a folder of its version, as winget and nvm may keep it, it takes one from nodejs.org, checks it too, and keeps it only for Forchetta.</li>
         <li>It lists the hooks it adds to <code>.claude\settings.json</code> and asks <strong>Apply the changes?</strong> Answer <code>y</code>, or <code>d</code> to see the whole diff first. It keeps a copy of the file.</li>
@@ -198,7 +198,7 @@
 
   <h2 id="update">Update</h2>
   <p>The command of the install again, in PowerShell and not as administrator. There is nothing to uninstall:</p>
-  <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
+  <div class="cmd-block"><pre><code>irm https://github.com/alessiodonato/forchetta/releases/latest/download/install.ps1 | iex</code></pre><button type="button" data-copy="irm https://github.com/alessiodonato/forchetta/releases/latest/download/install.ps1 | iex" aria-label="Copy the command">Copy</button></div>
   <p>It shows what changes in the hooks: answer <code>y</code>. It starts Forchetta again on the new version; then open the window with <code>forchetta open</code>. The sessions at work go on. From 0.13.0-beta.4 the window says when there is a new version and <strong>Update</strong> installs it: the command is for coming to it, once. The <a href="../changelog/">changelog</a> says what each one brings.</p>
 
   <h2 id="safe">What keeps it safe</h2>
@@ -211,7 +211,7 @@
     <li><strong>No program of mine to trust.</strong> What runs is Node.js, with the code of Forchetta, which you can read. GitHub builds it from the source and signs which commit it comes from; the installer takes that archive and no other.</li>
   </ul>
   <p>What it can't protect you from: a program that runs as you can read your files, those of Forchetta too. And the guard reads the commands of Bash and of PowerShell, not what a script does by itself.</p>
-  <p>If you find a way around any of this, please <a href="https://github.com/alessiodonato/forchetta/security/advisories/new">tell me in private</a>. <a href="https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md">More on its security</a>.</p>
+  <p>If you find a way around any of this, please <a href="https://github.com/alessiodonato/forchetta/security/advisories/new">tell me in private</a>. <a href="https://github.com/alessiodonato/forchetta/blob/main/SECURITY.md">More on its security</a>.</p>
 
   <h2 id="try">What to try</h2>
   <ol class="try">

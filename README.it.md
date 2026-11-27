@@ -6,10 +6,10 @@
 
 ### Disegna un team di agenti Claude Code, e mettilo al lavoro.
 
-Trascina gli agenti su una tela, disegna chi guida chi, e avvia il team nel tuo progetto. Ogni agente è una sessione di Claude Code: si dividono il lavoro, e Forchetta li tiene lontani dai file degli altri. Tutte le sessioni del tuo Mac, in un team o no, stanno in una finestra.
+Trascina gli agenti su una tela, disegna chi guida chi, e avvia il team nel tuo progetto. Ogni agente è una sessione di Claude Code: si dividono il lavoro, e Forchetta li tiene lontani dai file degli altri. Tutte le sessioni del tuo computer, in un team o no, stanno in una finestra.
 
 [![macOS 12+](https://img.shields.io/badge/macOS-12+-d97757?style=flat-square&logo=apple&logoColor=white)](#installazione)
-[![Windows: beta](https://img.shields.io/badge/Windows-beta-8b867d?style=flat-square)](#windows-e-linux-beta)
+[![Windows 10+](https://img.shields.io/badge/Windows-10+-d97757?style=flat-square)](#windows)
 [![Homebrew](https://img.shields.io/badge/brew-alessiodonato%2Ftap%2Fforchetta-d97757?style=flat-square&logo=homebrew&logoColor=white)](#installazione)
 [![Per Claude Code](https://img.shields.io/badge/per-Claude%20Code-d97757?style=flat-square)](https://code.claude.com)
 [![Gira in locale](https://img.shields.io/badge/gira-in%20locale-46c48a?style=flat-square)](#cosa-tocca-sul-tuo-mac)
@@ -77,30 +77,32 @@ forchetta setup
 
 Apri Forchetta da `~/Applications`: le sessioni già aperte compaiono da sole. Perché ogni nuova sessione sia una in cui Forchetta può scrivere, aggiungi `alias claude='forchetta run claude'` a `~/.zshrc`.
 
-Versione 0.12.11. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dalla 0.12.8 una versione nuova è un clic, nella finestra, oppure `forchetta update`. Per arrivarci: `brew upgrade forchetta && forchetta setup`.
+Versione 0.13.0. Servono macOS 12 o successivo e Claude Code (versione verificata 2.1.322); Homebrew porta con sé Node.js e tmux. Dalla 0.12.8 una versione nuova è un clic, nella finestra, oppure `forchetta update`. Per arrivarci: `brew upgrade forchetta && forchetta setup`.
 
 Per compilarla dal codice, vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
-### Windows e Linux (beta)
+### Windows
 
 Forchetta gira direttamente su Windows: niente WSL, niente amministratore. Il Claude Code che mostra è quello che hai già, con le tue impostazioni, e vede quello che vede adesso: le tue cartelle, i tuoi programmi, le periferiche collegate al PC. La usi da una finestra di Edge o Chrome: la stessa pagina del Mac, senza la barra dei menu e la scorciatoia da qualunque programma.
 
-Serve qualcuno che la provi: i suoi test girano su Windows con il vero Claude Code, e sono arrivate le prime segnalazioni da un PC (Windows 11). In PowerShell, non come amministratore:
+I suoi test girano su Windows con il vero Claude Code, ed è in uso su PC con Windows 11. In PowerShell, non come amministratore:
 
 ```powershell
-irm https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.ps1 | iex
+irm https://github.com/alessiodonato/forchetta/releases/latest/download/install.ps1 | iex
 ```
 
-Mostra gli hook che aggiunge e chiede conferma: rispondi `y`. Poi `forchetta open`, oppure Forchetta nel menu Start. Per aggiornare, rilancialo. Servono Windows 10 1809 o successivo e [Claude Code per Windows](https://code.claude.com/docs/en/setup); Node.js arriva da solo, se non c'è.
+Mostra gli hook che aggiunge e chiede conferma: rispondi `y`. Poi `forchetta open`, oppure Forchetta nel menu Start. Una versione nuova è un clic, nella finestra. Servono Windows 10 1809 o successivo e [Claude Code per Windows](https://code.claude.com/docs/en/setup); Node.js arriva da solo, se non c'è.
 
-Su Linux, con `curl`, `tmux` e `lsof` installati, e dentro WSL se lavori lì:
+### Linux e WSL (beta)
+
+La stessa versione fa girare le sessioni in tmux, come sul Mac. I suoi test girano su Ubuntu, ma nessuno l'ha ancora provata su un PC Linux o in WSL. Con `curl`, `tmux` e `lsof` installati:
 
 ```sh
-curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/download/v0.13.0-beta.8/install.sh &&
+curl -fsSLo ~/forchetta-install.sh https://github.com/alessiodonato/forchetta/releases/latest/download/install.sh &&
 sh ~/forchetta-install.sh
 ```
 
-Ogni installer contiene l'impronta della sua Forchetta e non accetta altro; GitHub la costruisce dal codice e firma da quale commit viene ([come verificarlo](https://github.com/alessiodonato/forchetta/blob/windows/SECURITY.md#what-you-install-on-linux-and-windows), in inglese).
+Ogni installer contiene l'impronta della sua Forchetta e non accetta altro; GitHub la costruisce dal codice e firma da quale commit viene ([come verificarlo](https://github.com/alessiodonato/forchetta/blob/main/SECURITY.md#what-you-install-on-linux-and-windows), in inglese).
 
 **[La guida per Windows](https://forchetta.dev/windows/)** (in inglese) dice come capire che ogni passo è riuscito, cosa fare se qualcosa va storto, cosa provare e dove dire com'è andata. [Quella per WSL](https://forchetta.dev/windows/wsl/) fa lo stesso.
 
