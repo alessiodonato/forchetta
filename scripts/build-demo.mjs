@@ -17,6 +17,8 @@ const SHIMS = {
   module: shim('stubs.ts'),
   http: shim('stubs.ts'),
   stream: shim('stubs.ts'),
+  string_decoder: shim('stubs.ts'),
+  net: shim('stubs.ts'),
   ws: shim('stubs.ts'),
 };
 
@@ -24,7 +26,7 @@ const SHIMS = {
 const nodeShims = {
   name: 'node-shims',
   setup(build) {
-    build.onResolve({ filter: /^(node:)?(fs|path|os|crypto|child_process|readline|url|module|http|stream)$|^ws$/ }, (args) => ({ path: SHIMS[args.path.replace(/^node:/, '')] }));
+    build.onResolve({ filter: /^(node:)?(fs|path|os|crypto|child_process|readline|url|module|http|stream|string_decoder|net)$|^ws$/ }, (args) => ({ path: SHIMS[args.path.replace(/^node:/, '')] }));
   },
 };
 

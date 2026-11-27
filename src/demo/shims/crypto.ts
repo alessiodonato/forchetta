@@ -26,4 +26,8 @@ export function timingSafeEqual(a: ArrayLike<number>, b: ArrayLike<number>): boo
   return diff === 0;
 }
 
-export default { randomUUID, randomBytes, timingSafeEqual };
+/** Only for the pipes of Windows, which the demo has not. */
+export const createHmac = (): never => {
+  throw new Error('not in the demo');
+};
+export default { randomUUID, randomBytes, timingSafeEqual, createHmac };

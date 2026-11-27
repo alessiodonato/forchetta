@@ -17,4 +17,6 @@ export function execFile(file: string, args: readonly string[], ...rest: unknown
 export const spawn = (): never => {
   throw new Error('not in the demo');
 };
-export default { execFile, spawn };
+/** Only for the folders of Windows (icacls), which the demo has not. */
+export const spawnSync = (): { status: number; stdout: string; stderr: string } => ({ status: 1, stdout: '', stderr: 'not in the demo' });
+export default { execFile, spawn, spawnSync };

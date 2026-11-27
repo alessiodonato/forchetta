@@ -22,4 +22,19 @@ export class WebSocketServer {
   close(): void {}
 }
 export class WebSocket {}
-export default { execFile, spawn, createInterface, fileURLToPath, pathToFileURL, createRequire, WebSocketServer, WebSocket };
+/** node:string_decoder, on TextDecoder: for the hosts of the sessions on Windows, which the demo has not. */
+export class StringDecoder {
+  private readonly decoder = new TextDecoder('utf-8');
+  constructor(_encoding?: string) {}
+  write(chunk: Uint8Array): string {
+    return this.decoder.decode(chunk, { stream: true });
+  }
+  end(chunk?: Uint8Array): string {
+    return (chunk ? this.decoder.decode(chunk, { stream: true }) : '') + this.decoder.decode();
+  }
+}
+/** node:net: the pipes of Windows, which the demo has not. */
+export const createConnection = (): never => {
+  throw new Error('not in the demo');
+};
+export default { execFile, spawn, createInterface, fileURLToPath, pathToFileURL, createRequire, WebSocketServer, WebSocket, StringDecoder, createConnection };
