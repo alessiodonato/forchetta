@@ -76,6 +76,21 @@
     if ($LASTEXITCODE -ne 0) { Stop-Here 'the download could not be opened: nothing was installed' }
   }
 
+  # A folder moved, again for a few seconds while Windows or an antivirus still holds a file in it: a program that has just
+  # run, an archive just opened. $false when it does not move.
+  function Move-Folder($from, $to, $tries = 20) {
+    for ($try = 1; $try -le $tries; $try++) {
+      try {
+        Move-Item -LiteralPath $from -Destination $to
+        return $true
+      } catch {
+        if ($try -ge $tries) { return $false }
+        Start-Sleep -Milliseconds 250
+      }
+    }
+    return $false
+  }
+
   # A junction, which needs no administrator: taken away without touching what it leads to.
   function Set-Junction($at, $to) {
     if (Test-Path -LiteralPath $at) {
@@ -129,14 +144,29 @@
     if (Test-Path -LiteralPath $NodeLib) {
       # The one in use by a daemon or a session does not move: it stays until the next time.
       $old = "$NodeLib.old-$PID"
-      try { Move-Item -LiteralPath $NodeLib -Destination $old } catch {
-        Remove-Item -LiteralPath $new -Recurse -Force
+      if (-not (Move-Folder $NodeLib $old 8)) {
+        Remove-Item -LiteralPath $new -Recurse -Force -ErrorAction SilentlyContinue
         Say "The Node.js of Forchetta is in use: it stays at $own."
         return $ownNode
       }
+      # The new one in its place, or the old one back: the hooks are never left without a Node.js.
+      if (-not (Move-Folder $new $NodeLib)) {
+        if (-not (Move-Folder $old $NodeLib)) { Stop-Here "the Node.js of Forchetta could not be put back: it is in $old" "rename that folder to $NodeLib, then run this again" }
+        Remove-Item -LiteralPath $new -Recurse -Force -ErrorAction SilentlyContinue
+        Say "The new Node.js could not take its place: the Node.js of Forchetta stays at $own."
+        return $ownNode
+      }
       Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
+      return $ownNode
     }
-    Move-Item -LiteralPath $new -Destination $NodeLib
+    if (-not (Move-Folder $new $NodeLib)) {
+      Remove-Item -LiteralPath $new -Recurse -Force -ErrorAction SilentlyContinue
+      if ($moves) {
+        Say $stays
+        return $moves
+      }
+      Stop-Here 'the Node.js for Forchetta could not be put in its folder: nothing was installed' 'run this again in a few seconds'
+    }
     return $ownNode
   }
 
@@ -247,7 +277,7 @@
         if (-not (Test-Path -LiteralPath (Join-Path $new "node_modules\node-pty\prebuilds\win32-$arch\conpty.node"))) { Stop-Here "Forchetta $version has no terminals for $arch" "see $Releases" }
         if ((Read-Program $node @((Join-Path $new 'dist\cli.js'), '--version')) -ne $version) { Stop-Here "Forchetta $version does not start on this Windows: nothing was installed" }
         if (Test-Path -LiteralPath $folder) { Remove-Item -LiteralPath $folder -Recurse -Force }
-        Move-Item -LiteralPath $new -Destination $folder
+        if (-not (Move-Folder $new $folder)) { Stop-Here "Forchetta $version could not be put in its folder: nothing was installed" 'run this again in a few seconds' }
       }
       Set-Junction $Link $folder
       Write-Commands
