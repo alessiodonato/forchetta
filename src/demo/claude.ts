@@ -705,6 +705,7 @@ export class FakeClaude {
     try {
       if (/\bretr(y|ies)\b/.test(words)) return await this.retries();
       if (/\brate[ -]?limit|\blimit\b|throttl/.test(words)) return await this.rateLimit(resumed);
+      if (/\brename\b/.test(words)) return await this.rename();
       if (/\b(build|clean|dist|deploy|rm )\b|\bdelete\b/.test(words)) return await this.build();
       if (/\b(explore|find|where|search|look|subagent|investigate)\b/.test(words)) return await this.explore(prompt);
       if (/\btests?\b/.test(words)) return await this.tests();
@@ -746,6 +747,21 @@ export class FakeClaude {
     });
     await this.bash('npm test -- api', '✓ test/api.test.ts (13 tests)\n13 passed', 2400);
     return 'Done: listOrders now allows 100 requests a minute for each client, checked before anything else.';
+  }
+
+  /** A rename the way auto mode often does it: one sed from the shell, not an Edit. The guard reads its line. */
+  private async rename(): Promise<string> {
+    const files = ['src/api.ts', 'src/orders.ts', 'test/api.test.ts'];
+    await this.grep('getOrder', files.join('\n'));
+    await this.bash(`sed -i '' 's/getOrder/fetchOrder/g' ${files.join(' ')}`, '', 1200, undefined, () => {
+      for (const path of files) {
+        const file = this.abs(path);
+        const text = readText(file);
+        if (text !== undefined) putFile(file, text.replaceAll('getOrder', 'fetchOrder'));
+      }
+    });
+    await this.bash('npm test -- api', '✓ test/api.test.ts (12 tests)\n12 passed', 2400);
+    return 'Renamed: getOrder is now fetchOrder in src/api.ts, src/orders.ts and the tests, which pass.';
   }
 
   private async build(): Promise<string> {
@@ -812,7 +828,7 @@ describe('orderTotal', () => {
   private async generic(prompt: string): Promise<string> {
     await this.read('README.md', 700);
     await this.grep(prompt.split(/\s+/).find((word) => word.length > 4)?.replace(/[^\w-]/g, '') || 'order', 'Found 3 matches in 2 files', 800);
-    return 'I had a look: this is a small shop with orders, a checkout form and an API client. In this demo my answers are scripted, and I know a few tasks: add retries to src/api.ts, add a rate limit, write tests, build the project (it asks a permission), or explore the code with a subagent.';
+    return 'I had a look: this is a small shop with orders, a checkout form and an API client. In this demo my answers are scripted, and I know a few tasks: add retries to src/api.ts, add a rate limit, rename getOrder (with sed), write tests, build the project (it asks a permission), or explore the code with a subagent.';
   }
 
   // ---- Teams ---------------------------------------------------------------------------------------------
@@ -894,6 +910,7 @@ function taskWords(prompt: string): string {
   const words = prompt.toLowerCase();
   if (/rate[ -]?limit|\blimit\b/.test(words)) return 'add the rate limit';
   if (/retr/.test(words)) return 'add the retries';
+  if (/\brename\b/.test(words)) return 'do the rename';
   return 'make the change';
 }
 

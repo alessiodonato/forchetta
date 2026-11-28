@@ -163,7 +163,7 @@ export function startTour(daemon: DemoDaemon): void {
     },
     {
       title: 'Two sessions, one file',
-      body: 'Now the guard. We named this session **retries** (✎ in a box does it). Ask it to **add retries to src/api.ts**: its tests are slow, so it keeps the file for a while.\n\nWhile it works, start a **second session** in the same folder and ask it to **add a rate limit to src/api.ts**. Watch both boxes.\n\nIf retries finishes first, ask it again: the guard only holds a file during a turn.',
+      body: 'Now the guard. We named this session **retries** (✎ in a box does it). Ask it to **add retries to src/api.ts**: its tests are slow, so it keeps the file for a while.\n\nWhile it works, start a **second session** in the same folder and ask it to **add a rate limit to src/api.ts**. Watch both boxes.\n\nThe guard reads shell commands too: a **third session** that renames getOrder with `sed -i` is stopped the same way.\n\nIf retries finishes first, ask it again: the guard only holds a file during a turn.',
       actions: [
         { label: '1. Ask for the retries', run: () => typeInto(first(), 'add retries to src/api.ts') },
         {
@@ -171,6 +171,13 @@ export function startTour(daemon: DemoDaemon): void {
           run: () =>
             void daemon.spawn({ cwd: folder(), prompt: 'add a rate limit to src/api.ts' }, { team: { label: 'rate-limit' } }).then((result) => {
               // Its terminal opens next to the first one, as for a session started from the panel.
+              if (result.ok) setTimeout(() => store()?.open(result.agentId), 400);
+            }),
+        },
+        {
+          label: '3. A rename with sed',
+          run: () =>
+            void daemon.spawn({ cwd: folder(), prompt: 'rename getOrder to fetchOrder' }, { team: { label: 'rename' } }).then((result) => {
               if (result.ok) setTimeout(() => store()?.open(result.agentId), 400);
             }),
         },
