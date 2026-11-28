@@ -82,12 +82,15 @@ describe('the Claude Code of a session', () => {
     const cwds = ['p100', 'fcwd', `n${REPO}`, 'p4242', 'fcwd', `n${REPO}`].join('\n');
     const agent = newAgent({ id: 'a', cwd: REPO, control: { kind: 'tmux', session: 'fk-a' }, state: 'working' }, 0);
     agent.pid = 100;
+    const run = async (file: string, args: string[]): Promise<string | undefined> => (file.endsWith('ps') ? ps : args.includes('cwd') ? cwds : listen);
     const servers = new Servers({
       agents: () => [agent],
       repoOf: (dir) => (dir.startsWith(REPO) ? REPO : undefined),
       enabled: () => true,
       self: 9999,
-      run: async (file, args) => (file.endsWith('ps') ? ps : args.includes('cwd') ? cwds : listen),
+      run,
+      // As on a Mac and on Linux, on Windows too: how it looks there is in windows.test.ts.
+      look: unixLook(run),
     });
     const start = (command: string) => servers.decide(agent, { hook_event_name: 'PreToolUse', session_id: 'a', tool_name: 'Bash', tool_input: { command } });
     expect(await start('python3 -m http.server 8766')).toBeUndefined();
