@@ -56,6 +56,10 @@ Agents in the same folder sooner or later reach for the same file. Forchetta see
 
 So there's no worktree to set up: one folder, one set of dependencies, one dev server, nothing to merge at the end. It works for every session, also one you start with plain `claude`, and it tells each session what the others changed, right when it matters. [The guard in the manual](https://forchetta.dev/manual.html#guard).
 
+<a href="https://www.youtube.com/watch?v=_Mw7yHPLmr8"><img src="docs/img/video-guard-poster-play.jpg" alt="Two Claude Code sessions, one file: what goes wrong. Play the video on YouTube" width="100%"></a>
+
+<sub>Two sessions on one file: what goes wrong, and the guard at work, also on a <code>sed -i</code>, in three and a half minutes on YouTube.</sub>
+
 ## Every session in one window
 
 <img src="docs/img/overview.png" alt="The Forchetta window: twelve sessions, each in a box with its state, what it is doing, a summary, its context and its cost. Two wait for you, in amber." width="100%">

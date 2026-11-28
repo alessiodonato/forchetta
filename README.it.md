@@ -58,6 +58,10 @@ Agenti nella stessa cartella prima o poi vogliono lo stesso file. Forchetta vede
 
 Così non c'è nessun worktree da preparare: una cartella, una sola installazione delle dipendenze, un solo server di sviluppo, niente da unire alla fine. Vale per tutte le sessioni, anche per quelle avviate con `claude` normale, e dice a ogni sessione cosa hanno cambiato le altre, proprio quando serve. [Il vigile nel manuale](https://forchetta.dev/manual.html#guard).
 
+<a href="https://www.youtube.com/watch?v=_Mw7yHPLmr8"><img src="docs/img/video-guard-poster-play.jpg" alt="Due sessioni Claude Code, un file: cosa va storto. Guarda il video su YouTube" width="100%"></a>
+
+<sub>Due sessioni sullo stesso file: cosa va storto, e il vigile al lavoro, anche su un <code>sed -i</code>, in tre minuti e mezzo su YouTube (in inglese).</sub>
+
 ## Tutte le sessioni in una finestra
 
 <img src="docs/img/overview.png" alt="La finestra di Forchetta: dodici sessioni, ognuna in un box con stato, cosa sta facendo, riassunto, contesto e costo. Due ti aspettano, in ambra." width="100%">
